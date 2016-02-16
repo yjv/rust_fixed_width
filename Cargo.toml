@@ -1,0 +1,6 @@
+[package]
+name = "fixed_width"
+version = "0.1.0"
+authors = ["yosefderay <yosefderay770@gmail.com>"]
+
+[dependencies]
