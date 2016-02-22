@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File, Line, Range};
+use common::{File, Line, Range, normalize_range, validate_line};
 
 pub struct InMemoryFile {
     name: String,
@@ -55,32 +55,28 @@ impl File for InMemoryFile {
         self.lines.get(index as usize).ok_or(format!("index {} is out of bounds", index))
     }
 
-    fn add_line<T: Line>(&mut self, line: T) -> Result<(), Self::Error> {
-        if line.length() != self.width() {
-            return Err("the length of the line does not match the width of the file".to_string());
-        }
-
+    fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
+        let line = try!(validate_line(line, self));
         self.lines.push(InMemoryLine::new(line.get(..).unwrap()));
-        Ok(())
+        Ok(self)
     }
 
-    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<(), Self::Error> {
-        if line.length() != self.width() {
-            return Err("the length of the line does not match the width of the file".to_string());
-        }
+    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error> {
+        let line = try!(validate_line(line, self));
 
         let length = self.length();
 
         if index > length {
             self.lines.extend(repeat(InMemoryLine::new_from_length(self.width)).take(index - length))
         }
+
         self.lines.insert(index, InMemoryLine::new(line.get(..).unwrap_or(String::new())));
-        Ok(())
+        Ok(self)
     }
 
-    fn remove_line(&mut self, index: usize) -> Result<(), Self::Error> {
+    fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error> {
         self.lines.remove(index);
-        Ok(())
+        Ok(self)
     }
 
     fn length(&self) -> usize {
@@ -119,47 +115,35 @@ impl InMemoryLine {
 }
 
 impl Line for InMemoryLine {
-    type Error = ();
+    type Error = String;
     fn length(&self) -> usize {
         self.data.len()
     }
 
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error> {
-        let start = range.start().unwrap_or(0);
-        let end = range.end().unwrap_or(self.data.len());
-        if start >= self.length() || end > self.length() {
-            Err(())
-        } else {
-            Ok(self.data[start..end].to_string())
-        }
+        let (start, end) = try!(normalize_range(range, self));
+        Ok(self.data[start..end].to_string())
     }
 
-    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<(), Self::Error> {
-        let start = range.start().unwrap_or(0);
-        let end = range.end().unwrap_or(self.data.len());
-        if start >= self.length() || end > self.length() || string.len() != end - start{
-            Err(())
+    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error> {
+        let (start, end) = try!(normalize_range(range, self));
+        if string.len() > end - start {
+            Err("string longer than the range being set".to_string())
         } else {
             let mut data = String::new();
-            {
-                data.push_str(&self.data[..start]);
-                data.push_str(&string[..]);
-                data.push_str(&self.data[end..]);
-            }
+            data.push_str(&self.data[..start]);
+            data.push_str(&string[..]);
+            data.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
+            data.push_str(&self.data[end..]);
             self.data = data;
-            Ok(())
+            Ok(self)
         }
 
     }
 
-    fn remove<T: Range>(&mut self, range: T) -> Result<(), Self::Error> {
-        let start = range.start().unwrap_or(0);
-        let end = range.end().unwrap_or(self.length());
-        if start >= self.length() {
-            Err(())
-        } else {
-            self.set(range, &repeat(" ").take(end - start).collect())
-        }
+    fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
+        let (start, end) = try!(normalize_range(range.clone(), self));
+        self.set(range, &repeat(" ").take(end - start).collect())
     }
 }
 
@@ -216,12 +200,12 @@ mod test {
         assert_eq!(Ok("aaaaaaaaaa".to_string()), line1.get(..));
         assert_eq!(Ok("aaaa".to_string()), line1.get(1..5));
         assert_eq!(Ok("          ".to_string()), line2.get(..));
-        let _ = line1.set(1..5, &"bbbb".to_string()).unwrap();
-        assert_eq!(Ok("abbbbaaaaa".to_string()), line1.get(..));
-        let _ = line1.remove(6..8).unwrap();
-        assert_eq!(Ok("abbbba  aa".to_string()), line1.get(..));
-        let _ = line2.set(3, &"a".to_string());
-        assert_eq!(Ok("   a      ".to_string()), line2.get(..));
+        assert_eq!(Ok("abbbbaaaaa".to_string()), line1.set(1..5, &"bbbb".to_string()).unwrap().get(..));
+        assert_eq!(Ok("abbbba  aa".to_string()), line1.remove(6..8).unwrap().get(..));
+        assert_eq!(Ok("   a      ".to_string()), line2.set(3, &"a".to_string()).unwrap().get(..));
+        assert_eq!(Ok("abbbba b a".to_string()), line1.set(7..9, &"b".to_string()).unwrap().get(..));
+        assert_eq!(Ok("b  a      ".to_string()), line2.set(0, &"b".to_string()).unwrap().get(..));
+        assert_eq!(Ok("b  a     b".to_string()), line2.set(9, &"b".to_string()).unwrap().get(..));
     }
 
 

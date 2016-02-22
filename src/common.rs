@@ -10,9 +10,9 @@ pub trait File: ToString {
     fn line_seperator(&self) -> &str;
     fn lines(&self) -> &Vec<Self::Line>;
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error>;
-    fn add_line<T: Line>(&mut self, line: T) -> Result<(), Self::Error>;
-    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<(), Self::Error>;
-    fn remove_line(&mut self, index: usize) -> Result<(), Self::Error>;
+    fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error>;
+    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
+    fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
     fn length(&self) -> usize;
 }
 
@@ -20,15 +20,15 @@ pub trait Line: ToString {
     type Error: Debug;
     fn length(&self) -> usize;
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error>;
-    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<(), Self::Error>;
-    fn remove<T: Range>(&mut self, range: T) -> Result<(), Self::Error>;
+    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error>;
+    fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error>;
     fn is_range_valid<T: Range>(&self, range: T) -> bool {
         let end  = range.end();
         return end.is_none() || end.unwrap() < self.length() + 1;
     }
 }
 
-pub trait Range {
+pub trait Range: Clone {
     fn start(&self) -> Option<usize>;
     fn end(&self) -> Option<usize>;
 }
@@ -83,7 +83,27 @@ impl Range for usize {
     }
 }
 
-    #[cfg(test)]
+pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), String> {
+    let start = range.start().unwrap_or(0);
+    let end = range.end().unwrap_or(line.length());
+    if start >= line.length() {
+        Err("start is off the end of the line".to_string())
+    } else if end > line.length() {
+        Err("end is off the end of the line".to_string())
+    } else {
+        Ok((start, end))
+    }
+}
+
+pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, String> {
+    if line.length() != file.width() {
+        Err("the line's length doesn't match the file's width.".to_string())
+    } else {
+        Ok(line)
+    }
+}
+
+#[cfg(test)]
 mod test {
 
     use super::Range;
