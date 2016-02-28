@@ -6,7 +6,7 @@ pub struct InMemoryFile {
     name: String,
     width: usize,
     lines: Vec<InMemoryLine>,
-    line_seperator: String
+    line_separator: String
 }
 
 impl InMemoryFile {
@@ -15,20 +15,20 @@ impl InMemoryFile {
     }
 
     pub fn new_with_lines(name: String, width: usize, lines: Vec<InMemoryLine>) -> Self {
-        Self::new_with_lines_and_line_seperator(name, width, lines, "\r\n".to_string())
+        Self::new_with_lines_and_line_separator(name, width, lines, "\r\n".to_string())
     }
 
-    pub fn new_with_lines_and_line_seperator(name: String, width: usize, lines: Vec<InMemoryLine>, line_seperator: String) -> Self {
+    pub fn new_with_lines_and_line_separator(name: String, width: usize, lines: Vec<InMemoryLine>, line_separator: String) -> Self {
         InMemoryFile {
             name: name,
             width: width,
             lines: lines,
-            line_seperator: line_seperator
+            line_separator: line_separator
         }
     }
 
-    pub fn new_with_line_seperator(name: String, width: usize, line_seperator: String) -> Self {
-        Self::new_with_lines_and_line_seperator(name, width, Vec::new(), line_seperator)
+    pub fn new_with_line_separator(name: String, width: usize, line_separator: String) -> Self {
+        Self::new_with_lines_and_line_separator(name, width, Vec::new(), line_separator)
     }
 }
 
@@ -43,16 +43,12 @@ impl File for InMemoryFile {
         self.width
     }
 
-    fn line_seperator(&self) -> &str {
-        &self.line_seperator[..]
-    }
-
-    fn lines(&self) -> &Vec<Self::Line> {
-        &self.lines
+    fn line_separator(&self) -> &str {
+        &self.line_separator[..]
     }
 
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error> {
-        self.lines.get(index as usize).ok_or(format!("index {} is out of bounds", index))
+        self.lines.get(index).ok_or(format!("index {} is out of bounds", index))
     }
 
     fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
@@ -64,7 +60,7 @@ impl File for InMemoryFile {
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error> {
         let line = try!(validate_line(line, self));
 
-        let length = self.length();
+        let length = self.len();
 
         if index > length {
             self.lines.extend(repeat(InMemoryLine::new_from_length(self.width)).take(index - length))
@@ -79,8 +75,8 @@ impl File for InMemoryFile {
         Ok(self)
     }
 
-    fn length(&self) -> usize {
-        self.lines.len() as usize
+    fn len(&self) -> usize {
+        self.lines.len()
     }
 }
 
@@ -89,13 +85,22 @@ impl ToString for InMemoryFile {
         let mut string = String::new();
         for line in self.lines.iter() {
             if string.len() != 0 {
-                string.push_str(&self.line_seperator[..]);
+                string.push_str(&self.line_separator[..]);
             }
 
             string.push_str(&line.get(..).unwrap_or(String::new())[..])
         }
 
         string
+    }
+}
+
+impl IntoIterator for InMemoryFile {
+    type Item = InMemoryLine;
+    type IntoIter = ::std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.lines.into_iter()
     }
 }
 
@@ -116,7 +121,7 @@ impl InMemoryLine {
 
 impl Line for InMemoryLine {
     type Error = String;
-    fn length(&self) -> usize {
+    fn len(&self) -> usize {
         self.data.len()
     }
 
@@ -138,7 +143,6 @@ impl Line for InMemoryLine {
             self.data = data;
             Ok(self)
         }
-
     }
 
     fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
@@ -159,6 +163,7 @@ mod test {
     use super::{InMemoryLine, InMemoryFile};
     use super::super::common::{Line, File};
     use std::iter::repeat;
+    use std::iter::Iterator;
 
     #[test]
     fn in_memory_file() {
@@ -172,23 +177,23 @@ mod test {
         assert_eq!(Ok(&line1), file.line(0));
         assert_eq!(Ok(&line2), file.line(1));
         assert_eq!(Err("index 2 is out of bounds".to_string()), file.line(2));
-        assert_eq!(&vec![line1.clone(), line2.clone()], file.lines());
-        assert_eq!(2, file.length());
+        assert_eq!(vec![line1.clone(), line2.clone()], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
+        assert_eq!(2, file.len());
         let _ = file.set_line(4, line3.clone());
-        assert_eq!(5, file.length());
+        assert_eq!(5, file.len());
         assert_eq!(Ok(&line1), file.line(0));
         assert_eq!(Ok(&line2), file.line(1));
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(3));
         assert_eq!(Ok(&line3), file.line(4));
-        assert_eq!(&vec![line1.clone(), line2.clone(), InMemoryLine::new_from_length(10), InMemoryLine::new_from_length(10), line3.clone()], file.lines());
+        assert_eq!(vec![line1.clone(), line2.clone(), InMemoryLine::new_from_length(10), InMemoryLine::new_from_length(10), line3.clone()], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
         let _ = file.remove_line(2);
         assert_eq!(Ok(&line1), file.line(0));
         assert_eq!(Ok(&line2), file.line(1));
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
         assert_eq!(Ok(&line3), file.line(3));
-        assert_eq!(&vec![line1, line2, InMemoryLine::new_from_length(10), line3], file.lines());
-        assert_eq!(4, file.length());
+        assert_eq!(vec![line1, line2, InMemoryLine::new_from_length(10), line3], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
+        assert_eq!(4, file.len());
         assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb\r\n          \r\ncccccccccc".to_string(), file.to_string());
     }
 
@@ -196,7 +201,7 @@ mod test {
     fn in_memory_line() {
         let mut line1 = InMemoryLine::new(repeat("a").take(10).collect());
         let mut line2 = InMemoryLine::new_from_length(10);
-        assert_eq!(10, line1.length());
+        assert_eq!(10, line1.len());
         assert_eq!(Ok("aaaaaaaaaa".to_string()), line1.get(..));
         assert_eq!(Ok("aaaa".to_string()), line1.get(1..5));
         assert_eq!(Ok("          ".to_string()), line2.get(..));
@@ -207,6 +212,4 @@ mod test {
         assert_eq!(Ok("b  a      ".to_string()), line2.set(0, &"b".to_string()).unwrap().get(..));
         assert_eq!(Ok("b  a     b".to_string()), line2.set(9, &"b".to_string()).unwrap().get(..));
     }
-
-
 }

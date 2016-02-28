@@ -1,31 +1,27 @@
 use std::string::ToString;
 use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
+use std::iter::IntoIterator;
 
-pub trait File: ToString {
+pub trait File: ToString + IntoIterator {
     type Line: Line;
     type Error: Debug;
     fn name(&self) -> &str;
     fn width(&self) -> usize;
-    fn line_seperator(&self) -> &str;
-    fn lines(&self) -> &Vec<Self::Line>;
+    fn line_separator(&self) -> &str;
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error>;
     fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error>;
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
     fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
-    fn length(&self) -> usize;
+    fn len(&self) -> usize;
 }
 
 pub trait Line: ToString {
     type Error: Debug;
-    fn length(&self) -> usize;
+    fn len(&self) -> usize;
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error>;
     fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error>;
     fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error>;
-    fn is_range_valid<T: Range>(&self, range: T) -> bool {
-        let end  = range.end();
-        return end.is_none() || end.unwrap() < self.length() + 1;
-    }
 }
 
 pub trait Range: Clone {
@@ -85,10 +81,10 @@ impl Range for usize {
 
 pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), String> {
     let start = range.start().unwrap_or(0);
-    let end = range.end().unwrap_or(line.length());
-    if start >= line.length() {
+    let end = range.end().unwrap_or(line.len());
+    if start >= line.len() {
         Err("start is off the end of the line".to_string())
-    } else if end > line.length() {
+    } else if end > line.len() {
         Err("end is off the end of the line".to_string())
     } else {
         Ok((start, end))
@@ -96,8 +92,10 @@ pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, 
 }
 
 pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, String> {
-    if line.length() != file.width() {
+    if line.len() != file.width() {
         Err("the line's length doesn't match the file's width.".to_string())
+    } else if line.to_string().contains(file.line_separator()) {
+        Err("the line contains the char for the file's line separator".to_string())
     } else {
         Ok(line)
     }
