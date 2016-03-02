@@ -1,19 +1,22 @@
 use std::string::ToString;
 use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
-use std::iter::IntoIterator;
 
-pub trait File: ToString + IntoIterator {
+pub trait File: ToString {
     type Line: Line;
     type Error: Debug;
     fn name(&self) -> &str;
     fn width(&self) -> usize;
     fn line_separator(&self) -> &str;
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error>;
+    fn line_mut(&mut self, index: usize) -> Result<&mut Self::Line, Self::Error>;
     fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error>;
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
     fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
     fn len(&self) -> usize;
+//    fn iter<'a>(&'a self) -> FileIterator<'a, Self> {
+//        FileIterator::new(self)
+//    }
 }
 
 pub trait Line: ToString {
@@ -98,6 +101,63 @@ pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, String> {
         Err("the line contains the char for the file's line separator".to_string())
     } else {
         Ok(line)
+    }
+}
+
+pub struct FileIterator<'a, T: File + 'a> {
+    position: usize,
+    file: &'a T
+}
+
+impl<'a, T: File + 'a> FileIterator<'a, T> {
+    pub fn new(file: &'a T) -> Self {
+        FileIterator {
+            position: 0,
+            file: file
+        }
+    }
+}
+
+impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
+    type Item = Result<&'a <T as File>::Line, <T as File>::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.position = self.position + 1;
+        if self.position - 1 >= self.file.len() {
+            None
+        } else {
+            Some(self.file.line(self.position - 1))
+        }
+    }
+}
+
+pub struct MutableFileIterator<'a, T: File + 'a> {
+    position: usize,
+    file: &'a mut T
+}
+
+impl<'a, T: File + 'a> MutableFileIterator<'a, T> {
+    pub fn new(file: &'a mut T) -> Self {
+        MutableFileIterator {
+            position: 0,
+            file: file
+        }
+    }
+}
+
+impl<'a, T: File + 'a> Iterator for MutableFileIterator<'a, T> {
+    type Item = Result<&'a mut <T as File>::Line, <T as File>::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.position = self.position + 1;
+        {
+            if self.position - 1 >= self.file.len() {
+                return None;
+            }
+        }
+        let mut file = &self.file;
+
+        Some(file.line_mut(self.position - 1))
     }
 }
 

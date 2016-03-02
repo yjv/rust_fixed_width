@@ -50,6 +50,9 @@ impl File for InMemoryFile {
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error> {
         self.lines.get(index).ok_or(format!("index {} is out of bounds", index))
     }
+    fn line_mut(&mut self, index: usize) -> Result<&mut Self::Line, Self::Error> {
+        self.lines.get_mut(index).ok_or(format!("index {} is out of bounds", index))
+    }
 
     fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
         let line = try!(validate_line(line, self));
@@ -92,15 +95,6 @@ impl ToString for InMemoryFile {
         }
 
         string
-    }
-}
-
-impl IntoIterator for InMemoryFile {
-    type Item = InMemoryLine;
-    type IntoIter = ::std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.lines.into_iter()
     }
 }
 
@@ -161,7 +155,7 @@ impl ToString for InMemoryLine {
 mod test {
 
     use super::{InMemoryLine, InMemoryFile};
-    use super::super::common::{Line, File};
+    use super::super::common::{Line, File, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
 
@@ -177,7 +171,7 @@ mod test {
         assert_eq!(Ok(&line1), file.line(0));
         assert_eq!(Ok(&line2), file.line(1));
         assert_eq!(Err("index 2 is out of bounds".to_string()), file.line(2));
-        assert_eq!(vec![line1.clone(), line2.clone()], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
+        assert_eq!(vec![&line1, &line2], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
         assert_eq!(2, file.len());
         let _ = file.set_line(4, line3.clone());
         assert_eq!(5, file.len());
@@ -186,13 +180,13 @@ mod test {
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(3));
         assert_eq!(Ok(&line3), file.line(4));
-        assert_eq!(vec![line1.clone(), line2.clone(), InMemoryLine::new_from_length(10), InMemoryLine::new_from_length(10), line3.clone()], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
+        assert_eq!(vec![&line1, &line2, &InMemoryLine::new_from_length(10), &InMemoryLine::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
         let _ = file.remove_line(2);
         assert_eq!(Ok(&line1), file.line(0));
         assert_eq!(Ok(&line2), file.line(1));
         assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
         assert_eq!(Ok(&line3), file.line(3));
-        assert_eq!(vec![line1, line2, InMemoryLine::new_from_length(10), line3], Iterator::collect::<Vec<InMemoryLine>>(file.into_iter()));
+        assert_eq!(vec![&line1, &line2, &InMemoryLine::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
         assert_eq!(4, file.len());
         assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb\r\n          \r\ncccccccccc".to_string(), file.to_string());
     }
