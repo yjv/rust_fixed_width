@@ -50,6 +50,7 @@ impl File for InMemoryFile {
     fn line(&self, index: usize) -> Result<&Self::Line, Self::Error> {
         self.lines.get(index).ok_or(format!("index {} is out of bounds", index))
     }
+
     fn line_mut(&mut self, index: usize) -> Result<&mut Self::Line, Self::Error> {
         self.lines.get_mut(index).ok_or(format!("index {} is out of bounds", index))
     }

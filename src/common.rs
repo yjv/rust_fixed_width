@@ -1,6 +1,7 @@
 use std::string::ToString;
 use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
+use spec::{RecordSpec, FileSpec, RecordSpecRecognizer};
 
 pub trait File: ToString {
     type Line: Line;
@@ -14,9 +15,6 @@ pub trait File: ToString {
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
     fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
     fn len(&self) -> usize;
-//    fn iter<'a>(&'a self) -> FileIterator<'a, Self> {
-//        FileIterator::new(self)
-//    }
 }
 
 pub trait Line: ToString {
@@ -131,34 +129,59 @@ impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
     }
 }
 
-pub struct MutableFileIterator<'a, T: File + 'a> {
-    position: usize,
-    file: &'a mut T
+pub struct FileReader<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> {
+    spec: &'a FileSpec<U>,
+    file: &'a T,
+    recognizer: Option<&'a V>
 }
 
-impl<'a, T: File + 'a> MutableFileIterator<'a, T> {
-    pub fn new(file: &'a mut T) -> Self {
-        MutableFileIterator {
-            position: 0,
-            file: file
-        }
+impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'a, T, U, V> {
+    pub fn new(spec: &'a FileSpec<U>, file: &'a T, recognizer: Option<&'a V>) -> Self {
+        FileReader {spec: spec, file: file, recognizer: recognizer}
+    }
+
+    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<LineReader<'a, <T as File>::Line, U>, String> {
+        let line = try!(self.file.line(index).map_err(|_| "".to_string()));
+
+        Ok(LineReader::new(
+            try!(self.spec.record_specs.get(
+                &try!(spec_name.map_or_else(
+                    || self.recognizer.ok_or(
+                        "Either the file reader needs a spec record recognizer or you must pass the spec record you need".to_string()
+                    ).and_then(
+                        |recognizer| recognizer.recognize(line, self.spec)
+                    ) ,
+                    |name| Ok(name))
+                )
+            ).ok_or("record spec not found".to_string())),
+            line
+        ))
     }
 }
 
-impl<'a, T: File + 'a> Iterator for MutableFileIterator<'a, T> {
-    type Item = Result<&'a mut <T as File>::Line, <T as File>::Error>;
+pub struct LineReader<'a, T: 'a + Line, U: 'a + Range> {
+    spec: &'a RecordSpec<U>,
+    line: &'a T
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.position = self.position + 1;
-        {
-            if self.position - 1 >= self.file.len() {
-                return None;
-            }
-        }
-        let mut file = &self.file;
-
-        Some(file.line_mut(self.position - 1))
+impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
+    pub fn new(spec: &'a RecordSpec<U>, line: &'a T) -> Self {
+        LineReader {spec: spec, line: line}
     }
+
+    pub fn field<V: FromField>(&self, name: String) -> Result<V, String> {
+        V::from_field(try!(self.line.get(
+            try!(self.spec.field_specs.get(&name).ok_or(format!("Failed to find the field named {}.", name))).range.clone()
+        ).map_err(|_| "failed to parse from field".to_string())))
+    }
+}
+
+pub trait FromField: Sized {
+    fn from_field(string: String) -> Result<Self, String>;
+}
+
+pub trait ToField {
+    fn to_field(&self) -> Result<String, String>;
 }
 
 #[cfg(test)]
@@ -185,6 +208,4 @@ mod test {
         assert_eq!(Some(4), range5.start());
         assert_eq!(Some(5), range5.end());
     }
-
-
 }
