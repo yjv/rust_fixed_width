@@ -184,6 +184,12 @@ pub trait ToField {
     fn to_field(&self) -> Result<String, String>;
 }
 
+pub trait LineGenerator {
+    type Error;
+    type Line;
+    fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error>;
+}
+
 #[cfg(test)]
 mod test {
 
