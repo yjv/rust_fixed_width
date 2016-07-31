@@ -136,6 +136,12 @@ pub trait ToField {
     fn to_field(&self) -> Result<String, String>;
 }
 
+impl FromField for String {
+    fn from_field(string: String) -> Result<Self, String> {
+        Ok(string)
+    }
+}
+
 pub trait LineGenerator {
     type Error: Debug;
     type Line: Line;

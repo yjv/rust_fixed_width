@@ -1,5 +1,6 @@
 use common::{File, Line, Range, FromField};
 use spec::{FileSpec, RecordSpec, RecordSpecRecognizer};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error<T: File> {
@@ -41,7 +42,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
 }
 
 #[derive(Debug)]
-pub enum LineReaderError<T: Line> {
+pub enum LineError<T: Line> {
     FieldSpecNotFound {
         name: String,
         record_spec_name: String
@@ -60,9 +61,15 @@ impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
         LineReader {spec: spec, line: line}
     }
 
-    pub fn field<V: FromField>(&self, name: String) -> Result<V, LineReaderError<T>> {
+    pub fn field<V: FromField>(&self, name: String) -> Result<V, LineError<T>> {
         V::from_field(try!(self.line.get(
-            try!(self.spec.field_specs.get(&name).ok_or(LineReaderError::FieldSpecNotFound { name: name, record_spec_name: self.spec.name.clone() })).range.clone()
-        ).map_err(LineReaderError::LineGetFailed))).map_err(LineReaderError::FromFieldFail)
+            try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound { name: name, record_spec_name: self.spec.name.clone() })).range.clone()
+        ).map_err(LineError::LineGetFailed))).map_err(LineError::FromFieldFail)
+    }
+    
+    pub fn fields<V: FromField>(&self) -> HashMap<String, Result<V, LineError<T>>> {
+        self.spec.field_specs.iter().map(|(name, field_spec)| (name.clone(), self.line.get(
+            field_spec.range.clone()
+        ).map_err(LineError::LineGetFailed).and_then(|v| V::from_field(v).map_err(LineError::FromFieldFail)))).collect()
     }
 }
