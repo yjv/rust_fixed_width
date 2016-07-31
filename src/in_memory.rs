@@ -1,25 +1,25 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File, Line, Range, normalize_range, validate_line, LineGenerator};
+use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, validate_line, LineGenerator as LineGeneratorTrait, InvalidRangeError, InvalidLineError};
 
-pub struct InMemoryFile {
+pub struct File {
     name: String,
     width: usize,
-    lines: Vec<InMemoryLine>,
+    lines: Vec<Line>,
     line_separator: String
 }
 
-impl InMemoryFile {
+impl File {
     pub fn new(name: String, width: usize) -> Self {
         Self::new_with_lines(name, width, Vec::new())
     }
 
-    pub fn new_with_lines(name: String, width: usize, lines: Vec<InMemoryLine>) -> Self {
+    pub fn new_with_lines(name: String, width: usize, lines: Vec<Line>) -> Self {
         Self::new_with_lines_and_line_separator(name, width, lines, "\r\n".to_string())
     }
 
-    pub fn new_with_lines_and_line_separator(name: String, width: usize, lines: Vec<InMemoryLine>, line_separator: String) -> Self {
-        InMemoryFile {
+    pub fn new_with_lines_and_line_separator(name: String, width: usize, lines: Vec<Line>, line_separator: String) -> Self {
+        File {
             name: name,
             width: width,
             lines: lines,
@@ -32,9 +32,14 @@ impl InMemoryFile {
     }
 }
 
-impl File for InMemoryFile {
-    type Line = InMemoryLine;
-    type Error = String;
+#[derive(Debug)]
+pub enum FileError {
+    InvalidLine(InvalidLineError)
+}
+
+impl FileTrait for File {
+    type Line = Line;
+    type Error = FileError;
     fn name(&self) -> &str {
         &self.name[..]
     }
@@ -47,30 +52,30 @@ impl File for InMemoryFile {
         &self.line_separator[..]
     }
 
-    fn line(&self, index: usize) -> Result<&Self::Line, Self::Error> {
-        self.lines.get(index).ok_or(format!("index {} is out of bounds", index))
+    fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
+        Ok(self.lines.get(index))
     }
 
-    fn line_mut(&mut self, index: usize) -> Result<&mut Self::Line, Self::Error> {
-        self.lines.get_mut(index).ok_or(format!("index {} is out of bounds", index))
+    fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
+        Ok(self.lines.get_mut(index))
     }
 
-    fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
-        let line = try!(validate_line(line, self));
-        self.lines.push(InMemoryLine::new(line.get(..).unwrap()));
+    fn add_line<T: LineTrait>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
+        let line = try!(validate_line(line, self).map_err(FileError::InvalidLine));
+        self.lines.push(Line::new(line.get(..).unwrap()));
         Ok(self)
     }
 
-    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error> {
-        let line = try!(validate_line(line, self));
+    fn set_line<T: LineTrait>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error> {
+        let line = try!(validate_line(line, self).map_err(FileError::InvalidLine));
 
         let length = self.len();
 
         if index > length {
-            self.lines.extend(repeat(InMemoryLine::new_from_length(self.width)).take(index - length))
+            self.lines.extend(repeat(Line::new_from_length(self.width)).take(index - length))
         }
 
-        self.lines.insert(index, InMemoryLine::new(line.get(..).unwrap_or(String::new())));
+        self.lines.insert(index, Line::new(line.get(..).unwrap_or(String::new())));
         Ok(self)
     }
 
@@ -84,7 +89,7 @@ impl File for InMemoryFile {
     }
 }
 
-impl ToString for InMemoryFile {
+impl ToString for File {
     fn to_string(&self) -> String {
         let mut string = String::new();
         for line in self.lines.iter() {
@@ -100,35 +105,41 @@ impl ToString for InMemoryFile {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
-pub struct InMemoryLine {
+pub struct Line {
     data: String
 }
 
-impl InMemoryLine {
+impl Line {
     pub fn new(data: String) -> Self {
-        InMemoryLine { data: data }
+        Line { data: data }
     }
 
     pub fn new_from_length(length: usize) -> Self {
-        InMemoryLine { data: repeat(" ").take(length).collect::<String>() }
+        Line { data: repeat(" ").take(length).collect::<String>() }
     }
 }
 
-impl Line for InMemoryLine {
-    type Error = String;
+#[derive(Debug)]
+pub enum LineError {
+    DataLongerThanRange,
+    InvalidRange(InvalidRangeError)
+}
+
+impl LineTrait for Line {
+    type Error = LineError;
     fn len(&self) -> usize {
         self.data.len()
     }
 
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error> {
-        let (start, end) = try!(normalize_range(range, self));
+        let (start, end) = try!(normalize_range(range, self).map_err(LineError::InvalidRange));
         Ok(self.data[start..end].to_string())
     }
 
     fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error> {
-        let (start, end) = try!(normalize_range(range, self));
+        let (start, end) = try!(normalize_range(range, self).map_err(LineError::InvalidRange));
         if string.len() > end - start {
-            Err("string longer than the range being set".to_string())
+            Err(LineError::DataLongerThanRange)
         } else {
             let mut data = String::new();
             data.push_str(&self.data[..start]);
@@ -141,72 +152,72 @@ impl Line for InMemoryLine {
     }
 
     fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
-        let (start, end) = try!(normalize_range(range.clone(), self));
+        let (start, end) = try!(normalize_range(range.clone(), self).map_err(LineError::InvalidRange));
         self.set(range, &repeat(" ").take(end - start).collect())
     }
 }
 
-impl ToString for InMemoryLine {
+impl ToString for Line {
     fn to_string(&self) -> String {
         self.data.clone()
     }
 }
 
-pub struct InMemoryLineGenerator;
+pub struct LineGenerator;
 
-impl LineGenerator for InMemoryLineGenerator {
+impl LineGeneratorTrait for LineGenerator {
     type Error = ();
-    type Line = InMemoryLine;
+    type Line = Line;
 
     fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error> {
-        Ok(InMemoryLine::new_from_length(length))
+        Ok(Line::new_from_length(length))
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use super::{InMemoryLine, InMemoryFile, InMemoryLineGenerator};
-    use super::super::common::{Line, File, FileIterator, LineGenerator};
+    use super::{Line, File, LineGenerator};
+    use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator, LineGenerator as LineGeneratorTrait};
     use std::iter::repeat;
     use std::iter::Iterator;
 
     #[test]
     fn in_memory_file() {
-        let mut file = InMemoryFile::new("bla".to_string(), 10);
+        let mut file = File::new("bla".to_string(), 10);
         assert_eq!("bla", file.name());
-        let line1 = InMemoryLine::new(repeat("a").take(10).collect::<String>());
-        let line2 = InMemoryLine::new(repeat("b").take(10).collect::<String>());
-        let line3 = InMemoryLine::new(repeat("c").take(10).collect::<String>());
+        let line1 = Line::new(repeat("a").take(10).collect::<String>());
+        let line2 = Line::new(repeat("b").take(10).collect::<String>());
+        let line3 = Line::new(repeat("c").take(10).collect::<String>());
         let _ = file.add_line(line1.clone());
         let _ = file.add_line(line2.clone());
-        assert_eq!(Ok(&line1), file.line(0));
-        assert_eq!(Ok(&line2), file.line(1));
-        assert_eq!(Err("index 2 is out of bounds".to_string()), file.line(2));
-        assert_eq!(vec![&line1, &line2], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
+        assert_eq!(Some(&line1), file.line(0).unwrap());
+        assert_eq!(Some(&line2), file.line(1).unwrap());
+        assert_eq!(None, file.line(2).unwrap());
+        assert_eq!(vec![&line1, &line2], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
         assert_eq!(2, file.len());
         let _ = file.set_line(4, line3.clone());
         assert_eq!(5, file.len());
-        assert_eq!(Ok(&line1), file.line(0));
-        assert_eq!(Ok(&line2), file.line(1));
-        assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
-        assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(3));
-        assert_eq!(Ok(&line3), file.line(4));
-        assert_eq!(vec![&line1, &line2, &InMemoryLine::new_from_length(10), &InMemoryLine::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
+        assert_eq!(Some(&line1), file.line(0).unwrap());
+        assert_eq!(Some(&line2), file.line(1).unwrap());
+        assert_eq!(Some(&Line::new_from_length(10)), file.line(2).unwrap());
+        assert_eq!(Some(&Line::new_from_length(10)), file.line(3).unwrap());
+        assert_eq!(Some(&line3), file.line(4).unwrap());
+        assert_eq!(vec![&line1, &line2, &Line::new_from_length(10), &Line::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
         let _ = file.remove_line(2);
-        assert_eq!(Ok(&line1), file.line(0));
-        assert_eq!(Ok(&line2), file.line(1));
-        assert_eq!(Ok(&InMemoryLine::new_from_length(10)), file.line(2));
-        assert_eq!(Ok(&line3), file.line(3));
-        assert_eq!(vec![&line1, &line2, &InMemoryLine::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&InMemoryLine>>());
+        assert_eq!(Some(&line1), file.line(0).unwrap());
+        assert_eq!(Some(&line2), file.line(1).unwrap());
+        assert_eq!(Some(&Line::new_from_length(10)), file.line(2).unwrap());
+        assert_eq!(Some(&line3), file.line(3).unwrap());
+        assert_eq!(vec![&line1, &line2, &Line::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
         assert_eq!(4, file.len());
         assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb\r\n          \r\ncccccccccc".to_string(), file.to_string());
     }
 
     #[test]
     fn in_memory_line() {
-        let mut line1 = InMemoryLine::new(repeat("a").take(10).collect());
-        let mut line2 = InMemoryLine::new_from_length(10);
+        let mut line1 = Line::new(repeat("a").take(10).collect());
+        let mut line2 = Line::new_from_length(10);
         assert_eq!(10, line1.len());
         assert_eq!(Ok("aaaaaaaaaa".to_string()), line1.get(..));
         assert_eq!(Ok("aaaa".to_string()), line1.get(1..5));
@@ -221,7 +232,7 @@ mod test {
 
     #[test]
     fn in_memory_line_generator() {
-        let generator = InMemoryLineGenerator;
-        assert_eq!(Ok(InMemoryLine::new_from_length(12)), generator.generate_line(12));
+        let generator = LineGenerator;
+        assert_eq!(Ok(Line::new_from_length(12)), generator.generate_line(12));
     }
 }

@@ -8,8 +8,8 @@ pub trait File: ToString {
     fn name(&self) -> &str;
     fn width(&self) -> usize;
     fn line_separator(&self) -> &str;
-    fn line(&self, index: usize) -> Result<&Self::Line, Self::Error>;
-    fn line_mut(&mut self, index: usize) -> Result<&mut Self::Line, Self::Error>;
+    fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error>;
+    fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error>;
     fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error>;
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
     fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
@@ -79,23 +79,35 @@ impl Range for usize {
     }
 }
 
-pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), String> {
+#[derive(Debug)]
+pub enum InvalidRangeError {
+    StartOffEndOfLine,
+    EndOffEndOfLine
+}
+
+pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), InvalidRangeError> {
     let start = range.start().unwrap_or(0);
     let end = range.end().unwrap_or(line.len());
     if start >= line.len() {
-        Err("start is off the end of the line".to_string())
+        Err(InvalidRangeError::StartOffEndOfLine)
     } else if end > line.len() {
-        Err("end is off the end of the line".to_string())
+        Err(InvalidRangeError::EndOffEndOfLine)
     } else {
         Ok((start, end))
     }
 }
 
-pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, String> {
+#[derive(Debug)]
+pub enum InvalidLineError {
+    LineLengthWrong,
+    LineContainsLineSeparator
+}
+
+pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, InvalidLineError> {
     if line.len() != file.width() {
-        Err("the line's length doesn't match the file's width.".to_string())
+        Err(InvalidLineError::LineLengthWrong)
     } else if line.to_string().contains(file.line_separator()) {
-        Err("the line contains the char for the file's line separator".to_string())
+        Err(InvalidLineError::LineContainsLineSeparator)
     } else {
         Ok(line)
     }
@@ -120,10 +132,10 @@ impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
-        if self.position - 1 >= self.file.len() {
-            None
-        } else {
-            Some(self.file.line(self.position - 1))
+        match self.file.line(self.position - 1) {
+            Ok(Some(line)) => Some(Ok(line)),
+            Err(error) => Some(Err(error)),
+            Ok(None) => None
         }
     }
 }

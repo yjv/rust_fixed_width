@@ -21,8 +21,13 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
         FileReader {spec: spec, file: file, recognizer: recognizer}
     }
 
-    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<LineReader<'a, <T as File>::Line, U>, Error<T>> {
-        let line = try!(self.file.line(index).map_err(Error::FailedToGetLine));
+    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<Option<LineReader<'a, <T as File>::Line, U>>, Error<T>> {
+        let line = match self.file.line(index).map_err(Error::FailedToGetLine) {
+            Ok(Some(line)) => line,
+            Err(error) => return Err(error),
+            Ok(None) => return Ok(None)
+        };
+
         let record_spec_name = try!(spec_name.map_or_else(
             || self.recognizer.ok_or(
                 Error::RecordSpecNameRequired
@@ -32,12 +37,39 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
             |name| Ok(name))
         );
 
-        Ok(LineReader::new(
+        Ok(Some(LineReader::new(
             try!(self.spec.record_specs.get(
                 &record_spec_name
             ).ok_or(Error::RecordSpecNotFound(record_spec_name))),
             line
-        ))
+        )))
+    }
+}
+
+pub struct FileIterator<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> {
+    position: usize,
+    reader: &'a FileReader<'a, T, U, V>
+}
+
+impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileIterator<'a, T, U, V> {
+    pub fn new(reader: &'a FileReader<'a, T, U, V>) -> Self {
+        FileIterator {
+            position: 0,
+            reader: reader
+        }
+    }
+}
+
+impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> Iterator for FileIterator<'a, T, U, V> {
+    type Item = Result<LineReader<'a, <T as File>::Line, U>, Error<T>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.position = self.position + 1;
+        match self.reader.get_line_reader(self.position - 1, None) {
+            Ok(Some(line)) => Some(Ok(line)),
+            Err(error) => Some(Err(error)),
+            Ok(None) => None
+        }
     }
 }
 
