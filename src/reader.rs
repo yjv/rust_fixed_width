@@ -66,7 +66,7 @@ impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
             try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound { name: name, record_spec_name: self.spec.name.clone() })).range.clone()
         ).map_err(LineError::LineGetFailed))).map_err(LineError::FromFieldFail)
     }
-    
+
     pub fn fields<V: FromField>(&self) -> HashMap<String, Result<V, LineError<T>>> {
         self.spec.field_specs.iter().map(|(name, field_spec)| (name.clone(), self.line.get(
             field_spec.range.clone()
