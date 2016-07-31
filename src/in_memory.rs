@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File, Line, Range, normalize_range, validate_line};
+use common::{File, Line, Range, normalize_range, validate_line, LineGenerator};
 
 pub struct InMemoryFile {
     name: String,
@@ -156,11 +156,22 @@ impl ToString for InMemoryLine {
     }
 }
 
+pub struct InMemoryLineGenerator;
+
+impl LineGenerator for InMemoryLineGenerator {
+    type Error = ();
+    type Line = InMemoryLine;
+
+    fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error> {
+        Ok(InMemoryLine::new_from_length(length))
+    }
+}
+
 #[cfg(test)]
 mod test {
 
-    use super::{InMemoryLine, InMemoryFile};
-    use super::super::common::{Line, File, FileIterator};
+    use super::{InMemoryLine, InMemoryFile, InMemoryLineGenerator};
+    use super::super::common::{Line, File, FileIterator, LineGenerator};
     use std::iter::repeat;
     use std::iter::Iterator;
 
@@ -210,5 +221,11 @@ mod test {
         assert_eq!(Ok("abbbba b a".to_string()), line1.set(7..9, &"b".to_string()).unwrap().get(..));
         assert_eq!(Ok("b  a      ".to_string()), line2.set(0, &"b".to_string()).unwrap().get(..));
         assert_eq!(Ok("b  a     b".to_string()), line2.set(9, &"b".to_string()).unwrap().get(..));
+    }
+
+    #[test]
+    fn in_memory_line_generator() {
+        let generator = InMemoryLineGenerator;
+        assert_eq!(Ok(InMemoryLine::new_from_length(12)), generator.generate_line(12));
     }
 }
