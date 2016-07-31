@@ -82,6 +82,10 @@ impl File for InMemoryFile {
     fn len(&self) -> usize {
         self.lines.len()
     }
+
+    fn generate_line(&self) -> Result<Self::Line, Self::Error> {
+        Ok(Self::Line::new_from_length(self.width))
+    }
 }
 
 impl ToString for InMemoryFile {
