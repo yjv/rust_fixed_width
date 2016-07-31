@@ -219,15 +219,15 @@ mod test {
         let mut line1 = Line::new(repeat("a").take(10).collect());
         let mut line2 = Line::new_from_length(10);
         assert_eq!(10, line1.len());
-        assert_eq!(Ok("aaaaaaaaaa".to_string()), line1.get(..));
-        assert_eq!(Ok("aaaa".to_string()), line1.get(1..5));
-        assert_eq!(Ok("          ".to_string()), line2.get(..));
-        assert_eq!(Ok("abbbbaaaaa".to_string()), line1.set(1..5, &"bbbb".to_string()).unwrap().get(..));
-        assert_eq!(Ok("abbbba  aa".to_string()), line1.remove(6..8).unwrap().get(..));
-        assert_eq!(Ok("   a      ".to_string()), line2.set(3, &"a".to_string()).unwrap().get(..));
-        assert_eq!(Ok("abbbba b a".to_string()), line1.set(7..9, &"b".to_string()).unwrap().get(..));
-        assert_eq!(Ok("b  a      ".to_string()), line2.set(0, &"b".to_string()).unwrap().get(..));
-        assert_eq!(Ok("b  a     b".to_string()), line2.set(9, &"b".to_string()).unwrap().get(..));
+        assert_eq!("aaaaaaaaaa".to_string(), line1.get(..).unwrap());
+        assert_eq!("aaaa".to_string(), line1.get(1..5).unwrap());
+        assert_eq!("          ".to_string(), line2.get(..).unwrap());
+        assert_eq!("abbbbaaaaa".to_string(), line1.set(1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba  aa".to_string(), line1.remove(6..8).unwrap().get(..).unwrap());
+        assert_eq!("   a      ".to_string(), line2.set(3, &"a".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba b a".to_string(), line1.set(7..9, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a      ".to_string(), line2.set(0, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a     b".to_string(), line2.set(9, &"b".to_string()).unwrap().get(..).unwrap());
     }
 
     #[test]
