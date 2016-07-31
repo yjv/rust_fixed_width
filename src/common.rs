@@ -1,8 +1,6 @@
 use std::string::ToString;
 use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
-use spec::{RecordSpec, FileSpec, RecordSpecRecognizer};
-use std::collections::HashMap;
 
 pub trait File: ToString {
     type Line: Line;
@@ -16,7 +14,6 @@ pub trait File: ToString {
     fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
     fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
     fn len(&self) -> usize;
-    fn generate_line(&self) -> Result<Self::Line, Self::Error>;
 }
 
 pub trait Line: ToString {
@@ -140,8 +137,8 @@ pub trait ToField {
 }
 
 pub trait LineGenerator {
-    type Error;
-    type Line;
+    type Error: Debug;
+    type Line: Line;
     fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error>;
 }
 

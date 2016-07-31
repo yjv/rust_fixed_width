@@ -1,5 +1,8 @@
+use common::{File, Line, Range, FromField};
+use spec::{FileSpec, RecordSpec, RecordSpecRecognizer};
+
 #[derive(Debug)]
-pub enum FileReaderError<T: File> {
+pub enum Error<T: File> {
     FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
     FailedToRecognizeRecordSpec(String),
@@ -17,13 +20,13 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
         FileReader {spec: spec, file: file, recognizer: recognizer}
     }
 
-    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<LineReader<'a, <T as File>::Line, U>, FileReaderError<T>> {
-        let line = try!(self.file.line(index).map_err(FileReaderError::FailedToGetLine));
+    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<LineReader<'a, <T as File>::Line, U>, Error<T>> {
+        let line = try!(self.file.line(index).map_err(Error::FailedToGetLine));
         let record_spec_name = try!(spec_name.map_or_else(
             || self.recognizer.ok_or(
-                FileReaderError::RecordSpecNameRequired
+                Error::RecordSpecNameRequired
             ).and_then(
-                |recognizer| recognizer.recognize(line, self.spec).map_err(FileReaderError::FailedToRecognizeRecordSpec)
+                |recognizer| recognizer.recognize(line, self.spec).map_err(Error::FailedToRecognizeRecordSpec)
             ),
             |name| Ok(name))
         );
@@ -31,7 +34,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
         Ok(LineReader::new(
             try!(self.spec.record_specs.get(
                 &record_spec_name
-            ).ok_or(FileReaderError::RecordSpecNotFound(record_spec_name))),
+            ).ok_or(Error::RecordSpecNotFound(record_spec_name))),
             line
         ))
     }

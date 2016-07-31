@@ -3,4 +3,10 @@ name = "fixed_width"
 version = "0.1.0"
 authors = ["yosefderay <yosefderay770@gmail.com>"]
 
-[dependencies]
+[features]
+default = ["in_memory"]
+in_memory = []
+spec = []
+reader = ["spec"]
+builder = ["spec"]
+all = ["in_memory", "reader", "builder", "spec"]
