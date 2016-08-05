@@ -10,15 +10,7 @@ pub struct File {
 }
 
 impl File {
-    pub fn new(name: String, width: usize) -> Self {
-        Self::new_with_lines(name, width, Vec::new())
-    }
-
-    pub fn new_with_lines(name: String, width: usize, lines: Vec<Line>) -> Self {
-        Self::new_with_lines_and_line_separator(name, width, lines, "\r\n".to_string())
-    }
-
-    pub fn new_with_lines_and_line_separator(name: String, width: usize, lines: Vec<Line>, line_separator: String) -> Self {
+    pub fn new(name: String, width: usize, lines: Vec<Line>, line_separator: String) -> Self {
         File {
             name: name,
             width: width,
@@ -27,8 +19,8 @@ impl File {
         }
     }
 
-    pub fn new_with_line_separator(name: String, width: usize, line_separator: String) -> Self {
-        Self::new_with_lines_and_line_separator(name, width, Vec::new(), line_separator)
+    pub fn new_with_name_and_width(name: String, width: usize) -> Self {
+        Self::new(name, width, Vec::new(), "\r\n".to_string())
     }
 }
 
