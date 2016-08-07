@@ -155,6 +155,12 @@ impl FromField for String {
     }
 }
 
+impl ToField for String {
+    fn to_field(&self) -> Result<String, String> {
+        Ok(self.clone())
+    }
+}
+
 pub trait LineGenerator {
     type Error: Debug;
     type Line: Line;
@@ -165,7 +171,7 @@ pub trait LineGenerator {
 mod test {
 
     use std::string::ToString;
-    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range};
+    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range, ToField, FromField};
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
@@ -289,5 +295,17 @@ mod test {
         assert_eq!(Err(InvalidLineError::LineLengthWrong), validate_line(line, &file));
         let line = TestLine {length: 5, data: "sdffds\r\nfdssdf".to_string()};
         assert_eq!(Err(InvalidLineError::LineContainsLineSeparator), validate_line(line, &file));
+    }
+
+    #[test]
+    fn to_field_for_string() {
+        let string = "eeewrrew".to_string();
+        assert_eq!(Ok(string.clone()), String::to_field(&string));
+    }
+
+    #[test]
+    fn from_field_for_string() {
+        let string = "eeewrrew".to_string();
+        assert_eq!(Ok(string.clone()), String::from_field(string));
     }
 }
