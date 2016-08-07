@@ -171,7 +171,7 @@ pub trait LineGenerator {
 mod test {
 
     use std::string::ToString;
-    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range, ToField, FromField};
+    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range, ToField, FromField, FileIterator};
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
@@ -235,12 +235,13 @@ mod test {
     }
 
     #[derive(Debug)]
-    struct TestFile {
+    struct TestFile<'a> {
         width: usize,
-        line_seperator: String
+        line_seperator: String,
+        lines: Vec<Result<&'a TestLine, ()>>
     }
 
-    impl File for TestFile {
+    impl<'a> File for TestFile<'a> {
         type Line = TestLine;
         type Error = ();
         fn name(&self) -> &str {
@@ -255,8 +256,12 @@ mod test {
             &self.line_seperator[..]
         }
 
-        fn line(&self, _: usize) -> Result<Option<&Self::Line>, Self::Error> {
-            unimplemented!()
+        fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
+            match self.lines.get(index) {
+                Some(&Ok(line)) => Ok(Some(line)),
+                Some(&Err(error)) => Err(error),
+                None => Ok(None)
+            }
         }
 
         fn line_mut(&mut self, _: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
@@ -280,7 +285,7 @@ mod test {
         }
     }
 
-    impl ToString for TestFile {
+    impl<'a> ToString for TestFile<'a> {
         fn to_string(&self) -> String {
             unimplemented!()
         }
@@ -288,7 +293,7 @@ mod test {
 
     #[test]
     fn validate_line_works() {
-        let file = TestFile {width: 5, line_seperator: "\r\n".to_string()};
+        let file = TestFile {width: 5, line_seperator: "\r\n".to_string(), lines: Vec::new()};
         let line = TestLine {length: 5, data: "sdffdsfdssdf".to_string()};
         assert_eq!(Ok(line.clone()), validate_line(line, &file));
         let line = TestLine {length: 7, data: "sdffdsfdssdf".to_string()};
@@ -307,5 +312,13 @@ mod test {
     fn from_field_for_string() {
         let string = "eeewrrew".to_string();
         assert_eq!(Ok(string.clone()), String::from_field(string));
+    }
+
+    #[test]
+    fn iterator_works() {
+        let file = TestFile {line_seperator: "\r\n".to_string(), width: 10, lines: Vec::new()};
+        for line in FileIterator::new(&file) {
+
+        }
     }
 }
