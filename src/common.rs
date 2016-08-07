@@ -316,9 +316,20 @@ mod test {
 
     #[test]
     fn iterator_works() {
-        let file = TestFile {line_seperator: "\r\n".to_string(), width: 10, lines: Vec::new()};
-        for line in FileIterator::new(&file) {
-
-        }
+        let line1 = TestLine {data: "".to_string(), length: 0};
+        let line2 = TestLine {data: "".to_string(), length: 0};
+        let line3 = TestLine {data: "".to_string(), length: 0};
+        let file = TestFile {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
+            Ok(&line1),
+            Ok(&line2),
+            Err(()),
+            Ok(&line3)
+        ]};
+        let mut iterator = FileIterator::new(&file);
+        assert_eq!(Some(Ok(&line1)), iterator.next());
+        assert_eq!(Some(Ok(&line2)), iterator.next());
+        assert_eq!(Some(Err(())), iterator.next());
+        assert_eq!(Some(Ok(&line3)), iterator.next());
+        assert_eq!(None, iterator.next());
     }
 }
