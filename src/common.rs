@@ -79,25 +79,26 @@ impl Range for usize {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum InvalidRangeError {
     StartOffEndOfLine,
     EndOffEndOfLine
 }
 
 pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), InvalidRangeError> {
+    let line_length = line.len();
     let start = range.start().unwrap_or(0);
-    let end = range.end().unwrap_or(line.len());
-    if start >= line.len() {
+    let end = range.end().unwrap_or(line_length);
+    if start >= line_length {
         Err(InvalidRangeError::StartOffEndOfLine)
-    } else if end > line.len() {
+    } else if end > line_length {
         Err(InvalidRangeError::EndOffEndOfLine)
     } else {
         Ok((start, end))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum InvalidLineError {
     LineLengthWrong,
     LineContainsLineSeparator
@@ -163,11 +164,12 @@ pub trait LineGenerator {
 #[cfg(test)]
 mod test {
 
-    use super::Range;
+    use std::string::ToString;
+    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range};
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
-    fn ranges() {
+    fn ranges_work() {
         let range1 = RangeStruct { start: 2, end: 5 };
         let range2 = RangeFull;
         let range3 = RangeFrom { start: 4 };
@@ -183,5 +185,109 @@ mod test {
         assert_eq!(Some(8), range4.end());
         assert_eq!(Some(4), range5.start());
         assert_eq!(Some(5), range5.end());
+    }
+
+    #[derive(Debug, Eq, PartialEq, Clone)]
+    struct TestLine {
+        length: usize,
+        data: String
+    }
+
+    impl Line for TestLine {
+        type Error = ();
+        fn len(&self) -> usize {
+            self.length
+        }
+
+        fn get<T: Range>(&self, _: T) -> Result<String, Self::Error> {
+            unimplemented!()
+        }
+
+        fn set<T: Range>(&mut self, _: T, _: &String) -> Result<&mut Self, Self::Error> {
+            unimplemented!()
+        }
+
+        fn remove<T: Range>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
+            unimplemented!()
+        }
+    }
+
+    impl ToString for TestLine {
+        fn to_string(&self) -> String {
+            self.data.clone()
+        }
+    }
+
+    #[test]
+    fn normalize_range_works() {
+        let line = TestLine {length: 5, data: "".to_string()};
+        assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), normalize_range(7..79, &line));
+        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), normalize_range(..6, &line));
+        assert_eq!(Ok((0, 5)), normalize_range(.., &line));
+        assert_eq!(Ok((2, 5)), normalize_range(2.., &line));
+        assert_eq!(Ok((0, 3)), normalize_range(..3, &line));
+    }
+
+    #[derive(Debug)]
+    struct TestFile {
+        width: usize,
+        line_seperator: String
+    }
+
+    impl File for TestFile {
+        type Line = TestLine;
+        type Error = ();
+        fn name(&self) -> &str {
+            unimplemented!()
+        }
+
+        fn width(&self) -> usize {
+            self.width
+        }
+
+        fn line_separator(&self) -> &str {
+            &self.line_seperator[..]
+        }
+
+        fn line(&self, _: usize) -> Result<Option<&Self::Line>, Self::Error> {
+            unimplemented!()
+        }
+
+        fn line_mut(&mut self, _: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
+            unimplemented!()
+        }
+
+        fn add_line<T: Line>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
+            unimplemented!()
+        }
+
+        fn set_line<T: Line>(&mut self, _: usize, _: T) -> Result<&mut Self, Self::Error> {
+            unimplemented!()
+        }
+
+        fn remove_line(&mut self, _: usize) -> Result<&mut Self, Self::Error> {
+            unimplemented!()
+        }
+
+        fn len(&self) -> usize {
+            unimplemented!()
+        }
+    }
+
+    impl ToString for TestFile {
+        fn to_string(&self) -> String {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn validate_line_works() {
+        let file = TestFile {width: 5, line_seperator: "\r\n".to_string()};
+        let line = TestLine {length: 5, data: "sdffdsfdssdf".to_string()};
+        assert_eq!(Ok(line.clone()), validate_line(line, &file));
+        let line = TestLine {length: 7, data: "sdffdsfdssdf".to_string()};
+        assert_eq!(Err(InvalidLineError::LineLengthWrong), validate_line(line, &file));
+        let line = TestLine {length: 5, data: "sdffds\r\nfdssdf".to_string()};
+        assert_eq!(Err(InvalidLineError::LineContainsLineSeparator), validate_line(line, &file));
     }
 }

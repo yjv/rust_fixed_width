@@ -176,7 +176,7 @@ mod test {
 
     #[test]
     fn in_memory_file() {
-        let mut file = File::new("bla".to_string(), 10);
+        let mut file = File::new_with_name_and_width("bla".to_string(), 10);
         assert_eq!("bla", file.name());
         let line1 = Line::new(repeat("a").take(10).collect::<String>());
         let line2 = Line::new(repeat("b").take(10).collect::<String>());
