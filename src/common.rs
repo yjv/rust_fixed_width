@@ -142,21 +142,25 @@ impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
 }
 
 pub trait FromField: Sized {
-    fn from_field(string: String) -> Result<Self, String>;
+    type Error: Debug;
+    fn from_field(string: String) -> Result<Self, Self::Error>;
 }
 
 pub trait ToField {
-    fn to_field(&self) -> Result<String, String>;
+    type Error: Debug;
+    fn to_field(&self) -> Result<String, Self::Error>;
 }
 
 impl FromField for String {
-    fn from_field(string: String) -> Result<Self, String> {
+    type Error = ();
+    fn from_field(string: String) -> Result<Self, Self::Error> {
         Ok(string)
     }
 }
 
 impl ToField for String {
-    fn to_field(&self) -> Result<String, String> {
+    type Error = ();
+    fn to_field(&self) -> Result<String, Self::Error> {
         Ok(self.clone())
     }
 }

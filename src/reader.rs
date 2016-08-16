@@ -3,10 +3,10 @@ use spec::{FileSpec, RecordSpec, RecordSpecRecognizer};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: File> {
+pub enum Error<T: File, U: RecordSpecRecognizer> {
     FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
-    FailedToRecognizeRecordSpec(String),
+    FailedToRecognizeRecordSpec(U::Error),
     RecordSpecNameRequired,
 }
 
@@ -21,7 +21,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileReader<'
         FileReader {spec: spec, file: file, recognizer: recognizer}
     }
 
-    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<Option<LineReader<'a, <T as File>::Line, U>>, Error<T>> {
+    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<Option<LineReader<'a, <T as File>::Line, U>>, Error<T, V>> {
         let line = match self.file.line(index).map_err(Error::FailedToGetLine) {
             Ok(Some(line)) => line,
             Err(error) => return Err(error),
@@ -61,7 +61,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> FileIterator
 }
 
 impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> Iterator for FileIterator<'a, T, U, V> {
-    type Item = Result<LineReader<'a, <T as File>::Line, U>, Error<T>>;
+    type Item = Result<LineReader<'a, <T as File>::Line, U>, Error<T, V>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
@@ -74,13 +74,13 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + RecordSpecRecognizer> Iterator for
 }
 
 #[derive(Debug)]
-pub enum LineError<T: Line> {
+pub enum LineError<T: Line, U: FromField> {
     FieldSpecNotFound {
         name: String,
         record_spec_name: String
     },
     LineGetFailed(T::Error),
-    FromFieldFail(String)
+    FromFieldFail(U::Error)
 }
 
 pub struct LineReader<'a, T: 'a + Line, U: 'a + Range> {
@@ -93,13 +93,13 @@ impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
         LineReader {spec: spec, line: line}
     }
 
-    pub fn field<V: FromField>(&self, name: String) -> Result<V, LineError<T>> {
+    pub fn field<V: FromField>(&self, name: String) -> Result<V, LineError<T, V>> {
         V::from_field(try!(self.line.get(
             try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound { name: name, record_spec_name: self.spec.name.clone() })).range.clone()
         ).map_err(LineError::LineGetFailed))).map_err(LineError::FromFieldFail)
     }
 
-    pub fn fields<V: FromField>(&self) -> HashMap<String, Result<V, LineError<T>>> {
+    pub fn fields<V: FromField>(&self) -> HashMap<String, Result<V, LineError<T, V>>> {
         self.spec.field_specs.iter().map(|(name, field_spec)| (name.clone(), self.line.get(
             field_spec.range.clone()
         ).map_err(LineError::LineGetFailed).and_then(|v| V::from_field(v).map_err(LineError::FromFieldFail)))).collect()

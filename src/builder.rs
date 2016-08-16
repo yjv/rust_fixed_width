@@ -3,7 +3,7 @@ use spec::FileSpec;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: LineGenerator, U: Line> {
+pub enum Error<T: LineGenerator, U: Line, V: ToField> {
     LineGenerateFailed(T::Error),
     RecordSpecNotFound(String),
     FieldSpecNotFound {
@@ -11,7 +11,7 @@ pub enum Error<T: LineGenerator, U: Line> {
         record_spec_name: String
     },
     LineSetFailed(U::Error),
-    ToFieldFail(String)
+    ToFieldFail(V::Error)
 }
 
 pub struct FileBuilder<'a, 'b, T: File, U: 'b + LineGenerator> {
@@ -25,7 +25,7 @@ impl<'a, 'b, T: File, U: 'b + LineGenerator> FileBuilder<'a, 'b, T, U> {
         FileBuilder { file: file, spec: spec, line_generator: line_generator }
     }
 
-    pub fn add_record<'c, V: ToField>(&mut self, data: HashMap<String, &'c V>, record_spec_name: String) -> Result<(), Error<U, U::Line>> {
+    pub fn add_record<'c, V: ToField>(&mut self, data: HashMap<String, &'c V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
         let mut line = try!(self.line_generator.generate_line(self.file.width()).map_err(|e| Error::LineGenerateFailed(e)));
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
 
