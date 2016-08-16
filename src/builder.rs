@@ -25,7 +25,7 @@ impl<'a, T: File, U: 'a + LineGenerator> FileBuilder<'a, T, U> {
         FileBuilder { file: file, spec: spec, line_generator: line_generator }
     }
 
-    pub fn add_record<'c, V: ToField>(&mut self, data: HashMap<String, &'b V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
+    pub fn add_record<'b, V: ToField>(&mut self, data: HashMap<String, &'b V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
         let mut line = try!(self.line_generator.generate_line(self.file.width()).map_err(|e| Error::LineGenerateFailed(e)));
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
 
