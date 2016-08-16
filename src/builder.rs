@@ -14,18 +14,18 @@ pub enum Error<T: LineGenerator, U: Line, V: ToField> {
     ToFieldFail(V::Error)
 }
 
-pub struct FileBuilder<'a, 'b, T: File, U: 'b + LineGenerator> {
+pub struct FileBuilder<'a, T: File, U: 'a + LineGenerator> {
     pub file: T,
     spec: &'a FileSpec,
-    line_generator: &'b U
+    line_generator: &'a U
 }
 
-impl<'a, 'b, T: File, U: 'b + LineGenerator> FileBuilder<'a, 'b, T, U> {
-    pub fn new(file: T, spec: &'a FileSpec, line_generator: &'b U) -> Self {
+impl<'a, T: File, U: 'a + LineGenerator> FileBuilder<'a, T, U> {
+    pub fn new(file: T, spec: &'a FileSpec, line_generator: &'a U) -> Self {
         FileBuilder { file: file, spec: spec, line_generator: line_generator }
     }
 
-    pub fn add_record<'c, V: ToField>(&mut self, data: HashMap<String, &'c V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
+    pub fn add_record<'c, V: ToField>(&mut self, data: HashMap<String, &'b V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
         let mut line = try!(self.line_generator.generate_line(self.file.width()).map_err(|e| Error::LineGenerateFailed(e)));
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
 
@@ -37,3 +37,4 @@ impl<'a, 'b, T: File, U: 'b + LineGenerator> FileBuilder<'a, 'b, T, U> {
         Ok(())
     }
 }
+
