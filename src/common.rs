@@ -154,12 +154,6 @@ impl ToField for String {
     }
 }
 
-pub trait LineGenerator {
-    type Error: Debug;
-    type Line: Line;
-    fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error>;
-}
-
 #[cfg(test)]
 mod test {
 
