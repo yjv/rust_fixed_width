@@ -1,39 +1,53 @@
-use common::{File, Line, LineGenerator, ToField};
-use spec::FileSpec;
+use common::{File, Line, ToField};
+use spec::{FileSpec, RecordSpec};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: LineGenerator, U: Line, V: ToField> {
-    LineGenerateFailed(T::Error),
+pub enum Error<T: File> {
     RecordSpecNotFound(String),
+    LineAddFailed(T::Error),
+}
+
+pub struct FileBuilder<'a, T: File> {
+    pub file: T,
+    spec: &'a FileSpec
+}
+
+impl<'a, T: File> FileBuilder<'a, T> {
+    pub fn new(file: T, spec: &'a FileSpec) -> Self {
+        FileBuilder { file: file, spec: spec }
+    }
+
+    pub fn add_line(&'a mut self, spec_name: String) -> Result<LineBuilder<'a, T::Line>, Error<T>> {
+        let record_spec = try!(self.spec.record_specs.get(&spec_name).ok_or(Error::RecordSpecNotFound(spec_name)));
+        let index = try!(self.file.add_line().map_err(Error::LineAddFailed));
+
+        Ok(LineBuilder {
+            line: try!(self.file.line_mut(index).map_err(Error::LineAddFailed)).expect("Line just added couldn't be retrieved. This shouldn't be possible."),
+            spec: record_spec
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum LineError<T: Line, U: ToField> {
     FieldSpecNotFound {
         name: String,
         record_spec_name: String
     },
-    LineSetFailed(U::Error),
-    ToFieldFail(V::Error)
+    LineSetFailed(T::Error),
+    ToFieldFail(U::Error)
 }
 
-pub struct FileBuilder<'a, T: File, U: 'a + LineGenerator> {
-    pub file: T,
-    spec: &'a FileSpec,
-    line_generator: &'a U
+pub struct LineBuilder<'a, T: 'a + Line> {
+    pub line: &'a mut T,
+    spec: &'a RecordSpec
 }
 
-impl<'a, T: File, U: 'a + LineGenerator> FileBuilder<'a, T, U> {
-    pub fn new(file: T, spec: &'a FileSpec, line_generator: &'a U) -> Self {
-        FileBuilder { file: file, spec: spec, line_generator: line_generator }
-    }
-
-    pub fn add_record<'b, V: 'b + ToField>(&mut self, data: HashMap<String, &'b V>, record_spec_name: String) -> Result<(), Error<U, U::Line, V>> {
-        let mut line = try!(self.line_generator.generate_line(self.file.width()).map_err(|e| Error::LineGenerateFailed(e)));
-        let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
-
-        for (name, value) in data {
-            let field_spec = try!(record_spec.field_specs.get(&name).ok_or(Error::FieldSpecNotFound {name: name, record_spec_name: record_spec.name.clone()}));
-            try!(line.set(field_spec.range.clone(), &try!(value.to_field().map_err(Error::ToFieldFail))).map_err(Error::LineSetFailed));
-        }
-
+impl <'a, T: 'a + Line> LineBuilder<'a, T> {
+    pub fn set_field<'b, U: 'b + ToField>(&mut self, name: String, value: &'b U) -> Result<(), LineError<T, U>> {
+        let field_spec = try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound {name: name, record_spec_name: self.spec.name.clone()}));
+        try!(self.line.set(field_spec.range.clone(), &try!(value.to_field().map_err(LineError::ToFieldFail))).map_err(LineError::LineSetFailed));
         Ok(())
     }
 }

@@ -28,9 +28,9 @@ pub enum PaddingDirection {
     Right
 }
 
-pub trait RecordSpecRecognizer {
+pub trait LineRecordSpecRecognizer {
     type Error: Debug;
-    fn recognize<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
 }
 
 pub struct IdFieldRecognizer {
@@ -52,9 +52,9 @@ pub enum IdFieldRecognizerError {
     NoRecordSpecMatchingIdField(String)
 }
 
-impl RecordSpecRecognizer for IdFieldRecognizer {
+impl LineRecordSpecRecognizer for IdFieldRecognizer {
     type Error = IdFieldRecognizerError;
-    fn recognize<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error> {
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error> {
         for (name, record_spec) in file_spec.record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {

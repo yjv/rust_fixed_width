@@ -10,9 +10,8 @@ pub trait File: ToString {
     fn line_separator(&self) -> &str;
     fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error>;
     fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error>;
-    fn add_line<T: Line>(&mut self, line: T) -> Result<&mut Self, Self::Error>;
-    fn set_line<T: Line>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error>;
-    fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error>;
+    fn add_line(&mut self) -> Result<usize, Self::Error>;
+    fn remove_line(&mut self) -> Result<usize, Self::Error>;
     fn len(&self) -> usize;
 }
 
@@ -21,7 +20,7 @@ pub trait Line: ToString {
     fn len(&self) -> usize;
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error>;
     fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error>;
-    fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error>;
+    fn clear<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error>;
 }
 
 pub trait Range: Clone {
@@ -104,16 +103,6 @@ pub enum InvalidLineError {
     LineContainsLineSeparator
 }
 
-pub fn validate_line<T: Line, U: File>(line: T, file: &U) -> Result<T, InvalidLineError> {
-    if line.len() != file.width() {
-        Err(InvalidLineError::LineLengthWrong)
-    } else if line.to_string().contains(file.line_separator()) {
-        Err(InvalidLineError::LineContainsLineSeparator)
-    } else {
-        Ok(line)
-    }
-}
-
 pub struct FileIterator<'a, T: File + 'a> {
     position: usize,
     file: &'a T
@@ -175,7 +164,7 @@ pub trait LineGenerator {
 mod test {
 
     use std::string::ToString;
-    use super::{Range, Line, File, InvalidRangeError, InvalidLineError, validate_line, normalize_range, ToField, FromField, FileIterator};
+    use super::{Range, Line, File, InvalidRangeError, normalize_range, ToField, FromField, FileIterator};
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
@@ -217,7 +206,7 @@ mod test {
             unimplemented!()
         }
 
-        fn remove<T: Range>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
+        fn clear<T: Range>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
             unimplemented!()
         }
     }
@@ -272,15 +261,11 @@ mod test {
             unimplemented!()
         }
 
-        fn add_line<T: Line>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
+        fn add_line(&mut self) -> Result<usize, Self::Error> {
             unimplemented!()
         }
 
-        fn set_line<T: Line>(&mut self, _: usize, _: T) -> Result<&mut Self, Self::Error> {
-            unimplemented!()
-        }
-
-        fn remove_line(&mut self, _: usize) -> Result<&mut Self, Self::Error> {
+        fn remove_line(&mut self) -> Result<usize, Self::Error> {
             unimplemented!()
         }
 
@@ -293,17 +278,6 @@ mod test {
         fn to_string(&self) -> String {
             unimplemented!()
         }
-    }
-
-    #[test]
-    fn validate_line_works() {
-        let file = TestFile {width: 5, line_seperator: "\r\n".to_string(), lines: Vec::new()};
-        let line = TestLine {length: 5, data: "sdffdsfdssdf".to_string()};
-        assert_eq!(Ok(line.clone()), validate_line(line, &file));
-        let line = TestLine {length: 7, data: "sdffdsfdssdf".to_string()};
-        assert_eq!(Err(InvalidLineError::LineLengthWrong), validate_line(line, &file));
-        let line = TestLine {length: 5, data: "sdffds\r\nfdssdf".to_string()};
-        assert_eq!(Err(InvalidLineError::LineContainsLineSeparator), validate_line(line, &file));
     }
 
     #[test]

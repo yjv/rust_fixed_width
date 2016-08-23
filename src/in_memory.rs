@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, validate_line, LineGenerator as LineGeneratorTrait, InvalidRangeError, InvalidLineError};
+use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, InvalidRangeError, InvalidLineError};
 
 pub struct File {
     name: String,
@@ -26,7 +26,8 @@ impl File {
 
 #[derive(Debug)]
 pub enum FileError {
-    InvalidLine(InvalidLineError)
+    InvalidLine(InvalidLineError),
+
 }
 
 impl FileTrait for File {
@@ -52,28 +53,14 @@ impl FileTrait for File {
         Ok(self.lines.get_mut(index))
     }
 
-    fn add_line<T: LineTrait>(&mut self, line: T) -> Result<&mut Self, Self::Error> {
-        let line = try!(validate_line(line, self).map_err(FileError::InvalidLine));
-        self.lines.push(Line::new(line.get(..).unwrap()));
-        Ok(self)
+    fn add_line(&mut self) -> Result<usize, Self::Error> {
+        self.lines.push(Line::new_from_length(self.width));
+        Ok(self.lines.len() - 1)
     }
 
-    fn set_line<T: LineTrait>(&mut self, index: usize, line: T) -> Result<&mut Self, Self::Error> {
-        let line = try!(validate_line(line, self).map_err(FileError::InvalidLine));
-
-        let length = self.len();
-
-        if index > length {
-            self.lines.extend(repeat(Line::new_from_length(self.width)).take(index - length))
-        }
-
-        self.lines.insert(index, Line::new(line.get(..).unwrap_or(String::new())));
-        Ok(self)
-    }
-
-    fn remove_line(&mut self, index: usize) -> Result<&mut Self, Self::Error> {
-        self.lines.remove(index);
-        Ok(self)
+    fn remove_line(&mut self) -> Result<usize, Self::Error> {
+        self.lines.pop();
+        Ok(self.lines.len() - 1)
     }
 
     fn len(&self) -> usize {
@@ -143,7 +130,7 @@ impl LineTrait for Line {
         }
     }
 
-    fn remove<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
+    fn clear<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
         let (start, end) = try!(normalize_range(range.clone(), self).map_err(LineError::InvalidRange));
         self.set(range, &repeat(" ").take(end - start).collect())
     }
@@ -155,22 +142,11 @@ impl ToString for Line {
     }
 }
 
-pub struct LineGenerator;
-
-impl LineGeneratorTrait for LineGenerator {
-    type Error = ();
-    type Line = Line;
-
-    fn generate_line(&self, length: usize) -> Result<Self::Line, Self::Error> {
-        Ok(Line::new_from_length(length))
-    }
-}
-
 #[cfg(test)]
 mod test {
 
-    use super::{Line, File, LineGenerator};
-    use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator, LineGenerator as LineGeneratorTrait};
+    use super::{Line, File};
+    use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
 
@@ -181,29 +157,20 @@ mod test {
         let line1 = Line::new(repeat("a").take(10).collect::<String>());
         let line2 = Line::new(repeat("b").take(10).collect::<String>());
         let line3 = Line::new(repeat("c").take(10).collect::<String>());
-        let _ = file.add_line(line1.clone());
-        let _ = file.add_line(line2.clone());
-        assert_eq!(Some(&line1), file.line(0).unwrap());
-        assert_eq!(Some(&line2), file.line(1).unwrap());
+        let index1 = file.add_line().unwrap();
+        let _ = file.line_mut(index1).unwrap().unwrap().set(.., &line1.to_string());
+        let index2 = file.add_line().unwrap();
+        let _ = file.line_mut(index2).unwrap().unwrap().set(.., &line2.to_string());
+        assert_eq!(Some(&line1), file.line(index1).unwrap());
+        assert_eq!(Some(&line2), file.line(index2).unwrap());
         assert_eq!(None, file.line(2).unwrap());
         assert_eq!(vec![&line1, &line2], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
         assert_eq!(2, file.len());
-        let _ = file.set_line(4, line3.clone());
-        assert_eq!(5, file.len());
-        assert_eq!(Some(&line1), file.line(0).unwrap());
-        assert_eq!(Some(&line2), file.line(1).unwrap());
-        assert_eq!(Some(&Line::new_from_length(10)), file.line(2).unwrap());
-        assert_eq!(Some(&Line::new_from_length(10)), file.line(3).unwrap());
-        assert_eq!(Some(&line3), file.line(4).unwrap());
-        assert_eq!(vec![&line1, &line2, &Line::new_from_length(10), &Line::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
-        let _ = file.remove_line(2);
-        assert_eq!(Some(&line1), file.line(0).unwrap());
-        assert_eq!(Some(&line2), file.line(1).unwrap());
-        assert_eq!(Some(&Line::new_from_length(10)), file.line(2).unwrap());
-        assert_eq!(Some(&line3), file.line(3).unwrap());
-        assert_eq!(vec![&line1, &line2, &Line::new_from_length(10), &line3], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
-        assert_eq!(4, file.len());
-        assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb\r\n          \r\ncccccccccc".to_string(), file.to_string());
+        assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb".to_string(), file.to_string());
+        let _ = file.remove_line();
+        assert_eq!(Some(&line1), file.line(index1).unwrap());
+        assert_eq!(None, file.line(index2).unwrap());
+        assert_eq!("aaaaaaaaaa".to_string(), file.to_string());
     }
 
     #[test]
@@ -215,16 +182,10 @@ mod test {
         assert_eq!("aaaa".to_string(), line1.get(1..5).unwrap());
         assert_eq!("          ".to_string(), line2.get(..).unwrap());
         assert_eq!("abbbbaaaaa".to_string(), line1.set(1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("abbbba  aa".to_string(), line1.remove(6..8).unwrap().get(..).unwrap());
+        assert_eq!("abbbba  aa".to_string(), line1.clear(6..8).unwrap().get(..).unwrap());
         assert_eq!("   a      ".to_string(), line2.set(3, &"a".to_string()).unwrap().get(..).unwrap());
         assert_eq!("abbbba b a".to_string(), line1.set(7..9, &"b".to_string()).unwrap().get(..).unwrap());
         assert_eq!("b  a      ".to_string(), line2.set(0, &"b".to_string()).unwrap().get(..).unwrap());
         assert_eq!("b  a     b".to_string(), line2.set(9, &"b".to_string()).unwrap().get(..).unwrap());
-    }
-
-    #[test]
-    fn in_memory_line_generator() {
-        let generator = LineGenerator;
-        assert_eq!(Ok(Line::new_from_length(12)), generator.generate_line(12));
     }
 }
