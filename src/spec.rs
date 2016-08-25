@@ -33,6 +33,11 @@ pub trait LineRecordSpecRecognizer {
     fn recognize_for_line<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
 }
 
+pub trait DataRecordSpecRecognizer {
+    type Error: Debug;
+    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, file_spec: &FileSpec<T>) -> Result<String, Self::Error>;
+}
+
 pub struct IdFieldRecognizer {
     id_field: String
 }
