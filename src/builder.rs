@@ -1,5 +1,5 @@
 use common::{File, Line, ToField};
-use spec::{FileSpec, RecordSpec, DataRecordSpecRecognizer};
+use spec::{FileSpec, DataRecordSpecRecognizer};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -26,12 +26,22 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
             || self.recognizer.ok_or(
                 Error::RecordSpecNameRequired
             ).and_then(
-                |recognizer| recognizer.recognize_for_data(data.as_ref(), self.spec).map_err(Error::FailedToRecognizeRecordSpec)
+                |recognizer| recognizer.recognize_for_data(data, self.spec).map_err(Error::FailedToRecognizeRecordSpec)
             ),
             |name| Ok(name))
         );
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
-        Ok(try!(self.file.add_line().map_err(Error::FailedToAddLine)))
+
+        let index = try!(self.file.add_line().map_err(Error::FailedToAddLine));
+        let line = try!(self.file.line_mut(index).map_err(Error::FailedToAddLine)).expect("line just added doesn't exist this shouldn't happen");
+
+        let data = data.as_ref();
+
+        for (name, field_spec) in record_spec.field_specs {
+            line.set(field_spec.range.clone(), data.get(&name).unwrap());
+        }
+
+        Ok(index)
     }
 }
 

@@ -35,7 +35,7 @@ pub trait LineRecordSpecRecognizer {
 
 pub trait DataRecordSpecRecognizer {
     type Error: Debug;
-    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, file_spec: &FileSpec<T>) -> Result<String, Self::Error>;
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
 }
 
 pub struct IdFieldRecognizer {
@@ -65,6 +65,25 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
                 if let Some(ref default) = field_spec.default {
                     if let Ok(string) = line.get(field_spec.range.clone()) {
                         if &string == default {
+                            return Ok(name.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(IdFieldRecognizerError::NoRecordSpecMatchingIdField(self.id_field.clone()))
+    }
+}
+
+impl DataRecordSpecRecognizer for IdFieldRecognizer {
+    type Error = IdFieldRecognizerError;
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, file_spec: &FileSpec<U>) -> Result<String, Self::Error> {
+        for (name, record_spec) in file_spec.record_specs.iter() {
+            if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
+                if let Some(ref default) = field_spec.default {
+                    if let Some(string) = data.as_ref().get(&self.id_field) {
+                        if string == default {
                             return Ok(name.clone());
                         }
                     }
