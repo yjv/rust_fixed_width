@@ -26,7 +26,7 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
             || self.recognizer.ok_or(
                 Error::RecordSpecNameRequired
             ).and_then(
-                |recognizer| recognizer.recognize_for_data(data, self.spec).map_err(Error::FailedToRecognizeRecordSpec)
+                |recognizer| recognizer.recognize_for_data(&data, self.spec).map_err(Error::FailedToRecognizeRecordSpec)
             ),
             |name| Ok(name))
         );
@@ -37,8 +37,10 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
 
         let data = data.as_ref();
 
-        for (name, field_spec) in record_spec.field_specs {
-            line.set(field_spec.range.clone(), data.get(&name).unwrap());
+        for (name, field_spec) in &record_spec.field_specs {
+            if let Some(value) = data.get(name) {
+                line.set(field_spec.range.clone(), &value.clone());
+            }
         }
 
         Ok(index)
