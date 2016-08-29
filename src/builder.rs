@@ -8,6 +8,7 @@ pub enum Error<T: File, U: DataRecordSpecRecognizer> {
     RecordSpecNotFound(String),
     FailedToRecognizeRecordSpec(U::Error),
     RecordSpecNameRequired,
+    FailedToSetDataOnLine(<T::Line as Line>::Error)
 }
 
 pub struct FileBuilder<'a, T: File, U: 'a + DataRecordSpecRecognizer> {
@@ -39,7 +40,7 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name) {
-                line.set(field_spec.range.clone(), &value.clone());
+                try!(line.set(field_spec.range.clone(), value).map_err(Error::FailedToSetDataOnLine));
             }
         }
 

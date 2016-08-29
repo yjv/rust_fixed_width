@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, InvalidRangeError, InvalidLineError};
+use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, InvalidRangeError};
 
 pub struct File {
     name: String,
@@ -24,15 +24,9 @@ impl File {
     }
 }
 
-#[derive(Debug)]
-pub enum FileError {
-    InvalidLine(InvalidLineError),
-
-}
-
 impl FileTrait for File {
     type Line = Line;
-    type Error = FileError;
+    type Error = ();
     fn name(&self) -> &str {
         &self.name[..]
     }

@@ -97,12 +97,6 @@ pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, 
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum InvalidLineError {
-    LineLengthWrong,
-    LineContainsLineSeparator
-}
-
 pub struct FileIterator<'a, T: File + 'a> {
     position: usize,
     file: &'a T
