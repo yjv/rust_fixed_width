@@ -10,17 +10,17 @@ pub struct File {
 }
 
 impl File {
-    pub fn new(name: String, width: usize, lines: Vec<Line>, line_separator: String) -> Self {
+    pub fn new(name: String, width: usize) -> Self {
+        Self::new_with_line_separator(name, width, "\r\n".to_string())
+    }
+
+    pub fn new_with_line_separator(name: String, width: usize, line_separator: String) -> Self {
         File {
             name: name,
             width: width,
-            lines: lines,
+            lines: Vec::new(),
             line_separator: line_separator
         }
-    }
-
-    pub fn new_with_name_and_width(name: String, width: usize) -> Self {
-        Self::new(name, width, Vec::new(), "\r\n".to_string())
     }
 }
 
@@ -135,7 +135,7 @@ impl ToString for Line {
 #[cfg(test)]
 mod test {
 
-    use super::{Line, File};
+    use super::File;
     use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
@@ -143,7 +143,7 @@ mod test {
 
     #[test]
     fn in_memory_file() {
-        let mut file = File::new_with_name_and_width("bla".to_string(), 10);
+        let mut file = File::new("bla".to_string(), 10);
         assert_eq!("bla", file.name());
         let line1 = repeat("a").take(10).collect::<String>();
         let line2 = repeat(" ").take(10).collect::<String>();
