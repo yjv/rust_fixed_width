@@ -48,13 +48,13 @@ impl FileTrait for File {
     }
 
     fn add_line(&mut self) -> Result<usize, Self::Error> {
-        self.lines.push(Line::new_from_length(self.width));
+        self.lines.push(Line::new(self.width));
         Ok(self.lines.len() - 1)
     }
 
     fn remove_line(&mut self) -> Result<usize, Self::Error> {
         self.lines.pop();
-        Ok(self.lines.len() - 1)
+        Ok(self.lines.len())
     }
 
     fn len(&self) -> usize {
@@ -83,11 +83,7 @@ pub struct Line {
 }
 
 impl Line {
-    pub fn new(data: String) -> Self {
-        Line { data: data }
-    }
-
-    pub fn new_from_length(length: usize) -> Self {
+    pub fn new(length: usize) -> Self {
         Line { data: repeat(" ").take(length).collect::<String>() }
     }
 }
@@ -143,43 +139,41 @@ mod test {
     use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
+    use std::string::ToString;
 
     #[test]
     fn in_memory_file() {
         let mut file = File::new_with_name_and_width("bla".to_string(), 10);
         assert_eq!("bla", file.name());
-        let line1 = Line::new(repeat("a").take(10).collect::<String>());
-        let line2 = Line::new(repeat("b").take(10).collect::<String>());
-        let line3 = Line::new(repeat("c").take(10).collect::<String>());
+        let line1 = repeat("a").take(10).collect::<String>();
+        let line2 = repeat(" ").take(10).collect::<String>();
+        let line3 = repeat("c").take(10).collect::<String>();
         let index1 = file.add_line().unwrap();
-        let _ = file.line_mut(index1).unwrap().unwrap().set(.., &line1.to_string());
+        let _ = file.line_mut(index1).unwrap().unwrap().set(.., &line1);
         let index2 = file.add_line().unwrap();
-        let _ = file.line_mut(index2).unwrap().unwrap().set(.., &line2.to_string());
-        assert_eq!(Some(&line1), file.line(index1).unwrap());
-        assert_eq!(Some(&line2), file.line(index2).unwrap());
-        assert_eq!(None, file.line(2).unwrap());
-        assert_eq!(vec![&line1, &line2], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<&Line>>());
-        assert_eq!(2, file.len());
-        assert_eq!("aaaaaaaaaa\r\nbbbbbbbbbb".to_string(), file.to_string());
-        let _ = file.remove_line();
-        assert_eq!(Some(&line1), file.line(index1).unwrap());
-        assert_eq!(None, file.line(index2).unwrap());
-        assert_eq!("aaaaaaaaaa".to_string(), file.to_string());
-    }
-
-    #[test]
-    fn in_memory_line() {
-        let mut line1 = Line::new(repeat("a").take(10).collect());
-        let mut line2 = Line::new_from_length(10);
-        assert_eq!(10, line1.len());
-        assert_eq!("aaaaaaaaaa".to_string(), line1.get(..).unwrap());
-        assert_eq!("aaaa".to_string(), line1.get(1..5).unwrap());
-        assert_eq!("          ".to_string(), line2.get(..).unwrap());
-        assert_eq!("abbbbaaaaa".to_string(), line1.set(1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("abbbba  aa".to_string(), line1.clear(6..8).unwrap().get(..).unwrap());
-        assert_eq!("   a      ".to_string(), line2.set(3, &"a".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("abbbba b a".to_string(), line1.set(7..9, &"b".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("b  a      ".to_string(), line2.set(0, &"b".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("b  a     b".to_string(), line2.set(9, &"b".to_string()).unwrap().get(..).unwrap());
+        let _ = file.line_mut(index2).unwrap().unwrap().set(.., &line2);
+        let index3 = file.add_line().unwrap();
+        let _ = file.line_mut(index3).unwrap().unwrap().set(.., &line3);
+        assert_eq!(line1, file.line(index1).unwrap().unwrap().to_string());
+        assert_eq!(line2, file.line(index2).unwrap().unwrap().to_string());
+        assert_eq!(line3, file.line(index3).unwrap().unwrap().to_string());
+        assert_eq!(None, file.line(3).unwrap());
+        assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap().to_string()).collect::<Vec<String>>());
+        assert_eq!(3, file.len());
+        assert_eq!("aaaaaaaaaa\r\n          \r\ncccccccccc".to_string(), file.to_string());
+        assert_eq!(10, file.line(index1).unwrap().unwrap().len());
+        assert_eq!(line1, file.line(index1).unwrap().unwrap().get(..).unwrap());
+        assert_eq!("aaaa".to_string(), file.line(index1).unwrap().unwrap().get(1..5).unwrap());
+        assert_eq!(line2, file.line(index2).unwrap().unwrap().get(..).unwrap());
+        assert_eq!("abbbbaaaaa".to_string(), file.line_mut(index1).unwrap().unwrap().set(1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba  aa".to_string(), file.line_mut(index1).unwrap().unwrap().clear(6..8).unwrap().get(..).unwrap());
+        assert_eq!("   a      ".to_string(), file.line_mut(index2).unwrap().unwrap().set(3, &"a".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba b a".to_string(), file.line_mut(index1).unwrap().unwrap().set(7..9, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a      ".to_string(), file.line_mut(index2).unwrap().unwrap().set(0, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a     b".to_string(), file.line_mut(index2).unwrap().unwrap().set(9, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!(2, file.remove_line().unwrap());
+        assert_eq!("abbbba b a".to_string(), file.line(index1).unwrap().unwrap().to_string());
+        assert_eq!(None, file.line(index3).unwrap());
+        assert_eq!("abbbba b a\r\nb  a     b".to_string(), file.to_string());
     }
 }
