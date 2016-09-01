@@ -1,5 +1,5 @@
 [package]
-name = "fixed_width"
+name = "rust_fixed_width"
 version = "0.1.0"
 authors = ["yosefderay <yosefderay770@gmail.com>"]
 
