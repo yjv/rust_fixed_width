@@ -7,3 +7,5 @@ pub mod spec;
 pub mod reader;
 #[cfg(feature = "builder")]
 pub mod builder;
+#[cfg(feature = "test")]
+pub mod test;

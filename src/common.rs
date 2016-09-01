@@ -150,9 +150,9 @@ impl ToField for String {
 
 #[cfg(test)]
 mod test {
-
     use std::string::ToString;
-    use super::{Range, Line, File, InvalidRangeError, normalize_range, ToField, FromField, FileIterator};
+    use super::{Range, InvalidRangeError, normalize_range, ToField, FromField, FileIterator};
+    use super::super::test::*;
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
@@ -174,98 +174,14 @@ mod test {
         assert_eq!(Some(5), range5.end());
     }
 
-    #[derive(Debug, Eq, PartialEq, Clone)]
-    struct TestLine {
-        length: usize,
-        data: String
-    }
-
-    impl Line for TestLine {
-        type Error = ();
-        fn len(&self) -> usize {
-            self.length
-        }
-
-        fn get<T: Range>(&self, _: T) -> Result<String, Self::Error> {
-            unimplemented!()
-        }
-
-        fn set<T: Range>(&mut self, _: T, _: &String) -> Result<&mut Self, Self::Error> {
-            unimplemented!()
-        }
-
-        fn clear<T: Range>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
-            unimplemented!()
-        }
-    }
-
-    impl ToString for TestLine {
-        fn to_string(&self) -> String {
-            self.data.clone()
-        }
-    }
-
     #[test]
     fn normalize_range_works() {
-        let line = TestLine {length: 5, data: "".to_string()};
+        let line = Line {length: 5, data: "".to_string()};
         assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), normalize_range(7..79, &line));
         assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), normalize_range(..6, &line));
         assert_eq!(Ok((0, 5)), normalize_range(.., &line));
         assert_eq!(Ok((2, 5)), normalize_range(2.., &line));
         assert_eq!(Ok((0, 3)), normalize_range(..3, &line));
-    }
-
-    #[derive(Debug)]
-    struct TestFile<'a> {
-        width: usize,
-        line_seperator: String,
-        lines: Vec<Result<&'a TestLine, ()>>
-    }
-
-    impl<'a> File for TestFile<'a> {
-        type Line = TestLine;
-        type Error = ();
-        fn name(&self) -> &str {
-            unimplemented!()
-        }
-
-        fn width(&self) -> usize {
-            self.width
-        }
-
-        fn line_separator(&self) -> &str {
-            &self.line_seperator[..]
-        }
-
-        fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
-            match self.lines.get(index) {
-                Some(&Ok(line)) => Ok(Some(line)),
-                Some(&Err(error)) => Err(error),
-                None => Ok(None)
-            }
-        }
-
-        fn line_mut(&mut self, _: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
-            unimplemented!()
-        }
-
-        fn add_line(&mut self) -> Result<usize, Self::Error> {
-            unimplemented!()
-        }
-
-        fn remove_line(&mut self) -> Result<usize, Self::Error> {
-            unimplemented!()
-        }
-
-        fn len(&self) -> usize {
-            unimplemented!()
-        }
-    }
-
-    impl<'a> ToString for TestFile<'a> {
-        fn to_string(&self) -> String {
-            unimplemented!()
-        }
     }
 
     #[test]
@@ -282,10 +198,10 @@ mod test {
 
     #[test]
     fn iterator_works() {
-        let line1 = TestLine {data: "".to_string(), length: 0};
-        let line2 = TestLine {data: "".to_string(), length: 0};
-        let line3 = TestLine {data: "".to_string(), length: 0};
-        let file = TestFile {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
+        let line1 = Line {data: "".to_string(), length: 0};
+        let line2 = Line {data: "".to_string(), length: 0};
+        let line3 = Line {data: "".to_string(), length: 0};
+        let file = File {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
             Ok(&line1),
             Ok(&line2),
             Err(()),
