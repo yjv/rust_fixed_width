@@ -97,7 +97,7 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
 
 #[cfg(test)]
 mod test {
-    use super::{IdFieldRecognizer, FileSpec, RecordSpec, FieldSpec};
+    use super::{IdFieldRecognizer, DataRecordSpecRecognizer, LineRecordSpecRecognizer, RecordSpec, FieldSpec};
     use std::collections::HashMap;
 
     #[test]
