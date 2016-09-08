@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <meta name="description" content="API documentation for the Rust `rust_fixed_width` crate.">
-    <meta name="keywords" content="rust, rustlang, rust-lang, rust_fixed_width">
+    <meta name="description" content="API documentation for the Rust `spec` mod in crate `rust_fixed_width`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, spec">
 
-    <title>rust_fixed_width - Rust</title>
+    <title>rust_fixed_width::spec - Rust</title>
 
-    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
-    <link rel="stylesheet" type="text/css" href="../main.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
     
 
     
@@ -28,7 +28,7 @@
 
     <nav class="sidebar">
         
-        <p class='location'></p><script>window.sidebarCurrent = {name: 'rust_fixed_width', ty: 'mod', relpath: '../'};</script>
+        <p class='location'><a href='../index.html'>rust_fixed_width</a></p><script>window.sidebarCurrent = {name: 'spec', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
     </nav>
 
     <nav class="sub">
@@ -43,44 +43,67 @@
     </nav>
 
     <section id='main' class="content mod">
-<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>rust_fixed_width</a></span><span class='out-of-band'><span id='render-detail'>
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>rust_fixed_width</a>::<wbr><a class='mod' href=''>spec</a></span><span class='out-of-band'><span id='render-detail'>
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/rust_fixed_width/src/lib.rs.html#1-11' title='goto source code'>[src]</a></span></h1>
-<h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+               </span><a id='src-256' class='srclink' href='../../src/rust_fixed_width/src/spec.rs.html#1-96' title='goto source code'>[src]</a></span></h1>
+<h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='builder/index.html'
-                                  title='rust_fixed_width::builder'>builder</a></td>
+                           <td><a class='struct' href='struct.FieldSpec.html'
+                                  title='rust_fixed_width::spec::FieldSpec'>FieldSpec</a></td>
                            <td class='docblock short'>
                                 
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='common/index.html'
-                                  title='rust_fixed_width::common'>common</a></td>
+                           <td><a class='struct' href='struct.FileSpec.html'
+                                  title='rust_fixed_width::spec::FileSpec'>FileSpec</a></td>
                            <td class='docblock short'>
                                 
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='in_memory/index.html'
-                                  title='rust_fixed_width::in_memory'>in_memory</a></td>
+                           <td><a class='struct' href='struct.IdFieldRecognizer.html'
+                                  title='rust_fixed_width::spec::IdFieldRecognizer'>IdFieldRecognizer</a></td>
                            <td class='docblock short'>
                                 
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='reader/index.html'
-                                  title='rust_fixed_width::reader'>reader</a></td>
+                           <td><a class='struct' href='struct.RecordSpec.html'
+                                  title='rust_fixed_width::spec::RecordSpec'>RecordSpec</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.IdFieldRecognizerError.html'
+                                  title='rust_fixed_width::spec::IdFieldRecognizerError'>IdFieldRecognizerError</a></td>
                            <td class='docblock short'>
                                 
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='spec/index.html'
-                                  title='rust_fixed_width::spec'>spec</a></td>
+                           <td><a class='enum' href='enum.PaddingDirection.html'
+                                  title='rust_fixed_width::spec::PaddingDirection'>PaddingDirection</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.DataRecordSpecRecognizer.html'
+                                  title='rust_fixed_width::spec::DataRecordSpecRecognizer'>DataRecordSpecRecognizer</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.LineRecordSpecRecognizer.html'
+                                  title='rust_fixed_width::spec::LineRecordSpecRecognizer'>LineRecordSpecRecognizer</a></td>
                            <td class='docblock short'>
                                 
                            </td>
@@ -138,13 +161,13 @@
     
 
     <script>
-        window.rootPath = "../";
+        window.rootPath = "../../";
         window.currentCrate = "rust_fixed_width";
         window.playgroundUrl = "";
     </script>
-    <script src="../jquery.js"></script>
-    <script src="../main.js"></script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
     
-    <script defer src="../search-index.js"></script>
+    <script defer src="../../search-index.js"></script>
 </body>
 </html>

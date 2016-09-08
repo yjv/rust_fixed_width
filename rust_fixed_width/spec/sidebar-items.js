@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["IdFieldRecognizerError",""],["PaddingDirection",""]],"struct":[["FieldSpec",""],["FileSpec",""],["IdFieldRecognizer",""],["RecordSpec",""]],"trait":[["DataRecordSpecRecognizer",""],["LineRecordSpecRecognizer",""]]});

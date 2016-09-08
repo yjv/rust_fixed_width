@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error",""],["LineError",""]],"struct":[["FileIterator",""],["FileReader",""],["LineReader",""]]});
