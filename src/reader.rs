@@ -32,7 +32,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
             || self.recognizer.ok_or(
                 Error::RecordSpecNameRequired
             ).and_then(
-                |recognizer| recognizer.recognize_for_line(line, self.spec).map_err(Error::FailedToRecognizeRecordSpec)
+                |recognizer| recognizer.recognize_for_line(line, &self.spec.record_specs).map_err(Error::FailedToRecognizeRecordSpec)
             ),
             |name| Ok(name))
         );

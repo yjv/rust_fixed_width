@@ -30,12 +30,12 @@ pub enum PaddingDirection {
 
 pub trait LineRecordSpecRecognizer {
     type Error: Debug;
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error>;
 }
 
 pub trait DataRecordSpecRecognizer {
     type Error: Debug;
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, file_spec: &FileSpec<U>) -> Result<String, Self::Error>;
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error>;
 }
 
 pub struct IdFieldRecognizer {
@@ -59,8 +59,8 @@ pub enum IdFieldRecognizerError {
 
 impl LineRecordSpecRecognizer for IdFieldRecognizer {
     type Error = IdFieldRecognizerError;
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, file_spec: &FileSpec<U>) -> Result<String, Self::Error> {
-        for (name, record_spec) in file_spec.record_specs.iter() {
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     if let Ok(string) = line.get(field_spec.range.clone()) {
@@ -78,8 +78,8 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
     type Error = IdFieldRecognizerError;
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, file_spec: &FileSpec<U>) -> Result<String, Self::Error> {
-        for (name, record_spec) in file_spec.record_specs.iter() {
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     if let Some(string) = data.as_ref().get(&self.id_field) {
@@ -92,5 +92,20 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
         }
 
         Err(IdFieldRecognizerError::NoRecordSpecMatchingIdField(self.id_field.clone()))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{IdFieldRecognizer, FileSpec, RecordSpec, FieldSpec};
+    use std::collections::HashMap;
+
+    #[test]
+    fn id_spec_recognizer() {
+        let mut record_specs: HashMap<String, RecordSpec> = HashMap::new();
+        record_specs.insert("record1".to_string(), RecordSpec {
+            field_specs: HashMap::new(),
+            name: "".to_string()
+        });
     }
 }

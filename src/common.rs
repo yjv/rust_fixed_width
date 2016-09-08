@@ -1,8 +1,7 @@
-use std::string::ToString;
 use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
 
-pub trait File: ToString {
+pub trait File {
     type Line: Line;
     type Error: Debug;
     fn name(&self) -> &str;
@@ -15,7 +14,7 @@ pub trait File: ToString {
     fn len(&self) -> usize;
 }
 
-pub trait Line: ToString {
+pub trait Line {
     type Error: Debug;
     fn len(&self) -> usize;
     fn get<T: Range>(&self, range: T) -> Result<String, Self::Error>;
