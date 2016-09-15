@@ -28,10 +28,10 @@ before_script:
 # the main build
 script:
   - |
-      travis-cargo build --features "test" &&
-      travis-cargo test --features "test" &&
-      travis-cargo bench --features "test" &&
-      travis-cargo --only stable doc --features "all"
+      travis-cargo build -- --features "test" &&
+      travis-cargo test -- --features "test" &&
+      travis-cargo bench -- --features "test" &&
+      travis-cargo --only stable doc -- --features "all"
 after_success:
   # upload the documentation from the build with stable (automatically only actually
   # runs on the master branch, not individual PRs)
@@ -39,7 +39,7 @@ after_success:
   # measure code coverage and upload to coveralls.io (the verify
   # argument mitigates kcov crashes due to malformed debuginfo, at the
   # cost of some speed <https://github.com/huonw/travis-cargo/issues/12>)
-  - travis-cargo coveralls --no-sudo --verify --features "test"
+  - travis-cargo coveralls --no-sudo --verify -- --features "test"
 
 env:
   global:
