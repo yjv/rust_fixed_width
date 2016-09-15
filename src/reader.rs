@@ -105,3 +105,11 @@ impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
         ).map_err(LineError::LineGetFailed).and_then(|v| V::from_field(v).map_err(LineError::FromFieldFail)))).collect()
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn ranges_work() {
+    }
+}
