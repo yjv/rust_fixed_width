@@ -1,4 +1,4 @@
-use common::{File, Line, ToField};
+use common::{File, Line};
 use spec::{FileSpec, DataRecordSpecRecognizer};
 use std::collections::HashMap;
 
@@ -22,7 +22,7 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
         FileBuilder { file: file, spec: spec, recognizer: recognizer }
     }
 
-    pub fn add_line<'b, V: AsRef<HashMap<String, String>>>(&'a mut self, data: V, spec_name: Option<String>) -> Result<usize, Error<T, U>> {
+    pub fn add_line<V: AsRef<HashMap<String, String>>>(&'a mut self, data: V, spec_name: Option<String>) -> Result<usize, Error<T, U>> {
         let record_spec_name = try!(spec_name.map_or_else(
             || self.recognizer.ok_or(
                 Error::RecordSpecNameRequired
@@ -43,32 +43,6 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
         }
 
         Ok(index)
-    }
-}
-
-#[derive(Debug)]
-pub enum DataError<T: ToField> {
-    ToFieldFail(T::Error)
-}
-
-pub struct DataBuilder {
-    data: HashMap<String, String>
-}
-
-impl DataBuilder {
-    pub fn new() -> Self {
-        DataBuilder { data: HashMap::new() }
-    }
-
-    pub fn set_field<'b, T: 'b + ToField>(&mut self, name: String, value: &'b T) -> Result<(), DataError<T>> {
-        self.data.insert(name, try!(value.to_field().map_err(DataError::ToFieldFail)));
-        Ok(())
-    }
-}
-
-impl AsRef<HashMap<String, String>> for DataBuilder {
-    fn as_ref(&self) -> &HashMap<String, String> {
-        &self.data
     }
 }
 

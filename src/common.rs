@@ -123,34 +123,10 @@ impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
     }
 }
 
-pub trait FromField: Sized {
-    type Error: Debug;
-    fn from_field(string: String) -> Result<Self, Self::Error>;
-}
-
-pub trait ToField {
-    type Error: Debug;
-    fn to_field(&self) -> Result<String, Self::Error>;
-}
-
-impl FromField for String {
-    type Error = ();
-    fn from_field(string: String) -> Result<Self, Self::Error> {
-        Ok(string)
-    }
-}
-
-impl ToField for String {
-    type Error = ();
-    fn to_field(&self) -> Result<String, Self::Error> {
-        Ok(self.clone())
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::string::ToString;
-    use super::{Range, InvalidRangeError, normalize_range, ToField, FromField, FileIterator};
+    use super::{Range, InvalidRangeError, normalize_range, FileIterator};
     use super::super::test::*;
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
@@ -181,18 +157,6 @@ mod test {
         assert_eq!(Ok((0, 5)), normalize_range(.., &line));
         assert_eq!(Ok((2, 5)), normalize_range(2.., &line));
         assert_eq!(Ok((0, 3)), normalize_range(..3, &line));
-    }
-
-    #[test]
-    fn to_field_for_string() {
-        let string = "eeewrrew".to_string();
-        assert_eq!(Ok(string.clone()), String::to_field(&string));
-    }
-
-    #[test]
-    fn from_field_for_string() {
-        let string = "eeewrrew".to_string();
-        assert_eq!(Ok(string.clone()), String::from_field(string));
     }
 
     #[test]
