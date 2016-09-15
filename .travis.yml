@@ -5,7 +5,7 @@ rust:
   - beta
   - nightly
 before_script: |
-  PKGNAME="your-project-name" # must match with cargo.toml
+  PKGNAME="rust_fixed_width" # must match with cargo.toml
   LOCAL="~/.local" # install here to avoid `sudo`
   export PATH=$LOCAL/bin:$PATH
 script: cargo test --features "test" --verbose
