@@ -4,19 +4,15 @@ use std::ops::Range as RangeStruct;
 use std::fmt::Debug;
 
 pub struct FileSpec<T: Range = RangeStruct<usize>> {
-    pub name: String,
     pub width: usize,
-    pub line_seperator: String,
     pub record_specs: HashMap<String, RecordSpec<T>>
 }
 
 pub struct RecordSpec<T: Range = RangeStruct<usize>> {
-    pub name: String,
     pub field_specs: HashMap<String, FieldSpec<T>>
 }
 
 pub struct FieldSpec<T: Range = RangeStruct<usize>> {
-    pub name: String,
     pub range: T,
     pub padding_direction: PaddingDirection,
     pub padding_char: char,
@@ -95,6 +91,27 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
     }
 }
 
+pub struct ErrorFieldRecognizer;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum ErrorFieldRecognizerError {
+    NoRecordSpecFound
+}
+
+impl LineRecordSpecRecognizer for ErrorFieldRecognizer {
+    type Error = ErrorFieldRecognizerError;
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        Err(ErrorFieldRecognizerError::NoRecordSpecFound)
+    }
+}
+
+impl DataRecordSpecRecognizer for ErrorFieldRecognizer {
+    type Error = ErrorFieldRecognizerError;
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        Err(ErrorFieldRecognizerError::NoRecordSpecFound)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{IdFieldRecognizer, DataRecordSpecRecognizer, LineRecordSpecRecognizer, RecordSpec, FieldSpec};
@@ -104,8 +121,7 @@ mod test {
     fn id_spec_recognizer() {
         let mut record_specs: HashMap<String, RecordSpec> = HashMap::new();
         record_specs.insert("record1".to_string(), RecordSpec {
-            field_specs: HashMap::new(),
-            name: "".to_string()
+            field_specs: HashMap::new()
         });
     }
 }

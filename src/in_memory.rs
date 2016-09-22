@@ -3,20 +3,18 @@ use std::iter::repeat;
 use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, InvalidRangeError};
 
 pub struct File {
-    name: String,
     width: usize,
     lines: Vec<Line>,
     line_separator: String
 }
 
 impl File {
-    pub fn new(name: String, width: usize) -> Self {
-        Self::new_with_line_separator(name, width, "\r\n".to_string())
+    pub fn new(width: usize) -> Self {
+        Self::new_with_line_separator(width, "\r\n".to_string())
     }
 
-    pub fn new_with_line_separator(name: String, width: usize, line_separator: String) -> Self {
+    pub fn new_with_line_separator(width: usize, line_separator: String) -> Self {
         File {
-            name: name,
             width: width,
             lines: Vec::new(),
             line_separator: line_separator
@@ -27,16 +25,8 @@ impl File {
 impl FileTrait for File {
     type Line = Line;
     type Error = ();
-    fn name(&self) -> &str {
-        &self.name[..]
-    }
-
     fn width(&self) -> usize {
         self.width
-    }
-
-    fn line_separator(&self) -> &str {
-        &self.line_separator[..]
     }
 
     fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
@@ -143,8 +133,7 @@ mod test {
 
     #[test]
     fn in_memory_file() {
-        let mut file = File::new("bla".to_string(), 10);
-        assert_eq!("bla", file.name());
+        let mut file = File::new(10);
         let line1 = repeat("a").take(10).collect::<String>();
         let line2 = repeat(" ").take(10).collect::<String>();
         let line3 = repeat("c").take(10).collect::<String>();

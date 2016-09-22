@@ -75,10 +75,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> Iterator
 
 #[derive(Debug)]
 pub enum LineError<T: Line> {
-    FieldSpecNotFound {
-        name: String,
-        record_spec_name: String
-    },
+    FieldSpecNotFound(String),
     LineGetFailed(T::Error),
 }
 
@@ -94,7 +91,7 @@ impl<'a, T: 'a + Line, U: 'a + Range> LineReader<'a, T, U> {
 
     pub fn field(&self, name: String) -> Result<String, LineError<T>> {
         Ok(try!(self.line.get(
-            try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound { name: name, record_spec_name: self.spec.name.clone() })).range.clone()
+            try!(self.spec.field_specs.get(&name).ok_or(LineError::FieldSpecNotFound(name))).range.clone()
         ).map_err(LineError::LineGetFailed)))
     }
 

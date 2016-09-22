@@ -4,9 +4,7 @@ use std::fmt::Debug;
 pub trait File {
     type Line: Line;
     type Error: Debug;
-    fn name(&self) -> &str;
     fn width(&self) -> usize;
-    fn line_separator(&self) -> &str;
     fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error>;
     fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;

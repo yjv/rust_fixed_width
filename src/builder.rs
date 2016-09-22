@@ -14,11 +14,15 @@ pub enum Error<T: File, U: DataRecordSpecRecognizer> {
 pub struct FileBuilder<'a, T: File, U: 'a + DataRecordSpecRecognizer> {
     pub file: T,
     spec: &'a FileSpec,
-    recognizer: Option<&'a U>
+    recognizer: &'a U
 }
 
 impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
-    pub fn new(file: T, spec: &'a FileSpec, recognizer: Option<&'a U>) -> Self {
+    pub fn new(file: T, spec: &'a FileSpec) -> Self {
+        FileBuilder { file: file, spec: spec, recognizer: ErrorFieldRecognizer }
+    }
+
+    pub fn new_with_recognizer(file: T, spec: &'a FileSpec, recognizer: &'a U) -> Self {
         FileBuilder { file: file, spec: spec, recognizer: recognizer }
     }
 
@@ -49,7 +53,20 @@ impl<'a, T: File, U: 'a + DataRecordSpecRecognizer> FileBuilder<'a, T, U> {
 #[cfg(test)]
 mod test {
 
+    use super::*;
+    use super::super::spec::*;
+    use super::super::in_memory::*;
+    use std::collections::HashMap;
+
     #[test]
-    fn ranges_work() {
+    fn building() {
+        let mut spec = FileSpec {
+            width: 10,
+            record_specs: HashMap::new()
+        };
+        spec.record_specs.insert("record1".to_string(), RecordSpec {
+            field_specs: HashMap::new()
+        });
+        let mut builder = FileBuilder::new(File::new(spec.width), &spec);
     }
 }
