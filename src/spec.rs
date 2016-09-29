@@ -15,7 +15,7 @@ pub struct RecordSpec<T: Range = RangeStruct<usize>> {
 pub struct FieldSpec<T: Range = RangeStruct<usize>> {
     pub range: T,
     pub padding_direction: PaddingDirection,
-    pub padding_char: char,
+    pub padding: String,
     pub default: Option<String>
 }
 
@@ -29,9 +29,23 @@ pub trait LineRecordSpecRecognizer {
     fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error>;
 }
 
+impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
+    type Error = V::Error;
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        (*self).recognize_for_line(line, record_specs)
+    }
+}
+
 pub trait DataRecordSpecRecognizer {
     type Error: Debug;
     fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error>;
+}
+
+impl<'a, V> DataRecordSpecRecognizer for &'a V where V: 'a + DataRecordSpecRecognizer {
+    type Error = V::Error;
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+        (*self).recognize_for_data(data, record_specs)
+    }
 }
 
 pub struct IdFieldRecognizer {
@@ -100,16 +114,38 @@ pub enum ErrorFieldRecognizerError {
 
 impl LineRecordSpecRecognizer for ErrorFieldRecognizer {
     type Error = ErrorFieldRecognizerError;
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+    fn recognize_for_line<T: Line, U: Range>(&self, _: &T, _: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
         Err(ErrorFieldRecognizerError::NoRecordSpecFound)
     }
 }
 
 impl DataRecordSpecRecognizer for ErrorFieldRecognizer {
     type Error = ErrorFieldRecognizerError;
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, _: T, _: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
         Err(ErrorFieldRecognizerError::NoRecordSpecFound)
     }
+}
+
+pub struct FileSpecBuilder<T: Range = RangeStruct<usize>> {
+    width: usize,
+    record_specs: HashMap<String, RecordSpec<T>>
+}
+
+impl <T: Range> FileSpecBuilder<T> {
+    pub fn new() -> Self {
+        unimplemented!()
+    }
+}
+
+pub struct RecordSpecBuilder<T: Range = RangeStruct<usize>> {
+    field_specs: HashMap<String, FieldSpec<T>>
+}
+
+pub struct FieldSpecBuilder<T: Range = RangeStruct<usize>> {
+    range: T,
+    padding_direction: PaddingDirection,
+    padding: String,
+    default: Option<String>
 }
 
 #[cfg(test)]

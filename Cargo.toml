@@ -12,7 +12,10 @@ documentation = "http://yjv.github.io/rust_fixed_width/rust_fixed_width/"
 default = ["in_memory"]
 in_memory = []
 spec = []
-reader = ["spec"]
-builder = ["spec"]
+reader = ["spec", "pad"]
+builder = ["spec", "pad"]
 all = ["in_memory", "reader", "builder", "spec"]
 test = ["all"]
+
+[dependencies]
+pad = { version = "0.1.4", optional = true }
