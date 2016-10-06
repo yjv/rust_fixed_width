@@ -8,10 +8,24 @@ pub struct FileSpec<T: Range = RangeStruct<usize>> {
     pub record_specs: HashMap<String, RecordSpec<T>>
 }
 
+impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpec<T> {
+    fn build(self) -> Self {
+        self
+    }
+}
+
+#[derive(Clone)]
 pub struct RecordSpec<T: Range = RangeStruct<usize>> {
     pub field_specs: HashMap<String, FieldSpec<T>>
 }
 
+impl <T: Range> SpecBuilder<RecordSpec<T>> for RecordSpec<T> {
+    fn build(self) -> Self {
+        self
+    }
+}
+
+#[derive(Clone)]
 pub struct FieldSpec<T: Range = RangeStruct<usize>> {
     pub range: T,
     pub padding_direction: PaddingDirection,
@@ -19,6 +33,13 @@ pub struct FieldSpec<T: Range = RangeStruct<usize>> {
     pub default: Option<String>
 }
 
+impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpec<T> {
+    fn build(self) -> Self {
+        self
+    }
+}
+
+#[derive(Clone)]
 pub enum PaddingDirection {
     Left,
     Right
@@ -126,26 +147,134 @@ impl DataRecordSpecRecognizer for ErrorFieldRecognizer {
     }
 }
 
+pub trait SpecBuilder<T> {
+    fn build(self) -> T;
+}
+
+#[derive(Clone)]
 pub struct FileSpecBuilder<T: Range = RangeStruct<usize>> {
-    width: usize,
+    width: Option<usize>,
     record_specs: HashMap<String, RecordSpec<T>>
 }
 
 impl <T: Range> FileSpecBuilder<T> {
     pub fn new() -> Self {
-        unimplemented!()
+        FileSpecBuilder {
+            width: None,
+            record_specs: HashMap::new()
+        }
+    }
+
+    pub fn with_record<U: SpecBuilder<RecordSpec<T>>>(mut self, name: String, record: U) -> Self {
+        self.record_specs.insert(name, record.build());
+        self
+    }
+
+    pub fn with_width(self, width: usize) -> Self {
+        FileSpecBuilder {
+            width: Some(width),
+            record_specs: self.record_specs
+        }
+    }
+}
+
+impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpecBuilder<T> {
+    fn build(self) -> FileSpec<T> {
+        FileSpec {
+            width: self.width.expect("width must be set in order to build"),
+            record_specs: self.record_specs
+        }
     }
 }
 
 pub struct RecordSpecBuilder<T: Range = RangeStruct<usize>> {
-    field_specs: HashMap<String, FieldSpec<T>>
+    field_specs: HashMap<String, FieldSpec<T>>,
+}
+
+impl <T: Range> RecordSpecBuilder<T> {
+    pub fn new() -> Self {
+        RecordSpecBuilder {
+            field_specs: HashMap::new()
+        }
+    }
+
+    pub fn with_field<U: SpecBuilder<FieldSpec<T>>>(mut self, name: String, field: U) -> Self {
+        self.field_specs.insert(name, field.build());
+        self
+    }
+}
+
+impl <T: Range> SpecBuilder<RecordSpec<T>> for RecordSpecBuilder<T> {
+    fn build(self) -> RecordSpec<T> {
+        RecordSpec {
+            field_specs: self.field_specs
+        }
+    }
 }
 
 pub struct FieldSpecBuilder<T: Range = RangeStruct<usize>> {
-    range: T,
-    padding_direction: PaddingDirection,
-    padding: String,
+    range: Option<T>,
+    padding_direction: Option<PaddingDirection>,
+    padding: Option<String>,
     default: Option<String>
+}
+
+impl <T: Range> FieldSpecBuilder<T> {
+    pub fn new() -> Self {
+        FieldSpecBuilder {
+            range: None,
+            padding_direction: None,
+            padding: None,
+            default: None
+        }
+    }
+
+    pub fn with_range(self, range: T) -> Self {
+        FieldSpecBuilder {
+            range: Some(range),
+            padding_direction: self.padding_direction,
+            padding: self.padding,
+            default: self.default
+        }
+    }
+
+    pub fn with_padding_direction(self, padding_direction: PaddingDirection) -> Self {
+        FieldSpecBuilder {
+            range: self.range,
+            padding_direction: Some(padding_direction),
+            padding: self.padding,
+            default: self.default
+        }
+    }
+
+    pub fn with_padding(self, padding: String) -> Self {
+        FieldSpecBuilder {
+            range: self.range,
+            padding_direction: self.padding_direction,
+            padding: Some(padding),
+            default: self.default
+        }
+    }
+
+    pub fn with_default(self, default: String) -> Self {
+        FieldSpecBuilder {
+            range: self.range,
+            padding_direction: self.padding_direction,
+            padding: self.padding,
+            default: Some(default)
+        }
+    }
+}
+
+impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpecBuilder<T> {
+    fn build(self) -> FieldSpec<T> {
+        FieldSpec {
+            range: self.range.expect("range must be set in order to build"),
+            padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
+            padding: self.padding.expect("padding must be set in order to build"),
+            default: self.default
+        }
+    }
 }
 
 #[cfg(test)]
