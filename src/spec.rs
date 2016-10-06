@@ -48,12 +48,12 @@ pub enum PaddingDirection {
 
 pub trait LineRecordSpecRecognizer {
     type Error: Debug;
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error>;
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<Option<String>, Self::Error>;
 }
 
 impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
     type Error = V::Error;
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
+    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<Option<String>, Self::Error> {
         (*self).recognize_for_line(line, record_specs)
     }
 }
@@ -84,27 +84,22 @@ impl IdFieldRecognizer {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum IdFieldRecognizerError {
-    NoRecordSpecMatchingIdField(String)
-}
-
 impl LineRecordSpecRecognizer for IdFieldRecognizer {
-    type Error = IdFieldRecognizerError;
+    type Error = ();
     fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     if let Ok(string) = line.get(field_spec.range.clone()) {
                         if &string == default {
-                            return Ok(name.clone());
+                            return Ok(Some(name.clone()));
                         }
                     }
                 }
             }
         }
 
-        Err(IdFieldRecognizerError::NoRecordSpecMatchingIdField(self.id_field.clone()))
+        None
     }
 }
 
@@ -116,35 +111,30 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
                 if let Some(ref default) = field_spec.default {
                     if let Some(string) = data.as_ref().get(&self.id_field) {
                         if string == default {
-                            return Ok(name.clone());
+                            return Ok(Some(name.clone()));
                         }
                     }
                 }
             }
         }
 
-        Err(IdFieldRecognizerError::NoRecordSpecMatchingIdField(self.id_field.clone()))
+        None
     }
 }
 
 pub struct ErrorFieldRecognizer;
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum ErrorFieldRecognizerError {
-    NoRecordSpecFound
-}
-
 impl LineRecordSpecRecognizer for ErrorFieldRecognizer {
-    type Error = ErrorFieldRecognizerError;
-    fn recognize_for_line<T: Line, U: Range>(&self, _: &T, _: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
-        Err(ErrorFieldRecognizerError::NoRecordSpecFound)
+    type Error = ();
+    fn recognize_for_line<T: Line, U: Range>(&self, _: &T, _: &HashMap<String, RecordSpec<U>>) -> Result<Option<String>, Self::Error> {
+        None
     }
 }
 
 impl DataRecordSpecRecognizer for ErrorFieldRecognizer {
-    type Error = ErrorFieldRecognizerError;
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, _: T, _: &HashMap<String, RecordSpec<U>>) -> Result<String, Self::Error> {
-        Err(ErrorFieldRecognizerError::NoRecordSpecFound)
+    type Error = ();
+    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, _: T, _: &HashMap<String, RecordSpec<U>>) -> Result<Option<String>, Self::Error> {
+        None
     }
 }
 
