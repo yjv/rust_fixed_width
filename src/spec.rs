@@ -3,6 +3,7 @@ use common::{Range, Line};
 use std::ops::Range as RangeStruct;
 use std::fmt::Debug;
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct FileSpec<T: Range = RangeStruct<usize>> {
     pub width: usize,
     pub record_specs: HashMap<String, RecordSpec<T>>
@@ -14,7 +15,7 @@ impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpec<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct RecordSpec<T: Range = RangeStruct<usize>> {
     pub field_specs: HashMap<String, FieldSpec<T>>
 }
@@ -25,7 +26,7 @@ impl <T: Range> SpecBuilder<RecordSpec<T>> for RecordSpec<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct FieldSpec<T: Range = RangeStruct<usize>> {
     pub range: T,
     pub padding_direction: PaddingDirection,
@@ -39,7 +40,7 @@ impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpec<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum PaddingDirection {
     Left,
     Right
@@ -151,7 +152,6 @@ pub trait SpecBuilder<T> {
     fn build(self) -> T;
 }
 
-#[derive(Clone)]
 pub struct FileSpecBuilder<T: Range = RangeStruct<usize>> {
     width: Option<usize>,
     record_specs: HashMap<String, RecordSpec<T>>
@@ -279,7 +279,8 @@ impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpecBuilder<T> {
 
 #[cfg(test)]
 mod test {
-    use super::{IdFieldRecognizer, DataRecordSpecRecognizer, LineRecordSpecRecognizer, RecordSpec, FieldSpec};
+    use super::*;
+    use super::super::common::Range;
     use std::collections::HashMap;
 
     #[test]
@@ -288,5 +289,134 @@ mod test {
         record_specs.insert("record1".to_string(), RecordSpec {
             field_specs: HashMap::new()
         });
+    }
+
+    #[test]
+    fn build() {
+        let spec = FileSpecBuilder::new()
+            .with_width(10)
+            .with_record(
+                "record1".to_string(),
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "field1".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((0..4))
+                            .with_padding("dsasd".to_string())
+                            .with_padding_direction(PaddingDirection::Left)
+                    )
+                    .with_field(
+                        "field2".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((5..9))
+                            .with_padding("sdf".to_string())
+                            .with_padding_direction(PaddingDirection::Right)
+                            .with_default("def".to_string())
+                    )
+                    .with_field(
+                        "field3".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((10..45))
+                            .with_padding("xcvcxv".to_string())
+                            .with_padding_direction(PaddingDirection::Right)
+                    )
+            )
+            .with_record(
+                "record2".to_string(),
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "field1".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((0..3))
+                            .with_padding("dsasd".to_string())
+                            .with_padding_direction(PaddingDirection::Left)
+                    )
+                    .with_field(
+                        "field2".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((4..8))
+                            .with_padding("sdf".to_string())
+                            .with_padding_direction(PaddingDirection::Right)
+                    )
+                    .with_field(
+                        "field3".to_string(),
+                        FieldSpecBuilder::new()
+                            .with_range((9..36))
+                            .with_padding("xcvcxv".to_string())
+                            .with_padding_direction(PaddingDirection::Right)
+                    )
+                    .with_field(
+                        "field4".to_string(),
+                        FieldSpec {
+                            range: (37..45),
+                            padding: "sdfsd".to_string(),
+                            padding_direction: PaddingDirection::Left,
+                            default: None
+                        }
+                    )
+            )
+            .with_record("record3".to_string(), RecordSpec {
+                field_specs: HashMap::new()
+            })
+            .build()
+        ;
+        let mut record_specs = HashMap::new();
+        let mut field_specs = HashMap::new();
+        field_specs.insert("field1".to_string(), FieldSpec {
+            range: (0..4),
+            padding: "dsasd".to_string(),
+            padding_direction: PaddingDirection::Left,
+            default: None
+        });
+        field_specs.insert("field2".to_string(), FieldSpec {
+            range: (5..9),
+            padding: "sdf".to_string(),
+            padding_direction: PaddingDirection::Right,
+            default: Some("def".to_string())
+        });
+        field_specs.insert("field3".to_string(), FieldSpec {
+            range: (10..45),
+            padding: "xcvcxv".to_string(),
+            padding_direction: PaddingDirection::Right,
+            default: None
+        });
+        record_specs.insert("record1".to_string(), RecordSpec {
+            field_specs: field_specs
+        });
+        let mut field_specs = HashMap::new();
+        field_specs.insert("field1".to_string(), FieldSpec {
+            range: (0..3),
+            padding: "dsasd".to_string(),
+            padding_direction: PaddingDirection::Left,
+            default: None
+        });
+        field_specs.insert("field2".to_string(), FieldSpec {
+            range: (4..8),
+            padding: "sdf".to_string(),
+            padding_direction: PaddingDirection::Right,
+            default: None
+        });
+        field_specs.insert("field3".to_string(), FieldSpec {
+            range: (9..36),
+            padding: "xcvcxv".to_string(),
+            padding_direction: PaddingDirection::Right,
+            default: None
+        });
+        field_specs.insert("field4".to_string(), FieldSpec {
+            range: (37..45),
+            padding: "sdfsd".to_string(),
+            padding_direction: PaddingDirection::Left,
+            default: None
+        });
+        record_specs.insert("record2".to_string(), RecordSpec {
+            field_specs: field_specs
+        });
+        record_specs.insert("record3".to_string(), RecordSpec {
+            field_specs: HashMap::new()
+        });
+        assert_eq!(FileSpec {
+            width: 10,
+            record_specs: record_specs
+        }, spec);
     }
 }
