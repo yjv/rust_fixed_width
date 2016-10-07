@@ -1,41 +1,37 @@
 use common::{File, Line, Range};
-use spec::{FileSpec, RecordSpec, LineRecordSpecRecognizer};
+use spec::{FileSpec, RecordSpec, LineRecordSpecRecognizer, NoneRecognizer};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: File, U: LineRecordSpecRecognizer> {
+pub enum Error<T: File> {
     FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
-    FailedToRecognizeRecordSpec(U::Error),
     RecordSpecNameRequired,
 }
 
-pub struct FileReader<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> {
+pub struct FileReader<'a, T: 'a + File, U: 'a + Range, V: LineRecordSpecRecognizer> {
     spec: &'a FileSpec<U>,
     file: &'a T,
-    recognizer: Option<&'a V>
+    recognizer: V
 }
 
 impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileReader<'a, T, U, V> {
-    pub fn new(spec: &'a FileSpec<U>, file: &'a T, recognizer: Option<&'a V>) -> Self {
+    pub fn new(spec: &'a FileSpec<U>, file: &'a T) -> FileReader<'a, T, U, NoneRecognizer> {
+        FileReader { spec: spec, file: file, recognizer: NoneRecognizer }
+    }
+
+    pub fn new_with_recognizer(spec: &'a FileSpec<U>, file: &'a T, recognizer: V) -> Self {
         FileReader {spec: spec, file: file, recognizer: recognizer}
     }
 
-    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<Option<LineReader<'a, <T as File>::Line, U>>, Error<T, V>> {
+    pub fn get_line_reader(&self, index: usize, spec_name: Option<String>) -> Result<Option<LineReader<'a, <T as File>::Line, U>>, Error<T>> {
         let line = match self.file.line(index).map_err(Error::FailedToGetLine) {
             Ok(Some(line)) => line,
             Err(error) => return Err(error),
             Ok(None) => return Ok(None)
         };
 
-        let record_spec_name = try!(spec_name.map_or_else(
-            || self.recognizer.ok_or(
-                Error::RecordSpecNameRequired
-            ).and_then(
-                |recognizer| recognizer.recognize_for_line(line, &self.spec.record_specs).map_err(Error::FailedToRecognizeRecordSpec)
-            ),
-            |name| Ok(name))
-        );
+        let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(line, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
 
         Ok(Some(LineReader::new(
             try!(self.spec.record_specs.get(
@@ -61,7 +57,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileIter
 }
 
 impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> Iterator for FileIterator<'a, T, U, V> {
-    type Item = Result<LineReader<'a, <T as File>::Line, U>, Error<T, V>>;
+    type Item = Result<LineReader<'a, <T as File>::Line, U>, Error<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
