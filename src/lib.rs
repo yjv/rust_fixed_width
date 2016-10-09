@@ -5,7 +5,7 @@ pub mod in_memory;
 pub mod spec;
 #[cfg(feature = "reader")]
 pub mod reader;
-#[cfg(feature = "builder")]
-pub mod builder;
+#[cfg(feature = "writer")]
+pub mod writer;
 #[cfg(feature = "test")]
 pub mod test;

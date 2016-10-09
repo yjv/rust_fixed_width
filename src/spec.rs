@@ -57,11 +57,11 @@ impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecog
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String>;
+    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String>;
 }
 
 impl<'a, V> DataRecordSpecRecognizer for &'a V where V: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String> {
         (*self).recognize_for_data(data, record_specs)
     }
 }
@@ -99,11 +99,11 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, data: T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if let Some(string) = data.as_ref().get(&self.id_field) {
+                    if let Some(string) = data.get(&self.id_field) {
                         if string == default {
                             return Some(name.clone());
                         }
@@ -125,7 +125,7 @@ impl LineRecordSpecRecognizer for NoneRecognizer {
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data<T: AsRef<HashMap<String, String>>, U: Range>(&self, _: T, _: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_data<T: Range>(&self, _: &HashMap<String, String>, _: &HashMap<String, RecordSpec<T>>) -> Option<String> {
         None
     }
 }
