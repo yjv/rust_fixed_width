@@ -4,8 +4,15 @@ use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, Inval
 
 pub struct File {
     width: usize,
-    lines: Vec<Line>,
+    lines: Vec<String>,
     line_separator: String
+}
+
+#[derive(Debug)]
+pub enum Error {
+    DataLongerThanRange,
+    InvalidRange(InvalidRangeError),
+    InvalidIndex(usize)
 }
 
 impl File {
@@ -24,21 +31,47 @@ impl File {
 
 impl FileTrait for File {
     type Line = Line;
-    type Error = ();
+    type Error = Error;
     fn width(&self) -> usize {
         self.width
     }
 
-    fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
-        Ok(self.lines.get(index))
+    fn get<T: Range>(&self, index: usize, range: T) -> Result<Option<String>, Self::Error> {
+        let line = match self.lines.get(index) {
+            Some(line) => line,
+            None => return Ok(None)
+        };
+
+        let (start, end) = try!(normalize_range(range, self.width).map_err(Error::InvalidRange));
+        Ok(line[start..end].to_string())
     }
 
-    fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
-        Ok(self.lines.get_mut(index))
+    fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error> {
+        let line = match self.lines.get_mut(index) {
+            Some(line) => line,
+            None => return Err(Error::InvalidIndex(index))
+        };
+
+        let (start, end) = try!(normalize_range(range, self.width).map_err(Error::InvalidRange));
+        if string.len() > end - start {
+            Err(Error::DataLongerThanRange)
+        } else {
+            line.truncate(0);
+            line.push_str(&self.data[..start]);
+            line.push_str(&string[..]);
+            line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
+            line.push_str(&self.data[end..]);
+            Ok(self)
+        }
+    }
+
+    fn clear<T: Range>(&mut self, index: usize, range: T) -> Result<&mut Self, Self::Error> {
+        self.set(index, range, repeat(" ").take(end - start).collect());
+        self
     }
 
     fn add_line(&mut self) -> Result<usize, Self::Error> {
-        self.lines.push(Line::new(self.width));
+        self.lines.push(repeat(" ").take(length).collect::<String>());
         Ok(self.lines.len() - 1)
     }
 
@@ -79,7 +112,7 @@ impl Line {
 }
 
 #[derive(Debug)]
-pub enum LineError {
+pub enum Error {
     DataLongerThanRange,
     InvalidRange(InvalidRangeError)
 }

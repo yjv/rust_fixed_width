@@ -7,7 +7,8 @@ pub enum FileError<T: File> {
     FailedToAddLine(T::Error),
     RecordSpecNotFound(String),
     RecordSpecNameRequired,
-    FailedToSetDataOnLine(<T::Line as Line>::Error)
+    FailedToSetDataOnLine(<T::Line as Line>::Error),
+    FailedToGetLine(T::Error)
 }
 
 #[derive(Debug)]
@@ -46,6 +47,21 @@ impl<'a, T: File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> File
         }
 
         Ok(index)
+    }
+
+    pub fn get_line_writer(&'a mut self, index: usize, spec_name: Option<String>) -> Result<Option<LineWriter<'a, <T as File>::Line, U, V>>, FileError<T>> {
+        let line = match self.file.line_mut(index).map_err(FileError::FailedToGetLine) {
+            Ok(Some(line)) => line,
+            Err(error) => return Err(error),
+            Ok(None) => return Ok(None)
+        };
+
+        Ok(Some(LineWriter::new_with_recognizers(
+            line,
+            self.spec,
+            &self.data_recognizer as U,
+            &self.line_recognizer as V
+        )))
     }
 }
 

@@ -2,22 +2,14 @@ use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 use std::fmt::Debug;
 
 pub trait File {
-    type Line: Line;
     type Error: Debug;
     fn width(&self) -> usize;
-    fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error>;
-    fn line_mut(&mut self, index: usize) -> Result<Option<&mut Self::Line>, Self::Error>;
+    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error>;
+    fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error>;
+    fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
     fn len(&self) -> usize;
-}
-
-pub trait Line {
-    type Error: Debug;
-    fn len(&self) -> usize;
-    fn get<T: Range>(&self, range: T) -> Result<String, Self::Error>;
-    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error>;
-    fn clear<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error>;
 }
 
 pub trait Range: Clone {
@@ -81,8 +73,7 @@ pub enum InvalidRangeError {
     EndOffEndOfLine
 }
 
-pub fn normalize_range<T: Range, U: Line>(range: T, line: &U) -> Result<(usize, usize), InvalidRangeError> {
-    let line_length = line.len();
+pub fn normalize_range<T: Range, U: Line>(range: T, line_length: usize) -> Result<(usize, usize), InvalidRangeError> {
     let start = range.start().unwrap_or(0);
     let end = range.end().unwrap_or(line_length);
     if start >= line_length {
