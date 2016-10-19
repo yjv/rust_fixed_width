@@ -27,6 +27,10 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
     }
 
     pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<Option<String>, Error<T>> {
+        if index >= self.file.len() {
+            return Ok(None);
+        }
+
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -39,6 +43,10 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
     }
 
     pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<Option<HashMap<String, Result<String, Error<T>>>>, Error<T>> {
+        if index >= self.file.len() {
+            return Ok(None);
+        }
+
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -46,7 +54,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
         Ok(Some(record_spec.field_specs.iter().map(|(name, field_spec)| (name.clone(), self.file.get(
             index,
             field_spec.range.clone()
-        ).map_err(Error::GetFailed))).collect()))
+        ).map_err(Error::GetFailed).map(|v| v.unwrap()))).collect()))
     }
 }
 
@@ -65,7 +73,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileIter
 }
 
 impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> Iterator for FileIterator<'a, T, U, V> {
-    type Item = Result<Option<HashMap<String, Result<String, Error<T>>>>, Error<T>>;
+    type Item = Result<HashMap<String, Result<String, Error<T>>>, Error<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;

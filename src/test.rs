@@ -4,7 +4,7 @@ use super::common::{Range, File as FileTrait};
 pub struct File {
     pub width: usize,
     pub line_seperator: String,
-    pub lines: Vec<Result<String, ()>>
+    pub lines: Vec<Result<Option<String>, ()>>
 }
 
 impl FileTrait for File {

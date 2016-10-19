@@ -8,7 +8,7 @@ pub enum Error<T: File> {
     RecordSpecNameRequired,
     FailedToSetData(T::Error),
     FailedToGetLine(T::Error),
-    RecordSpecNotFound(String),
+    RecordSpecNotFound(String)
 }
 
 pub struct FileWriter<'a, T: 'a + File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
@@ -28,27 +28,21 @@ impl<'a, T: File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> File
     }
 
     pub fn add_line(&'a mut self, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<usize, Error<T>> {
-        try!(self.file.add_line().map_err(Error::FailedToAddLine))
+        Ok(try!(self.file.add_line().map_err(Error::FailedToAddLine)))
     }
 
     pub fn set_fields(&'a mut self, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a mut Self, Error<T>> {
-        let line = match self.file.line_mut(index).map_err(Error::FailedToGetLine) {
-            Ok(Some(line)) => line,
-            Err(error) => return Err(error),
-            Ok(None) => return Ok(None)
-        };
-
         let record_spec_name = try!(
             spec_name
                 .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
-                .or_else(|| self.line_recognizer.recognize_for_line(line, &self.spec.record_specs))
+                .or_else(|| self.line_recognizer.recognize_for_line(self.file, index, &self.spec.record_specs))
                 .ok_or(Error::RecordSpecNameRequired)
         );
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
-                try!(self.line.set(field_spec.range.clone(), value).map_err(Error::FailedToSetData));
+                try!(self.file.set(index, field_spec.range.clone(), value).map_err(Error::FailedToSetData));
             }
         }
 

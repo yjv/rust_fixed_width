@@ -76,7 +76,7 @@ pub enum InvalidRangeError {
 
 pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
     let start = range.start().unwrap_or(0);
-    let Some(end) = range.end().or_else(|| string.map(|s| min(start + s.len(), line_length)));
+    let end = range.end().or_else(|| string.map(|s| min(start + s.len(), line_length))).expect("this should be impossible since somehting will return a Some");
     if start >= line_length {
         Err(InvalidRangeError::StartOffEndOfLine)
     } else if end > line_length {
@@ -158,10 +158,10 @@ mod test {
         let line2 = "".to_string();
         let line3 = "".to_string();
         let file = File {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
-            Ok(line1),
-            Ok(line2),
+            Ok(Some(line1)),
+            Ok(Some(line2)),
             Err(()),
-            Ok(line3)
+            Ok(Some(line3))
         ]};
         let mut iterator = FileIterator::new(&file);
         assert_eq!(Some(Ok(&line1)), iterator.next());
