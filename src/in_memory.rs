@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File as FileTrait, Line as LineTrait, Range, normalize_range, InvalidRangeError};
+use common::{File as FileTrait, Range, normalize_range, InvalidRangeError};
 
 pub struct File {
     width: usize,
@@ -30,7 +30,6 @@ impl File {
 }
 
 impl FileTrait for File {
-    type Line = Line;
     type Error = Error;
     fn width(&self) -> usize {
         self.width
@@ -42,8 +41,8 @@ impl FileTrait for File {
             None => return Ok(None)
         };
 
-        let (start, end) = try!(normalize_range(range, self.width).map_err(Error::InvalidRange));
-        Ok(line[start..end].to_string())
+        let (start, end) = try!(normalize_range(range, self.width, None).map_err(Error::InvalidRange));
+        Ok(Some(line[start..end].to_string()))
     }
 
     fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error> {
@@ -52,26 +51,27 @@ impl FileTrait for File {
             None => return Err(Error::InvalidIndex(index))
         };
 
-        let (start, end) = try!(normalize_range(range, self.width).map_err(Error::InvalidRange));
+        let (start, end) = try!(normalize_range(range, self.width, Some(string)).map_err(Error::InvalidRange));
         if string.len() > end - start {
             Err(Error::DataLongerThanRange)
         } else {
+            let data = line.clone();
             line.truncate(0);
-            line.push_str(&self.data[..start]);
+            line.push_str(&data[..start]);
             line.push_str(&string[..]);
             line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
-            line.push_str(&self.data[end..]);
+            line.push_str(&data[end..]);
             Ok(self)
         }
     }
 
     fn clear<T: Range>(&mut self, index: usize, range: T) -> Result<&mut Self, Self::Error> {
-        self.set(index, range, repeat(" ").take(end - start).collect());
-        self
+        let (start, end) = try!(normalize_range(range, self.width, None).map_err(Error::InvalidRange));
+        self.set(index, range, &repeat(" ").take(end - start).collect())
     }
 
     fn add_line(&mut self) -> Result<usize, Self::Error> {
-        self.lines.push(repeat(" ").take(length).collect::<String>());
+        self.lines.push(repeat(" ").take(self.width).collect::<String>());
         Ok(self.lines.len() - 1)
     }
 
@@ -93,65 +93,10 @@ impl ToString for File {
                 string.push_str(&self.line_separator[..]);
             }
 
-            string.push_str(&line.get(..).unwrap_or(String::new())[..])
+            string.push_str(&line[..])
         }
 
         string
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Clone)]
-pub struct Line {
-    data: String
-}
-
-impl Line {
-    pub fn new(length: usize) -> Self {
-        Line { data: repeat(" ").take(length).collect::<String>() }
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    DataLongerThanRange,
-    InvalidRange(InvalidRangeError)
-}
-
-impl LineTrait for Line {
-    type Error = LineError;
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn get<T: Range>(&self, range: T) -> Result<String, Self::Error> {
-        let (start, end) = try!(normalize_range(range, self).map_err(LineError::InvalidRange));
-        Ok(self.data[start..end].to_string())
-    }
-
-    fn set<T: Range>(&mut self, range: T, string: &String) -> Result<&mut Self, Self::Error> {
-        let (start, end) = try!(normalize_range(range, self).map_err(LineError::InvalidRange));
-        if string.len() > end - start {
-            Err(LineError::DataLongerThanRange)
-        } else {
-            let mut data = String::new();
-            data.push_str(&self.data[..start]);
-            data.push_str(&string[..]);
-            data.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
-            data.push_str(&self.data[end..]);
-            self.data = data;
-            Ok(self)
-        }
-    }
-
-    fn clear<T: Range>(&mut self, range: T) -> Result<&mut Self, Self::Error> {
-        let (start, end) = try!(normalize_range(range.clone(), self).map_err(LineError::InvalidRange));
-        self.set(range, &repeat(" ").take(end - start).collect())
-    }
-}
-
-impl ToString for Line {
-    fn to_string(&self) -> String {
-        self.data.clone()
     }
 }
 
@@ -159,7 +104,7 @@ impl ToString for Line {
 mod test {
 
     use super::File;
-    use super::super::common::{Line as LineTrait, File as FileTrait, FileIterator};
+    use super::super::common::{File as FileTrait, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
     use std::string::ToString;
@@ -176,25 +121,25 @@ mod test {
         let _ = file.line_mut(index2).unwrap().unwrap().set(.., &line2);
         let index3 = file.add_line().unwrap();
         let _ = file.line_mut(index3).unwrap().unwrap().set(.., &line3);
-        assert_eq!(line1, file.line(index1).unwrap().unwrap().to_string());
-        assert_eq!(line2, file.line(index2).unwrap().unwrap().to_string());
-        assert_eq!(line3, file.line(index3).unwrap().unwrap().to_string());
+        assert_eq!(line1, file.line(index1).unwrap().unwrap());
+        assert_eq!(line2, file.line(index2).unwrap().unwrap());
+        assert_eq!(line3, file.line(index3).unwrap().unwrap());
         assert_eq!(None, file.line(3).unwrap());
-        assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap().to_string()).collect::<Vec<String>>());
+        assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<String>>());
         assert_eq!(3, file.len());
         assert_eq!("aaaaaaaaaa\r\n          \r\ncccccccccc".to_string(), file.to_string());
         assert_eq!(10, file.line(index1).unwrap().unwrap().len());
         assert_eq!(line1, file.line(index1).unwrap().unwrap().get(..).unwrap());
         assert_eq!("aaaa".to_string(), file.line(index1).unwrap().unwrap().get(1..5).unwrap());
         assert_eq!(line2, file.line(index2).unwrap().unwrap().get(..).unwrap());
-        assert_eq!("abbbbaaaaa".to_string(), file.line_mut(index1).unwrap().unwrap().set(1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("abbbba  aa".to_string(), file.line_mut(index1).unwrap().unwrap().clear(6..8).unwrap().get(..).unwrap());
-        assert_eq!("   a      ".to_string(), file.line_mut(index2).unwrap().unwrap().set(3, &"a".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("abbbba b a".to_string(), file.line_mut(index1).unwrap().unwrap().set(7..9, &"b".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("b  a      ".to_string(), file.line_mut(index2).unwrap().unwrap().set(0, &"b".to_string()).unwrap().get(..).unwrap());
-        assert_eq!("b  a     b".to_string(), file.line_mut(index2).unwrap().unwrap().set(9, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbbaaaaa".to_string(), file.set(index1, 1..5, &"bbbb".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba  aa".to_string(), file.clear(index1, 6..8).unwrap().get(..).unwrap());
+        assert_eq!("   a      ".to_string(), file.set(index2, 3, &"a".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("abbbba b a".to_string(), file.set(index1, 7..9, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a      ".to_string(), file.set(index2, 0, &"b".to_string()).unwrap().get(..).unwrap());
+        assert_eq!("b  a     b".to_string(), file.set(index2, 9, &"b".to_string()).unwrap().get(..).unwrap());
         assert_eq!(2, file.remove_line().unwrap());
-        assert_eq!("abbbba b a".to_string(), file.line(index1).unwrap().unwrap().to_string());
+        assert_eq!("abbbba b a".to_string(), file.line(index1).unwrap().unwrap());
         assert_eq!(None, file.line(index3).unwrap());
         assert_eq!("abbbba b a\r\nb  a     b".to_string(), file.to_string());
     }

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use common::{Range, Line};
+use common::{Range, normalize_range, File};
 use std::ops::Range as RangeStruct;
 use std::fmt::Debug;
 
@@ -47,12 +47,12 @@ pub enum PaddingDirection {
 }
 
 pub trait LineRecordSpecRecognizer {
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String>;
+    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String>;
 }
 
 impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
-        (*self).recognize_for_line(line, record_specs)
+    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+        (*self).recognize_for_line(file, index, record_specs)
     }
 }
 
@@ -60,7 +60,7 @@ pub trait DataRecordSpecRecognizer {
     fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String>;
 }
 
-impl<'a, V> DataRecordSpecRecognizer for &'a V where V: 'a + DataRecordSpecRecognizer {
+impl<'a, U> DataRecordSpecRecognizer for &'a U where U: 'a + DataRecordSpecRecognizer {
     fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String> {
         (*self).recognize_for_data(data, record_specs)
     }
@@ -81,11 +81,11 @@ impl IdFieldRecognizer {
 }
 
 impl LineRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_line<T: Line, U: Range>(&self, line: &T, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if let Ok(string) = line.get(field_spec.range.clone()) {
+                    if let Ok(Some(string)) = file.get(index, field_spec.range.clone()) {
                         if &string == default {
                             return Some(name.clone());
                         }
@@ -119,7 +119,7 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
 pub struct NoneRecognizer;
 
 impl LineRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_line<T: Line, U: Range>(&self, _: &T, _: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_line<T: File, U: Range>(&self, _: &T, _: usize, _: &HashMap<String, RecordSpec<U>>) -> Option<String> {
         None
     }
 }

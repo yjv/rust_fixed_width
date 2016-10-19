@@ -1,29 +1,28 @@
-use super::common::{Range, Line as LineTrait, File as FileTrait};
+use super::common::{Range, File as FileTrait};
 
 #[derive(Debug)]
-pub struct File<'a> {
+pub struct File {
     pub width: usize,
     pub line_seperator: String,
-    pub lines: Vec<Result<&'a Line, ()>>
+    pub lines: Vec<Result<String, ()>>
 }
 
-impl<'a> FileTrait for File<'a> {
-    type Line = Line;
+impl FileTrait for File {
     type Error = ();
 
     fn width(&self) -> usize {
         self.width
     }
 
-    fn line(&self, index: usize) -> Result<Option<&Self::Line>, Self::Error> {
-        match self.lines.get(index) {
-            Some(&Ok(line)) => Ok(Some(line)),
-            Some(&Err(error)) => Err(error),
-            None => Ok(None)
-        }
+    fn get<T: Range>(&self, _: usize, _: T) -> Result<Option<String>, Self::Error> {
+        unimplemented!()
     }
 
-    fn line_mut(&mut self, _: usize) -> Result<Option<&mut Self::Line>, Self::Error> {
+    fn set<T: Range>(&mut self, _: usize, _: T, _: &String) -> Result<&mut Self, Self::Error> {
+        unimplemented!()
+    }
+
+    fn clear<T: Range>(&mut self, _: usize, _: T) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
 
@@ -36,31 +35,6 @@ impl<'a> FileTrait for File<'a> {
     }
 
     fn len(&self) -> usize {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Line {
-    pub length: usize,
-    pub data: String
-}
-
-impl LineTrait for Line {
-    type Error = ();
-    fn len(&self) -> usize {
-        self.length
-    }
-
-    fn get<T: Range>(&self, _: T) -> Result<String, Self::Error> {
-        unimplemented!()
-    }
-
-    fn set<T: Range>(&mut self, _: T, _: &String) -> Result<&mut Self, Self::Error> {
-        unimplemented!()
-    }
-
-    fn clear<T: Range>(&mut self, _: T) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
 }
