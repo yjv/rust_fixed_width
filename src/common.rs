@@ -3,9 +3,9 @@ use std::fmt::Debug;
 use std::cmp::min;
 
 pub trait File {
-    type Error: Debug;
+    type Error: FileError;
     fn width(&self) -> usize;
-    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<Option<String>, Self::Error>;
+    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error>;
     fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error>;
     fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
@@ -16,6 +16,11 @@ pub trait File {
 pub trait Range: Clone {
     fn start(&self) -> Option<usize>;
     fn end(&self) -> Option<usize>;
+}
+
+pub trait FileError: Debug {
+    fn is_invalid_index(&self) -> bool;
+    fn is_invalid_range(&self) -> bool;
 }
 
 impl Range for RangeStruct<usize> {
@@ -101,14 +106,14 @@ impl<'a, T: File + 'a> FileIterator<'a, T> {
 }
 
 impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
-    type Item = Result<String, <T as File>::Error>;
+    type Item = Result<String, T::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
-        match self.file.get(self.position - 1, ..) {
-            Ok(Some(line)) => Some(Ok(line)),
-            Err(error) => Some(Err(error)),
-            Ok(None) => None
+        if self.position >= self.file.len() {
+            None
+        } else {
+            Some(self.file.get(self.position - 1, ..))
         }
     }
 }
@@ -158,16 +163,16 @@ mod test {
         let line2 = "".to_string();
         let line3 = "".to_string();
         let file = File {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
-            Ok(Some(line1)),
-            Ok(Some(line2)),
+            Ok(line1.clone()),
+            Ok(line2.clone()),
             Err(()),
-            Ok(Some(line3))
+            Ok(line3.clone())
         ]};
         let mut iterator = FileIterator::new(&file);
-        assert_eq!(Some(Ok(&line1)), iterator.next());
-        assert_eq!(Some(Ok(&line2)), iterator.next());
+        assert_eq!(Some(Ok(line1)), iterator.next());
+        assert_eq!(Some(Ok(line2)), iterator.next());
         assert_eq!(Some(Err(())), iterator.next());
-        assert_eq!(Some(Ok(&line3)), iterator.next());
+        assert_eq!(Some(Ok(line3)), iterator.next());
         assert_eq!(None, iterator.next());
     }
 }

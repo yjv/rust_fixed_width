@@ -1,10 +1,20 @@
-use super::common::{Range, File as FileTrait};
+use super::common::{Range, File as FileTrait, FileError};
 
 #[derive(Debug)]
 pub struct File {
     pub width: usize,
     pub line_seperator: String,
-    pub lines: Vec<Result<Option<String>, ()>>
+    pub lines: Vec<Result<String, ()>>
+}
+
+impl FileError for () {
+    fn is_invalid_index(&self) -> bool {
+        unimplemented!()
+    }
+
+    fn is_invalid_range(&self) -> bool {
+        unimplemented!()
+    }
 }
 
 impl FileTrait for File {
@@ -14,7 +24,7 @@ impl FileTrait for File {
         self.width
     }
 
-    fn get<T: Range>(&self, _: usize, _: T) -> Result<Option<String>, Self::Error> {
+    fn get<T: Range>(&self, _: usize, _: T) -> Result<String, Self::Error> {
         unimplemented!()
     }
 
