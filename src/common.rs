@@ -81,7 +81,7 @@ pub enum InvalidRangeError {
 
 pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
     let start = range.start().unwrap_or(0);
-    let end = range.end().or_else(|| string.map(|s| min(start + s.len(), line_length))).expect("this should be impossible since somehting will return a Some");
+    let end = range.end().or_else(|| string.map(|s| min(start + s.len(), line_length))).expect("this should be impossible since something will return a Some");
     if start >= line_length {
         Err(InvalidRangeError::StartOffEndOfLine)
     } else if end > line_length {
