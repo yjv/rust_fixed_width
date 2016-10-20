@@ -146,7 +146,6 @@ mod test {
 
     #[test]
     fn normalize_range_works() {
-        let line = "12345".to_string();
         assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), normalize_range(7..79, 5, None));
         assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), normalize_range(..6, 5, None));
         assert_eq!(Ok((0, 5)), normalize_range(.., 5, None));

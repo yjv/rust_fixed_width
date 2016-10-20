@@ -15,7 +15,7 @@ pub enum Error {
     InvalidIndex(usize)
 }
 
-type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T> = ::std::result::Result<T, Error>;
 
 impl FileError for Error {
     fn is_invalid_index(&self) -> bool {
@@ -60,19 +60,21 @@ impl FileTrait for File {
     }
 
     fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self> {
-        let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
-        let (start, end) = try!(normalize_range(range, self.width, Some(string)).map_err(Error::InvalidRange));
-        if string.len() > end - start {
-            Err(Error::DataLongerThanRange)
-        } else {
-            let data = line.clone();
-            line.truncate(0);
-            line.push_str(&data[..start]);
-            line.push_str(&string[..]);
-            line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
-            line.push_str(&data[end..]);
-            Ok(self)
+        {
+            let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
+            let (start, end) = try!(normalize_range(range, self.width, Some(string)).map_err(Error::InvalidRange));
+            if string.len() > end - start {
+                return Err(Error::DataLongerThanRange)
+            } else {
+                let data = line.clone();
+                line.truncate(0);
+                line.push_str(&data[..start]);
+                line.push_str(&string[..]);
+                line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
+                line.push_str(&data[end..]);
+            }
         }
+        Ok(self)
     }
 
     fn clear<T: Range>(&mut self, index: usize, range: T) -> Result<&mut Self> {

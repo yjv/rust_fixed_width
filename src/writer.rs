@@ -27,7 +27,7 @@ impl<'a, T: File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> File
         FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer }
     }
 
-    pub fn add_line(&'a mut self, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<usize, Error<T>> {
+    pub fn add_line(&'a mut self) -> Result<usize, Error<T>> {
         Ok(try!(self.file.add_line().map_err(Error::FailedToAddLine)))
     }
 

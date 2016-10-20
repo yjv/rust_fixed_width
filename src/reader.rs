@@ -1,5 +1,5 @@
 use common::{File, Range};
-use spec::{FileSpec, RecordSpec, LineRecordSpecRecognizer, NoneRecognizer};
+use spec::{FileSpec, LineRecordSpecRecognizer, NoneRecognizer};
 use std::collections::HashMap;
 
 #[derive(Debug)]

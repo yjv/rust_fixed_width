@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use common::{Range, normalize_range, File};
+use common::{Range, File};
 use std::ops::Range as RangeStruct;
-use std::fmt::Debug;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct FileSpec<T: Range = RangeStruct<usize>> {
@@ -262,7 +261,6 @@ impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpecBuilder<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use super::super::common::Range;
     use std::collections::HashMap;
 
     #[test]
