@@ -15,6 +15,12 @@ pub enum Error {
     InvalidIndex(usize)
 }
 
+impl From<InvalidRangeError> for Error {
+    fn from(e: InvalidRangeError) -> Self {
+        Error::InvalidRange(e)
+    }
+}
+
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 impl FileError for Error {
@@ -55,14 +61,14 @@ impl FileTrait for File {
 
     fn get<T: Range>(&self, index: usize, range: T) -> Result<String> {
         let line = try!(self.lines.get(index).ok_or(Error::InvalidIndex(index)));
-        let (start, end) = try!(normalize_range(range, self.width, None).map_err(Error::InvalidRange));
+        let (start, end) = try!(normalize_range(range, self.width, None));
         Ok(line[start..end].to_string())
     }
 
     fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
-            let (start, end) = try!(normalize_range(range, self.width, Some(string)).map_err(Error::InvalidRange));
+            let (start, end) = try!(normalize_range(range, self.width, Some(string)));
             if string.len() > end - start {
                 return Err(Error::DataLongerThanRange)
             } else {
@@ -78,7 +84,7 @@ impl FileTrait for File {
     }
 
     fn clear<T: Range>(&mut self, index: usize, range: T) -> Result<&mut Self> {
-        let (start, end) = try!(normalize_range(range, self.width, None).map_err(Error::InvalidRange));
+        let (start, end) = try!(normalize_range(range, self.width, None));
         self.set(index, start..end, &repeat(" ").take(end - start).collect())
     }
 
