@@ -6,11 +6,69 @@ pub trait File {
     type Error: FileError;
     fn width(&self) -> usize;
     fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error>;
+    fn len(&self) -> usize;
+}
+
+pub trait MutableFile: File {
     fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error>;
     fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
-    fn len(&self) -> usize;
+}
+
+impl<'a, U> File for &'a U where U: 'a + File {
+    type Error = U::Error;
+    fn width(&self) -> usize {
+        (*self).width()
+    }
+
+    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error> {
+        (*self).get(line_index, range)
+    }
+
+    fn len(&self) -> usize {
+        (*self).len()
+    }
+}
+
+impl<'a, U> File for &'a mut U where U: 'a + File {
+    type Error = U::Error;
+    fn width(&self) -> usize {
+        (**self).width()
+    }
+
+    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error> {
+        (**self).get(line_index, range)
+    }
+
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+}
+
+impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
+    fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, <Self as File>::Error> {
+        match (**self).set(line_index, range, string) {
+            Ok(_) => Ok(self),
+            Err(err) => Err(err)
+        }
+
+    }
+
+    fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, <Self as File>::Error> {
+        match (**self).clear(line_index, range) {
+            Ok(_) => Ok(self),
+            Err(err) => Err(err)
+        }
+    }
+
+    fn add_line(&mut self) -> Result<usize, <Self as File>::Error> {
+        (**self).add_line()
+    }
+
+    fn remove_line(&mut self) -> Result<usize, <Self as File>::Error> {
+        (**self).remove_line()
+    }
 }
 
 pub trait Range: Clone {
@@ -91,13 +149,13 @@ pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&S
     }
 }
 
-pub struct FileIterator<'a, T: File + 'a> {
+pub struct FileIterator<T: File> {
     position: usize,
-    file: &'a T
+    file: T
 }
 
-impl<'a, T: File + 'a> FileIterator<'a, T> {
-    pub fn new(file: &'a T) -> Self {
+impl<T: File> FileIterator<T> {
+    pub fn new(file: T) -> Self {
         FileIterator {
             position: 0,
             file: file
@@ -105,7 +163,7 @@ impl<'a, T: File + 'a> FileIterator<'a, T> {
     }
 }
 
-impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
+impl<T: File> Iterator for FileIterator<T> {
     type Item = Result<String, T::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -172,6 +230,8 @@ mod test {
         assert_eq!(Some(Ok(line2)), iterator.next());
         assert_eq!(Some(Err(())), iterator.next());
         assert_eq!(Some(Ok(line3)), iterator.next());
+        assert_eq!(None, iterator.next());
+        assert_eq!(None, iterator.next());
         assert_eq!(None, iterator.next());
     }
 }

@@ -1,6 +1,6 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File as FileTrait, Range, normalize_range, InvalidRangeError, FileError};
+use common::{File as FileTrait, MutableFile, Range, normalize_range, InvalidRangeError, FileError};
 
 pub struct File {
     width: usize,
@@ -63,8 +63,12 @@ impl FileTrait for File {
         let line = try!(self.lines.get(index).ok_or(Error::InvalidIndex(index)));
         let (start, end) = try!(normalize_range(range, self.width, None));
         Ok(line[start..end].to_string())
+    }fn len(&self) -> usize {
+        self.lines.len()
     }
+}
 
+impl MutableFile for File {
     fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
@@ -97,10 +101,6 @@ impl FileTrait for File {
         self.lines.pop();
         Ok(self.lines.len())
     }
-
-    fn len(&self) -> usize {
-        self.lines.len()
-    }
 }
 
 impl ToString for File {
@@ -122,7 +122,7 @@ impl ToString for File {
 mod test {
 
     use super::{File, Error};
-    use super::super::common::{File as FileTrait, FileIterator};
+    use super::super::common::{File as FileTrait, MutableFile, FileIterator};
     use std::iter::repeat;
     use std::iter::Iterator;
     use std::string::ToString;

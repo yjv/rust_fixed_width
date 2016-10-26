@@ -1,4 +1,4 @@
-use common::File;
+use common::{File, MutableFile};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer};
 use std::collections::HashMap;
 
@@ -11,14 +11,14 @@ pub enum Error<T: File> {
     RecordSpecNotFound(String)
 }
 
-pub struct FileWriter<'a, T: 'a + File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
+pub struct FileWriter<'a, T: 'a + MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
     file: &'a mut T,
     spec: &'a FileSpec,
     data_recognizer: U,
     line_recognizer: V
 }
 
-impl<'a, T: File, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> FileWriter<'a, T, U, V> {
+impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> FileWriter<'a, T, U, V> {
     pub fn new(file: &'a mut T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer> {
         FileWriter { file: file, spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer }
     }

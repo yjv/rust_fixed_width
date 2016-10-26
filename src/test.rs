@@ -1,4 +1,4 @@
-use super::common::{Range, File as FileTrait, FileError};
+use super::common::{Range, File as FileTrait, MutableFile, FileError};
 
 #[derive(Debug)]
 pub struct File {
@@ -28,6 +28,12 @@ impl FileTrait for File {
         self.lines.get(index).unwrap().clone()
     }
 
+    fn len(&self) -> usize {
+        self.lines.len()
+    }
+}
+
+impl MutableFile for File {
     fn set<T: Range>(&mut self, _: usize, _: T, _: &String) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
@@ -42,9 +48,5 @@ impl FileTrait for File {
 
     fn remove_line(&mut self) -> Result<usize, Self::Error> {
         unimplemented!()
-    }
-
-    fn len(&self) -> usize {
-        self.lines.len()
     }
 }
