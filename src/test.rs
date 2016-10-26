@@ -24,8 +24,8 @@ impl FileTrait for File {
         self.width
     }
 
-    fn get<T: Range>(&self, _: usize, _: T) -> Result<String, Self::Error> {
-        unimplemented!()
+    fn get<T: Range>(&self, index: usize, _: T) -> Result<String, Self::Error> {
+        self.lines.get(index).unwrap().clone()
     }
 
     fn set<T: Range>(&mut self, _: usize, _: T, _: &String) -> Result<&mut Self, Self::Error> {
@@ -45,6 +45,6 @@ impl FileTrait for File {
     }
 
     fn len(&self) -> usize {
-        unimplemented!()
+        self.lines.len()
     }
 }

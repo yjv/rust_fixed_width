@@ -110,7 +110,7 @@ impl<'a, T: File + 'a> Iterator for FileIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
-        if self.position >= self.file.len() {
+        if self.position > self.file.len() {
             None
         } else {
             Some(self.file.get(self.position - 1, ..))
