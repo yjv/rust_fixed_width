@@ -2,6 +2,7 @@ use std::string::ToString;
 use std::iter::repeat;
 use common::{File as FileTrait, MutableFile, Range, normalize_range, InvalidRangeError, FileError};
 
+#[derive(Clone)]
 pub struct File {
     width: usize,
     lines: Vec<String>,
@@ -144,6 +145,7 @@ mod test {
         assert_eq!(line3, file.get(index3, ..).unwrap());
         assert_eq!(Error::InvalidIndex(3), file.get(3, ..).unwrap_err());
         assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<String>>());
+        assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(file.clone()).map(|r| r.unwrap()).collect::<Vec<String>>());
         assert_eq!(3, file.len());
         assert_eq!("aaaaaaaaaa\r\n          \r\ncccccccccc".to_string(), file.to_string());
         assert_eq!(line1, file.get(index1, ..).unwrap());
