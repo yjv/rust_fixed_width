@@ -11,19 +11,19 @@ pub enum Error<T: File> {
     RecordSpecNotFound(String)
 }
 
-pub struct FileWriter<'a, T: 'a + MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
-    file: &'a mut T,
+pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
+    file: T,
     spec: &'a FileSpec,
     data_recognizer: U,
     line_recognizer: V
 }
 
 impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> FileWriter<'a, T, U, V> {
-    pub fn new(file: &'a mut T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer> {
+    pub fn new(file: T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer> {
         FileWriter { file: file, spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer }
     }
 
-    pub fn new_with_recognizers(file: &'a mut T, spec: &'a FileSpec, data_recognizer: U, line_recognizer: V) -> Self {
+    pub fn new_with_recognizers(file: T, spec: &'a FileSpec, data_recognizer: U, line_recognizer: V) -> Self {
         FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer }
     }
 
@@ -35,7 +35,7 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         let record_spec_name = try!(
             spec_name
                 .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
-                .or_else(|| self.line_recognizer.recognize_for_line(self.file, index, &self.spec.record_specs))
+                .or_else(|| self.line_recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs))
                 .ok_or(Error::RecordSpecNameRequired)
         );
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
@@ -53,6 +53,10 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         let mut data = HashMap::new();
         data.insert(key, value);
         self.set_fields(index, &data, spec_name)
+    }
+
+    pub fn file(&'a self) -> &'a T {
+        &self.file
     }
 }
 

@@ -11,23 +11,23 @@ pub enum Error<T: File> {
     FieldSpecNotFound(String)
 }
 
-pub struct FileReader<'a, T: 'a + File, U: 'a + Range, V: LineRecordSpecRecognizer> {
+pub struct FileReader<'a, T: File, U: 'a + Range, V: LineRecordSpecRecognizer> {
     spec: &'a FileSpec<U>,
-    file: &'a T,
+    file: T,
     recognizer: V
 }
 
 impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileReader<'a, T, U, V> {
-    pub fn new(spec: &'a FileSpec<U>, file: &'a T) -> FileReader<'a, T, U, NoneRecognizer> {
+    pub fn new(spec: &'a FileSpec<U>, file: T) -> FileReader<'a, T, U, NoneRecognizer> {
         FileReader { spec: spec, file: file, recognizer: NoneRecognizer }
     }
 
-    pub fn new_with_recognizer(spec: &'a FileSpec<U>, file: &'a T, recognizer: V) -> Self {
+    pub fn new_with_recognizer(spec: &'a FileSpec<U>, file: T, recognizer: V) -> Self {
         FileReader {spec: spec, file: file, recognizer: recognizer}
     }
 
     pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<String, Error<T>> {
-        let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
+        let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
         ).ok_or(Error::RecordSpecNotFound(record_spec_name)));
@@ -39,7 +39,7 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
     }
 
     pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<T>> {
-        let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
+        let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
         ).ok_or(Error::RecordSpecNotFound(record_spec_name)));
@@ -52,8 +52,8 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
         Ok(fields)
     }
 
-    pub fn file(&self) -> &'a T {
-        self.file
+    pub fn file(&'a self) -> &'a T {
+        &self.file
     }
 }
 
