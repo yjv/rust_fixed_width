@@ -135,7 +135,7 @@ impl Range for usize {
 pub enum InvalidRangeError {
     StartOffEndOfLine,
     EndOffEndOfLine,
-    DataLongerThanRange
+    LengthShorterThanString
 }
 
 pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
@@ -146,7 +146,7 @@ pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&S
     } else if end > line_length {
         Err(InvalidRangeError::EndOffEndOfLine)
     } else if string.is_some() && end - start < string.unwrap().len() {
-        Err(InvalidRangeError::DataLongerThanRange)
+        Err(InvalidRangeError::LengthShorterThanString)
     } else {
         Ok((start, end))
     }
@@ -215,7 +215,7 @@ mod test {
         assert_eq!(Ok((0, 2)), normalize_range(.., 5, Some(&"23".to_string())));
         assert_eq!(Ok((2, 4)), normalize_range(2.., 5, Some(&"23".to_string())));
         assert_eq!(Ok((0, 3)), normalize_range(..3, 5, Some(&"23".to_string())));
-        assert_eq!(Err(InvalidRangeError::DataLongerThanRange), normalize_range(3, 5, Some(&"dasadsads".to_string())));
+        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), normalize_range(3, 5, Some(&"dasadsads".to_string())));
     }
 
     #[test]
