@@ -74,16 +74,12 @@ impl MutableFile for File {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
             let (start, end) = try!(normalize_range(range, self.width, Some(string)));
-            if string.len() > end - start {
-                return Err(Error::DataLongerThanRange)
-            } else {
-                let data = line.clone();
-                line.truncate(0);
-                line.push_str(&data[..start]);
-                line.push_str(&string[..]);
-                line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
-                line.push_str(&data[end..]);
-            }
+            let data = line.clone();
+            line.truncate(0);
+            line.push_str(&data[..start]);
+            line.push_str(&string[..]);
+            line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
+            line.push_str(&data[end..]);
         }
         Ok(self)
     }
