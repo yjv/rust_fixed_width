@@ -122,7 +122,7 @@ impl ToString for File {
 mod test {
 
     use super::{File, Error};
-    use super::super::common::{File as FileTrait, MutableFile, FileIterator};
+    use super::super::common::{File as FileTrait, MutableFile, FileIterator, InvalidRangeError, FileError};
     use std::iter::repeat;
     use std::iter::Iterator;
     use std::string::ToString;
@@ -159,5 +159,16 @@ mod test {
         assert_eq!("abbbba b a".to_string(), file.get(index1, ..).unwrap());
         assert_eq!(Error::InvalidIndex(index3), file.get(index3, ..).unwrap_err());
         assert_eq!("abbbba b a\r\nb  a     b".to_string(), file.to_string());
+    }
+
+    #[test]
+    fn error() {
+        let error = Error::InvalidRange(InvalidRangeError::EndOffEndOfLine);
+        assert_eq!(true, error.is_invalid_range());
+        assert_eq!(false, error.is_invalid_index());
+        let error = Error::InvalidIndex(3);
+        assert_eq!(false, error.is_invalid_range());
+        assert_eq!(true, error.is_invalid_index());
+        assert_eq!(Error::InvalidRange(InvalidRangeError::EndOffEndOfLine), Error::from(InvalidRangeError::EndOffEndOfLine));
     }
 }
