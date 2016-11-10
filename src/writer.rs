@@ -1,14 +1,22 @@
-use common::{File, MutableFile};
+use common::{File, MutableFile, normalize_range, InvalidRangeError};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: File> {
+pub enum Error<T: File, U: Padder> {
     FailedToAddLine(T::Error),
     RecordSpecNameRequired,
     FailedToSetData(T::Error),
     FailedToGetLine(T::Error),
-    RecordSpecNotFound(String)
+    RecordSpecNotFound(String),
+    InvalidRange(InvalidRangeError),
+    PaddingFailed(U::Error)
+}
+
+impl<T: File, U: Padder> From<InvalidRangeError> for Error<T, U> {
+    fn from(e: InvalidRangeError) -> Self {
+        Error::InvalidRange(e)
+    }
 }
 
 pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> {
@@ -28,11 +36,11 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
     }
 
-    pub fn add_line(&'a mut self) -> Result<usize, Error<T>> {
+    pub fn add_line(&'a mut self) -> Result<usize, Error<T, W>> {
         Ok(try!(self.file.add_line().map_err(Error::FailedToAddLine)))
     }
 
-    pub fn set_fields(&'a mut self, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a mut Self, Error<T>> {
+    pub fn set_fields(&'a mut self, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a mut Self, Error<T, W>> {
         let record_spec_name = try!(
             spec_name
                 .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
@@ -43,10 +51,11 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
+                let (end, start) = try!(normalize_range(field_spec.range.clone(), self.file.width(), Some(value)));
                 try!(self.file.set(
                     index,
                     field_spec.range.clone(),
-                    self.padder.pad(value, field_spec.range)
+                    &try!(self.padder.pad(value, end - start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed))
                 ).map_err(Error::FailedToSetData));
             }
         }
@@ -54,7 +63,7 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         Ok(self)
     }
 
-    pub fn set_field(&'a mut self, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a mut Self, Error<T>> {
+    pub fn set_field(&'a mut self, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a mut Self, Error<T, W>> {
         let mut data = HashMap::new();
         data.insert(key, value);
         self.set_fields(index, &data, spec_name)

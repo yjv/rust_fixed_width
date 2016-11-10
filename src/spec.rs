@@ -40,7 +40,7 @@ impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpec<T> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum PaddingDirection {
     Left,
     Right
@@ -48,19 +48,19 @@ pub enum PaddingDirection {
 
 pub trait Padder {
     type Error: Debug;
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
 }
 
 impl<'a, T> Padder for &'a T where T: 'a + Padder {
     type Error = T::Error;
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         (**self).pad(data, length, padding, direction)
     }
 }
 
 pub trait UnPadder {
     type Error: Debug;
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
 }
 
 extern crate pad;
@@ -85,7 +85,7 @@ impl DefaultPadder {
 
 impl Padder for DefaultPadder {
     type Error = PaddingError;
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         Ok(data.pad(
             length,
             try!(Self::get_char(padding)),
@@ -100,7 +100,7 @@ impl Padder for DefaultPadder {
 
 impl UnPadder for DefaultPadder {
     type Error = PaddingError;
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         Ok(match direction {
             PaddingDirection::Left => data.trim_left_matches(try!(Self::get_char(padding))).to_string(),
             PaddingDirection::Right => data.trim_right_matches(try!(Self::get_char(padding))).to_string(),
@@ -112,15 +112,15 @@ pub struct IdentityPadder;
 
 impl Padder for IdentityPadder {
     type Error = ();
-    fn pad(&self, data: String, _: usize, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
-        Ok(data)
+    fn pad(&self, data: &String, _: usize, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data.clone())
     }
 }
 
 impl UnPadder for IdentityPadder {
     type Error = ();
-    fn unpad(&self, data: String, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
-        Ok(data)
+    fn unpad(&self, data: &String, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data.clone())
     }
 }
 
