@@ -1,44 +1,50 @@
 use common::{File, Range};
-use spec::{FileSpec, LineRecordSpecRecognizer, NoneRecognizer};
+use spec::{FileSpec, LineRecordSpecRecognizer, NoneRecognizer, UnPadder, IdentityPadder};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum Error<T: File> {
+pub enum Error<T: File, U: UnPadder> {
     FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
     RecordSpecNameRequired,
     GetFailed(String, T::Error),
-    FieldSpecNotFound(String)
+    FieldSpecNotFound(String),
+    UnPaddingFailed(U::Error)
 }
 
-pub struct FileReader<'a, T: File, U: 'a + Range, V: LineRecordSpecRecognizer> {
+pub struct FileReader<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> {
     spec: &'a FileSpec<U>,
     file: T,
-    recognizer: V
+    recognizer: V,
+    un_padder: W
 }
 
-impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileReader<'a, T, U, V> {
-    pub fn new(spec: &'a FileSpec<U>, file: T) -> FileReader<'a, T, U, NoneRecognizer> {
-        FileReader { spec: spec, file: file, recognizer: NoneRecognizer }
+impl<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> FileReader<'a, T, U, V, W> {
+    pub fn new(spec: &'a FileSpec<U>, file: T) -> FileReader<'a, T, U, NoneRecognizer, IdentityPadder> {
+        FileReader { spec: spec, file: file, recognizer: NoneRecognizer, un_padder: IdentityPadder }
     }
 
-    pub fn new_with_recognizer(spec: &'a FileSpec<U>, file: T, recognizer: V) -> Self {
-        FileReader {spec: spec, file: file, recognizer: recognizer}
+    pub fn new_with_recognizer_and_unpadder(spec: &'a FileSpec<U>, file: T, recognizer: V, un_padder: W) -> Self {
+        FileReader {spec: spec, file: file, recognizer: recognizer, un_padder: un_padder}
     }
 
-    pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<String, Error<T>> {
+    pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<String, Error<T, W>> {
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
         ).ok_or(Error::RecordSpecNotFound(record_spec_name)));
 
-        Ok(try!(self.file.get(
+        let field_spec = try!(record_spec.field_specs.get(&name).ok_or_else(|| Error::FieldSpecNotFound(name.clone())));
+
+        let data = try!(self.file.get(
             index,
-            try!(record_spec.field_specs.get(&name).ok_or_else(|| Error::FieldSpecNotFound(name.clone()))).range.clone()
-        ).map_err(|e| Error::GetFailed(name, e))))
+            field_spec.range.clone()
+        ).map_err(|e| Error::GetFailed(name, e)));
+
+        Ok(try!(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(Error::UnPaddingFailed)))
     }
 
-    pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<T>> {
+    pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<T, W>> {
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -47,7 +53,11 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
         let mut fields = HashMap::new();
 
         for (name, field_spec) in &record_spec.field_specs {
-            fields.insert(name.clone(), try!(self.file.get(index, field_spec.range.clone()).map_err(|e| Error::GetFailed(name.clone(), e))));
+            let data = try!(self.file.get(index, field_spec.range.clone()).map_err(|e| Error::GetFailed(name.clone(), e)));
+            fields.insert(
+                name.clone(),
+                try!(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(Error::UnPaddingFailed))
+            );
         }
         Ok(fields)
     }
@@ -57,13 +67,13 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileRead
     }
 }
 
-pub struct FileIterator<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> {
+pub struct FileIterator<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> {
     position: usize,
-    reader: &'a FileReader<'a, T, U, V>
+    reader: &'a FileReader<'a, T, U, V, W>
 }
 
-impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileIterator<'a, T, U, V> {
-    pub fn new(reader: &'a FileReader<'a, T, U, V>) -> Self {
+impl<'a, T: File, U: Range, V: LineRecordSpecRecognizer, W: UnPadder> FileIterator<'a, T, U, V, W> {
+    pub fn new(reader: &'a FileReader<'a, T, U, V, W>) -> Self {
         FileIterator {
             position: 0,
             reader: reader
@@ -71,8 +81,8 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> FileIter
     }
 }
 
-impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> Iterator for FileIterator<'a, T, U, V> {
-    type Item = Result<HashMap<String, String>, Error<T>>;
+impl<'a, T: File, U: Range, V: LineRecordSpecRecognizer, W: UnPadder> Iterator for FileIterator<'a, T, U, V, W> {
+    type Item = Result<HashMap<String, String>, Error<T, W>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
@@ -100,6 +110,7 @@ mod test {
                     .with_range(0..4)
                     .with_default("hello".to_string())
                     .with_padding("")
+                    .with_padding_direction(PaddingDirection::Left)
                 )
             )
         ;
