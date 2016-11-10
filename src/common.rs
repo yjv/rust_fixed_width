@@ -1,17 +1,17 @@
-use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
+use std::ops::Range;
 use std::fmt::Debug;
 use std::cmp::min;
 
 pub trait File {
     type Error: FileError;
     fn width(&self) -> usize;
-    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error>;
+    fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error>;
     fn len(&self) -> usize;
 }
 
 pub trait MutableFile: File {
-    fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, Self::Error>;
-    fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, Self::Error>;
+    fn set(&mut self, line_index: usize, range: Range<usize>, string: &String) -> Result<&mut Self, Self::Error>;
+    fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
 }
@@ -22,7 +22,7 @@ impl<'a, U> File for &'a U where U: 'a + File {
         (*self).width()
     }
 
-    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error> {
+    fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error> {
         (*self).get(line_index, range)
     }
 
@@ -37,7 +37,7 @@ impl<'a, U> File for &'a mut U where U: 'a + File {
         (**self).width()
     }
 
-    fn get<T: Range>(&self, line_index: usize, range: T) -> Result<String, Self::Error> {
+    fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error> {
         (**self).get(line_index, range)
     }
 
@@ -47,7 +47,7 @@ impl<'a, U> File for &'a mut U where U: 'a + File {
 }
 
 impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
-    fn set<T: Range>(&mut self, line_index: usize, range: T, string: &String) -> Result<&mut Self, <Self as File>::Error> {
+    fn set(&mut self, line_index: usize, range: Range<usize>, string: &String) -> Result<&mut Self, <Self as File>::Error> {
         match (**self).set(line_index, range, string) {
             Ok(_) => Ok(self),
             Err(err) => Err(err)
@@ -55,7 +55,7 @@ impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
 
     }
 
-    fn clear<T: Range>(&mut self, line_index: usize, range: T) -> Result<&mut Self, <Self as File>::Error> {
+    fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, <Self as File>::Error> {
         match (**self).clear(line_index, range) {
             Ok(_) => Ok(self),
             Err(err) => Err(err)
@@ -70,65 +70,15 @@ impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
         (**self).remove_line()
     }
 }
-
-pub trait Range: Clone {
-    fn start(&self) -> Option<usize>;
-    fn end(&self) -> Option<usize>;
-}
+//
+//pub trait Range: Clone {
+//    fn start(&self) -> Option<usize>;
+//    fn end(&self) -> Option<usize>;
+//}
 
 pub trait FileError: Debug {
     fn is_invalid_index(&self) -> bool;
     fn is_invalid_range(&self) -> bool;
-}
-
-impl Range for RangeStruct<usize> {
-    fn start(&self) -> Option<usize> {
-        Some(self.start)
-    }
-
-    fn end(&self) -> Option<usize> {
-        Some(self.end)
-    }
-}
-
-impl Range for RangeFull {
-    fn start(&self) -> Option<usize> {
-        None
-    }
-
-    fn end (&self) -> Option<usize> {
-        None
-    }
-}
-
-impl Range for RangeFrom<usize> {
-    fn start(&self) -> Option<usize> {
-        Some(self.start)
-    }
-
-    fn end(&self) -> Option<usize> {
-        None
-    }
-}
-
-impl Range for RangeTo<usize> {
-    fn start(&self) -> Option<usize> {
-        None
-    }
-
-    fn end(&self) -> Option<usize> {
-        Some(self.end)
-    }
-}
-
-impl Range for usize {
-    fn start(&self) -> Option<usize> {
-        Some(*self)
-    }
-
-    fn end(&self) -> Option<usize> {
-        Some(*self + 1)
-    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -138,17 +88,15 @@ pub enum InvalidRangeError {
     LengthShorterThanString
 }
 
-pub fn normalize_range<T: Range>(range: T, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
-    let start = range.start().unwrap_or(0);
-    let end = range.end().or_else(|| string.map(|s| min(start + s.len(), line_length))).or(Some(line_length)).expect("this should be impossible since something will return a Some");
-    if start >= line_length {
+pub fn validate_range(range: Range<usize>, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
+    if range.start >= line_length {
         Err(InvalidRangeError::StartOffEndOfLine)
-    } else if end > line_length {
+    } else if range.end > line_length {
         Err(InvalidRangeError::EndOffEndOfLine)
-    } else if string.is_some() && end - start < string.unwrap().len() {
+    } else if string.is_some() && range.end - range.start < string.unwrap().len() {
         Err(InvalidRangeError::LengthShorterThanString)
     } else {
-        Ok((start, end))
+        Ok((range.start, range.end))
     }
 }
 
@@ -174,7 +122,7 @@ impl<T: File> Iterator for FileIterator<T> {
         if self.position > self.file.len() {
             None
         } else {
-            Some(self.file.get(self.position - 1, ..))
+            Some(self.file.get(self.position - 1, 0..self.file.width()))
         }
     }
 }
@@ -182,40 +130,15 @@ impl<T: File> Iterator for FileIterator<T> {
 #[cfg(test)]
 mod test {
     use std::string::ToString;
-    use super::{Range, InvalidRangeError, normalize_range, FileIterator};
+    use super::{InvalidRangeError, validate_range, FileIterator};
     use super::super::test::*;
     use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
-    fn ranges_work() {
-        let range1 = RangeStruct { start: 2, end: 5 };
-        let range2 = RangeFull;
-        let range3 = RangeFrom { start: 4 };
-        let range4 = RangeTo { end: 8 };
-        let range5: usize = 4;
-        assert_eq!(Some(2), range1.start());
-        assert_eq!(Some(5), range1.end());
-        assert_eq!(None, range2.start());
-        assert_eq!(None, range2.end());
-        assert_eq!(Some(4), range3.start());
-        assert_eq!(None, range3.end());
-        assert_eq!(None, range4.start());
-        assert_eq!(Some(8), range4.end());
-        assert_eq!(Some(4), range5.start());
-        assert_eq!(Some(5), range5.end());
-    }
-
-    #[test]
-    fn normalize_range_works() {
-        assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), normalize_range(7..79, 5, None));
-        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), normalize_range(..6, 5, None));
-        assert_eq!(Ok((0, 5)), normalize_range(.., 5, None));
-        assert_eq!(Ok((2, 5)), normalize_range(2.., 5, None));
-        assert_eq!(Ok((0, 3)), normalize_range(..3, 5, None));
-        assert_eq!(Ok((0, 2)), normalize_range(.., 5, Some(&"23".to_string())));
-        assert_eq!(Ok((2, 4)), normalize_range(2.., 5, Some(&"23".to_string())));
-        assert_eq!(Ok((0, 3)), normalize_range(..3, 5, Some(&"23".to_string())));
-        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), normalize_range(3, 5, Some(&"dasadsads".to_string())));
+    fn validate_range_works() {
+        assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), validate_range(7..79, 5, None));
+        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), validate_range(..6, 5, None));
+        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), validate_range(3, 5, Some(&"dasadsads".to_string())));
     }
 
     #[test]

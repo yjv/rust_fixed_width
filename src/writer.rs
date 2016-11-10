@@ -1,6 +1,7 @@
-use common::{File, MutableFile, normalize_range, InvalidRangeError};
+use common::{File, MutableFile, validate_range, InvalidRangeError};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub enum Error<T: File, U: Padder> {
@@ -51,7 +52,7 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
-                let (end, start) = try!(normalize_range(field_spec.range.clone(), self.file.width(), Some(value)));
+                let (end, start) = try!(validate_range(field_spec.range.clone(), self.file.width(), Some(value)));
                 try!(self.file.set(
                     index,
                     field_spec.range.clone(),
@@ -73,6 +74,14 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         &self.file
     }
 }
+//
+//pub struct FileWriterBuilder {
+//    file: T,
+//    spec: &'a FileSpec,
+//    data_recognizer: U,
+//    line_recognizer: V,
+//    padder: W
+//}
 
 #[cfg(test)]
 mod test {

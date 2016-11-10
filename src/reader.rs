@@ -1,4 +1,4 @@
-use common::{File, Range};
+use common::File;
 use spec::{FileSpec, LineRecordSpecRecognizer, NoneRecognizer, UnPadder, IdentityPadder};
 use std::collections::HashMap;
 
@@ -12,23 +12,23 @@ pub enum Error<T: File, U: UnPadder> {
     UnPaddingFailed(U::Error)
 }
 
-pub struct FileReader<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> {
-    spec: &'a FileSpec<U>,
+pub struct FileReader<'a, T: File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> {
+    spec: &'a FileSpec,
     file: T,
-    recognizer: V,
-    un_padder: W
+    recognizer: U,
+    un_padder: V
 }
 
-impl<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> FileReader<'a, T, U, V, W> {
-    pub fn new(spec: &'a FileSpec<U>, file: T) -> FileReader<'a, T, U, NoneRecognizer, IdentityPadder> {
+impl<'a, T: File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> FileReader<'a, T, U, V> {
+    pub fn new(spec: &'a FileSpec, file: T) -> FileReader<'a, T, NoneRecognizer, IdentityPadder> {
         FileReader { spec: spec, file: file, recognizer: NoneRecognizer, un_padder: IdentityPadder }
     }
 
-    pub fn new_with_recognizer_and_unpadder(spec: &'a FileSpec<U>, file: T, recognizer: V, un_padder: W) -> Self {
+    pub fn new_with_recognizer_and_un_padder(spec: &'a FileSpec, file: T, recognizer: U, un_padder: V) -> Self {
         FileReader {spec: spec, file: file, recognizer: recognizer, un_padder: un_padder}
     }
 
-    pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<String, Error<T, W>> {
+    pub fn field(&self, index: usize, name: String, spec_name: Option<String>) -> Result<String, Error<T, V>> {
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -44,7 +44,7 @@ impl<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPad
         Ok(try!(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(Error::UnPaddingFailed)))
     }
 
-    pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<T, W>> {
+    pub fn fields(&self, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<T, V>> {
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -67,13 +67,13 @@ impl<'a, T: File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPad
     }
 }
 
-pub struct FileIterator<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer, W: 'a + UnPadder> {
+pub struct FileIterator<'a, T: 'a + File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> {
     position: usize,
-    reader: &'a FileReader<'a, T, U, V, W>
+    reader: &'a FileReader<'a, T, U, V>
 }
 
-impl<'a, T: File, U: Range, V: LineRecordSpecRecognizer, W: UnPadder> FileIterator<'a, T, U, V, W> {
-    pub fn new(reader: &'a FileReader<'a, T, U, V, W>) -> Self {
+impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> FileIterator<'a, T, U, V> {
+    pub fn new(reader: &'a FileReader<'a, T, U, V>) -> Self {
         FileIterator {
             position: 0,
             reader: reader
@@ -81,8 +81,8 @@ impl<'a, T: File, U: Range, V: LineRecordSpecRecognizer, W: UnPadder> FileIterat
     }
 }
 
-impl<'a, T: File, U: Range, V: LineRecordSpecRecognizer, W: UnPadder> Iterator for FileIterator<'a, T, U, V, W> {
-    type Item = Result<HashMap<String, String>, Error<T, W>>;
+impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> Iterator for FileIterator<'a, T, U, V> {
+    type Item = Result<HashMap<String, String>, Error<T, V>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
@@ -109,7 +109,7 @@ mod test {
                 .with_field("field1", FieldSpecBuilder::new()
                     .with_range(0..4)
                     .with_default("hello".to_string())
-                    .with_padding("")
+                    .with_padding("0")
                     .with_padding_direction(PaddingDirection::Left)
                 )
             )

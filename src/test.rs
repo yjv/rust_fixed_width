@@ -1,4 +1,5 @@
-use super::common::{Range, File as FileTrait, MutableFile, FileError};
+use super::common::{File as FileTrait, MutableFile, FileError};
+use std::ops::Range;
 
 #[derive(Debug)]
 pub struct File {
@@ -24,7 +25,7 @@ impl FileTrait for File {
         self.width
     }
 
-    fn get<T: Range>(&self, index: usize, _: T) -> Result<String, Self::Error> {
+    fn get(&self, index: usize, _: Range<usize>) -> Result<String, Self::Error> {
         self.lines.get(index).unwrap().clone()
     }
 
@@ -34,11 +35,11 @@ impl FileTrait for File {
 }
 
 impl MutableFile for File {
-    fn set<T: Range>(&mut self, _: usize, _: T, _: &String) -> Result<&mut Self, Self::Error> {
+    fn set(&mut self, _: usize, _: Range<usize>, _: &String) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
 
-    fn clear<T: Range>(&mut self, _: usize, _: T) -> Result<&mut Self, Self::Error> {
+    fn clear(&mut self, _: usize, _: Range<usize>) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
 

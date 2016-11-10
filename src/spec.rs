@@ -1,40 +1,40 @@
 use std::collections::HashMap;
-use common::{Range, File};
-use std::ops::Range as RangeStruct;
+use common::File;
+use std::ops::Range;
 use std::fmt::Debug;
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct FileSpec<T: Range = RangeStruct<usize>> {
+pub struct FileSpec {
     pub width: usize,
-    pub record_specs: HashMap<String, RecordSpec<T>>
+    pub record_specs: HashMap<String, RecordSpec>
 }
 
-impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpec<T> {
+impl SpecBuilder<FileSpec> for FileSpec {
     fn build(self) -> Self {
         self
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct RecordSpec<T: Range = RangeStruct<usize>> {
-    pub field_specs: HashMap<String, FieldSpec<T>>
+pub struct RecordSpec {
+    pub field_specs: HashMap<String, FieldSpec>
 }
 
-impl <T: Range> SpecBuilder<RecordSpec<T>> for RecordSpec<T> {
+impl SpecBuilder<RecordSpec> for RecordSpec {
     fn build(self) -> Self {
         self
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct FieldSpec<T: Range = RangeStruct<usize>> {
-    pub range: T,
+pub struct FieldSpec {
+    pub range: Range<usize>,
     pub padding_direction: PaddingDirection,
     pub padding: String,
     pub default: Option<String>
 }
 
-impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpec<T> {
+impl SpecBuilder<FieldSpec> for FieldSpec {
     fn build(self) -> Self {
         self
     }
@@ -125,21 +125,21 @@ impl UnPadder for IdentityPadder {
 }
 
 pub trait LineRecordSpecRecognizer {
-    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String>;
+    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String>;
 }
 
 impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
-    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         (*self).recognize_for_line(file, index, record_specs)
     }
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String>;
+    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String>;
 }
 
 impl<'a, U> DataRecordSpecRecognizer for &'a U where U: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String> {
+    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         (*self).recognize_for_data(data, record_specs)
     }
 }
@@ -159,7 +159,7 @@ impl IdFieldRecognizer {
 }
 
 impl LineRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -177,7 +177,7 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data<T: Range>(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec<T>>) -> Option<String> {
+    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -197,13 +197,13 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
 pub struct NoneRecognizer;
 
 impl LineRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_line<T: File, U: Range>(&self, _: &T, _: usize, _: &HashMap<String, RecordSpec<U>>) -> Option<String> {
+    fn recognize_for_line<T: File>(&self, _: &T, _: usize, _: &HashMap<String, RecordSpec>) -> Option<String> {
         None
     }
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data<T: Range>(&self, _: &HashMap<String, String>, _: &HashMap<String, RecordSpec<T>>) -> Option<String> {
+    fn recognize_for_data(&self, _: &HashMap<String, String>, _: &HashMap<String, RecordSpec>) -> Option<String> {
         None
     }
 }
@@ -212,12 +212,12 @@ pub trait SpecBuilder<T> {
     fn build(self) -> T;
 }
 
-pub struct FileSpecBuilder<T: Range = RangeStruct<usize>> {
+pub struct FileSpecBuilder {
     width: Option<usize>,
-    record_specs: HashMap<String, RecordSpec<T>>
+    record_specs: HashMap<String, RecordSpec>
 }
 
-impl <T: Range> FileSpecBuilder<T> {
+impl FileSpecBuilder {
     pub fn new() -> Self {
         FileSpecBuilder {
             width: None,
@@ -225,7 +225,7 @@ impl <T: Range> FileSpecBuilder<T> {
         }
     }
 
-    pub fn with_record<U: Into<String>, V: SpecBuilder<RecordSpec<T>>>(mut self, name: U, record: V) -> Self {
+    pub fn with_record<U: Into<String>, V: SpecBuilder<RecordSpec>>(mut self, name: U, record: V) -> Self {
         self.record_specs.insert(name.into(), record.build());
         self
     }
@@ -238,8 +238,8 @@ impl <T: Range> FileSpecBuilder<T> {
     }
 }
 
-impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpecBuilder<T> {
-    fn build(self) -> FileSpec<T> {
+impl SpecBuilder<FileSpec> for FileSpecBuilder {
+    fn build(self) -> FileSpec {
         FileSpec {
             width: self.width.expect("width must be set in order to build"),
             record_specs: self.record_specs
@@ -247,39 +247,39 @@ impl <T: Range> SpecBuilder<FileSpec<T>> for FileSpecBuilder<T> {
     }
 }
 
-pub struct RecordSpecBuilder<T: Range = RangeStruct<usize>> {
-    field_specs: HashMap<String, FieldSpec<T>>,
+pub struct RecordSpecBuilder {
+    field_specs: HashMap<String, FieldSpec>,
 }
 
-impl <T: Range> RecordSpecBuilder<T> {
+impl RecordSpecBuilder {
     pub fn new() -> Self {
         RecordSpecBuilder {
             field_specs: HashMap::new()
         }
     }
 
-    pub fn with_field<U: Into<String>, V: SpecBuilder<FieldSpec<T>>>(mut self, name: U, field: V) -> Self {
+    pub fn with_field<U: Into<String>, V: SpecBuilder<FieldSpec>>(mut self, name: U, field: V) -> Self {
         self.field_specs.insert(name.into(), field.build());
         self
     }
 }
 
-impl <T: Range> SpecBuilder<RecordSpec<T>> for RecordSpecBuilder<T> {
-    fn build(self) -> RecordSpec<T> {
+impl SpecBuilder<RecordSpec> for RecordSpecBuilder {
+    fn build(self) -> RecordSpec {
         RecordSpec {
             field_specs: self.field_specs
         }
     }
 }
 
-pub struct FieldSpecBuilder<T: Range = RangeStruct<usize>> {
-    range: Option<T>,
+pub struct FieldSpecBuilder {
+    range: Option<Range<usize>>,
     padding_direction: Option<PaddingDirection>,
     padding: Option<String>,
     default: Option<String>
 }
 
-impl <T: Range> FieldSpecBuilder<T> {
+impl FieldSpecBuilder {
     pub fn new() -> Self {
         FieldSpecBuilder {
             range: None,
@@ -289,7 +289,7 @@ impl <T: Range> FieldSpecBuilder<T> {
         }
     }
 
-    pub fn with_range(self, range: T) -> Self {
+    pub fn with_range(self, range: Range<usize>) -> Self {
         FieldSpecBuilder {
             range: Some(range),
             padding_direction: self.padding_direction,
@@ -326,8 +326,8 @@ impl <T: Range> FieldSpecBuilder<T> {
     }
 }
 
-impl <T: Range> SpecBuilder<FieldSpec<T>> for FieldSpecBuilder<T> {
-    fn build(self) -> FieldSpec<T> {
+impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
+    fn build(self) -> FieldSpec {
         FieldSpec {
             range: self.range.expect("range must be set in order to build"),
             padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),

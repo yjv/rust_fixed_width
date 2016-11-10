@@ -1,6 +1,7 @@
 use std::string::ToString;
 use std::iter::repeat;
-use common::{File as FileTrait, MutableFile, Range, normalize_range, InvalidRangeError, FileError};
+use std::ops::Range;
+use common::{File as FileTrait, MutableFile, validate_range, InvalidRangeError, FileError};
 
 #[derive(Clone)]
 pub struct File {
@@ -60,9 +61,9 @@ impl FileTrait for File {
         self.width
     }
 
-    fn get<T: Range>(&self, index: usize, range: T) -> Result<String> {
+    fn get(&self, index: usize, range: Range<usize>) -> Result<String> {
         let line = try!(self.lines.get(index).ok_or(Error::InvalidIndex(index)));
-        let (start, end) = try!(normalize_range(range, self.width, None));
+        let (start, end) = try!(validate_range(range, self.width, None));
         Ok(line[start..end].to_string())
     }
 
@@ -72,10 +73,10 @@ impl FileTrait for File {
 }
 
 impl MutableFile for File {
-    fn set<T: Range>(&mut self, index: usize, range: T, string: &String) -> Result<&mut Self> {
+    fn set(&mut self, index: usize, range: Range<usize>, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
-            let (start, end) = try!(normalize_range(range, self.width, Some(string)));
+            let (start, end) = try!(validate_range(range, self.width, Some(string)));
             let data = line.clone();
             line.truncate(0);
             line.push_str(&data[..start]);
@@ -86,8 +87,8 @@ impl MutableFile for File {
         Ok(self)
     }
 
-    fn clear<T: Range>(&mut self, index: usize, range: T) -> Result<&mut Self> {
-        let (start, end) = try!(normalize_range(range, self.width, None));
+    fn clear(&mut self, index: usize, range: Range<usize>) -> Result<&mut Self> {
+        let (start, end) = try!(validate_range(range, self.width, None));
         self.set(index, start..end, &repeat(" ").take(end - start).collect())
     }
 
