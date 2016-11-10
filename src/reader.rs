@@ -87,7 +87,21 @@ impl<'a, T: 'a + File, U: 'a + Range, V: 'a + LineRecordSpecRecognizer> Iterator
 #[cfg(test)]
 mod test {
 
+    use super::*;
+    use super::super::spec::*;
+    use super::super::test::*;
+
     #[test]
-    fn ranges_work() {
+    fn read() {
+        let spec = FileSpecBuilder::new()
+            .with_width(10)
+            .with_record("record1", RecordSpecBuilder::new()
+                .with_field("field1", FieldSpecBuilder::new()
+                    .with_range(0..4)
+                    .with_default("hello".to_string())
+                    .with_padding("")
+                )
+            )
+        ;
     }
 }

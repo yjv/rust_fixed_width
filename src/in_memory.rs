@@ -64,7 +64,9 @@ impl FileTrait for File {
         let line = try!(self.lines.get(index).ok_or(Error::InvalidIndex(index)));
         let (start, end) = try!(normalize_range(range, self.width, None));
         Ok(line[start..end].to_string())
-    }fn len(&self) -> usize {
+    }
+
+    fn len(&self) -> usize {
         self.lines.len()
     }
 }

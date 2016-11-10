@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use common::{Range, File};
 use std::ops::Range as RangeStruct;
+use std::fmt::Debug;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct FileSpec<T: Range = RangeStruct<usize>> {
@@ -45,6 +46,84 @@ pub enum PaddingDirection {
     Right
 }
 
+pub trait Padder {
+    type Error: Debug;
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+}
+
+impl<'a, T> Padder for &'a T where T: 'a + Padder {
+    type Error = T::Error;
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        (**self).pad(data, length, padding, direction)
+    }
+}
+
+pub trait UnPadder {
+    type Error: Debug;
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+}
+
+extern crate pad;
+use self::pad::{PadStr, Alignment};
+
+pub struct DefaultPadder;
+
+#[derive(Debug)]
+pub enum PaddingError {
+    PaddingLongerThanOne
+}
+
+impl DefaultPadder {
+    fn get_char(padding: &String) -> Result<char, PaddingError> {
+        if padding.len() > 1 {
+            Err(PaddingError::PaddingLongerThanOne)
+        } else {
+            Ok(padding.chars().next().or(Some(' ')).expect("should have a some no matter what"))
+        }
+    }
+}
+
+impl Padder for DefaultPadder {
+    type Error = PaddingError;
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data.pad(
+            length,
+            try!(Self::get_char(padding)),
+            match direction {
+                PaddingDirection::Left => Alignment::Left,
+                PaddingDirection::Right => Alignment::Right,
+            },
+            false
+        ))
+    }
+}
+
+impl UnPadder for DefaultPadder {
+    type Error = PaddingError;
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(match direction {
+            PaddingDirection::Left => data.trim_left_matches(try!(Self::get_char(padding))).to_string(),
+            PaddingDirection::Right => data.trim_right_matches(try!(Self::get_char(padding))).to_string(),
+        })
+    }
+}
+
+pub struct IdentityPadder;
+
+impl Padder for IdentityPadder {
+    type Error = ();
+    fn pad(&self, data: String, _: usize, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data)
+    }
+}
+
+impl UnPadder for IdentityPadder {
+    type Error = ();
+    fn unpad(&self, data: String, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data)
+    }
+}
+
 pub trait LineRecordSpecRecognizer {
     fn recognize_for_line<T: File, U: Range>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec<U>>) -> Option<String>;
 }
@@ -71,11 +150,11 @@ pub struct IdFieldRecognizer {
 
 impl IdFieldRecognizer {
     pub fn new() -> Self {
-        Self::new_with_field("$id".to_string())
+        Self::new_with_field("$id")
     }
 
-    pub fn new_with_field(id_field: String) -> Self {
-        IdFieldRecognizer { id_field: id_field }
+    pub fn new_with_field<T: Into<String>>(id_field: T) -> Self {
+        IdFieldRecognizer { id_field: id_field.into() }
     }
 }
 
@@ -146,8 +225,8 @@ impl <T: Range> FileSpecBuilder<T> {
         }
     }
 
-    pub fn with_record<U: SpecBuilder<RecordSpec<T>>>(mut self, name: String, record: U) -> Self {
-        self.record_specs.insert(name, record.build());
+    pub fn with_record<U: Into<String>, V: SpecBuilder<RecordSpec<T>>>(mut self, name: U, record: V) -> Self {
+        self.record_specs.insert(name.into(), record.build());
         self
     }
 
@@ -179,8 +258,8 @@ impl <T: Range> RecordSpecBuilder<T> {
         }
     }
 
-    pub fn with_field<U: SpecBuilder<FieldSpec<T>>>(mut self, name: String, field: U) -> Self {
-        self.field_specs.insert(name, field.build());
+    pub fn with_field<U: Into<String>, V: SpecBuilder<FieldSpec<T>>>(mut self, name: U, field: V) -> Self {
+        self.field_specs.insert(name.into(), field.build());
         self
     }
 }
@@ -228,21 +307,21 @@ impl <T: Range> FieldSpecBuilder<T> {
         }
     }
 
-    pub fn with_padding(self, padding: String) -> Self {
+    pub fn with_padding<U: Into<String>>(self, padding: U) -> Self {
         FieldSpecBuilder {
             range: self.range,
             padding_direction: self.padding_direction,
-            padding: Some(padding),
+            padding: Some(padding.into()),
             default: self.default
         }
     }
 
-    pub fn with_default(self, default: String) -> Self {
+    pub fn with_default<U: Into<String>>(self, default: U) -> Self {
         FieldSpecBuilder {
             range: self.range,
             padding_direction: self.padding_direction,
             padding: self.padding,
-            default: Some(default)
+            default: Some(default.into())
         }
     }
 }
@@ -281,22 +360,22 @@ mod test {
                     .with_field(
                         "field1".to_string(),
                         FieldSpecBuilder::new()
-                            .with_range((0..4))
-                            .with_padding("dsasd".to_string())
+                            .with_range(0..4)
+                            .with_padding("dsasd")
                             .with_padding_direction(PaddingDirection::Left)
                     )
                     .with_field(
                         "field2".to_string(),
                         FieldSpecBuilder::new()
-                            .with_range((5..9))
+                            .with_range(5..9)
                             .with_padding("sdf".to_string())
                             .with_padding_direction(PaddingDirection::Right)
-                            .with_default("def".to_string())
+                            .with_default("def")
                     )
                     .with_field(
                         "field3".to_string(),
                         FieldSpecBuilder::new()
-                            .with_range((10..45))
+                            .with_range(10..45)
                             .with_padding("xcvcxv".to_string())
                             .with_padding_direction(PaddingDirection::Right)
                     )
@@ -319,7 +398,7 @@ mod test {
                             .with_padding_direction(PaddingDirection::Right)
                     )
                     .with_field(
-                        "field3".to_string(),
+                        "field3",
                         FieldSpecBuilder::new()
                             .with_range((9..36))
                             .with_padding("xcvcxv".to_string())

@@ -1,5 +1,5 @@
 use common::{File, MutableFile};
-use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer};
+use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -11,20 +11,21 @@ pub enum Error<T: File> {
     RecordSpecNotFound(String)
 }
 
-pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> {
+pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> {
     file: T,
     spec: &'a FileSpec,
     data_recognizer: U,
-    line_recognizer: V
+    line_recognizer: V,
+    padder: W
 }
 
-impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer> FileWriter<'a, T, U, V> {
-    pub fn new(file: T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer> {
-        FileWriter { file: file, spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer }
+impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> FileWriter<'a, T, U, V, W> {
+    pub fn new(file: T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer, IdentityPadder> {
+        FileWriter { file: file, spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer, padder: IdentityPadder }
     }
 
-    pub fn new_with_recognizers(file: T, spec: &'a FileSpec, data_recognizer: U, line_recognizer: V) -> Self {
-        FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer }
+    pub fn new_with_recognizers_and_padder(file: T, spec: &'a FileSpec, data_recognizer: U, line_recognizer: V, padder: W) -> Self {
+        FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
     }
 
     pub fn add_line(&'a mut self) -> Result<usize, Error<T>> {
@@ -42,7 +43,11 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
-                try!(self.file.set(index, field_spec.range.clone(), value).map_err(Error::FailedToSetData));
+                try!(self.file.set(
+                    index,
+                    field_spec.range.clone(),
+                    self.padder.pad(value, field_spec.range)
+                ).map_err(Error::FailedToSetData));
             }
         }
 
