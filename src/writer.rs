@@ -1,4 +1,4 @@
-use common::{File, MutableFile, validate_range, InvalidRangeError};
+use common::{File, MutableFile};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
 
@@ -9,14 +9,7 @@ pub enum Error<T: File, U: Padder> {
     FailedToSetData(T::Error),
     FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
-    InvalidRange(InvalidRangeError),
     PaddingFailed(U::Error)
-}
-
-impl<T: File, U: Padder> From<InvalidRangeError> for Error<T, U> {
-    fn from(e: InvalidRangeError) -> Self {
-        Error::InvalidRange(e)
-    }
 }
 
 pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> {
@@ -51,11 +44,11 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
 
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
-                let (end, start) = try!(validate_range(field_spec.range.clone(), self.file.width(), Some(value)));
+                let value = try!(self.padder.pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
                 try!(self.file.set(
                     index,
-                    start,
-                    &try!(self.padder.pad(value, end - start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed))
+                    field_spec.range.start,
+                    &value
                 ).map_err(Error::FailedToSetData));
             }
         }
