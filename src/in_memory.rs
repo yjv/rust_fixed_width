@@ -63,8 +63,7 @@ impl FileTrait for File {
 
     fn get(&self, index: usize, range: Range<usize>) -> Result<String> {
         let line = try!(self.lines.get(index).ok_or(Error::InvalidIndex(index)));
-        let (start, end) = try!(validate_range(range, self.width, None));
-        Ok(line[start..end].to_string())
+        Ok(line[try!(validate_range(range, self.width))].to_string())
     }
 
     fn len(&self) -> usize {
@@ -76,20 +75,20 @@ impl MutableFile for File {
     fn set(&mut self, index: usize, column_index: usize, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
-            let (start, end) = try!(validate_range(column_index..column_index + string.len(), self.width, Some(string)));
+            let range = try!(validate_range(column_index..column_index + string.len(), self.width));
             let data = line.clone();
             line.truncate(0);
-            line.push_str(&data[..start]);
+            line.push_str(&data[..range.start]);
             line.push_str(&string[..]);
-            line.push_str(&repeat(" ").take(end - start - string.len()).collect::<String>()[..]);
-            line.push_str(&data[end..]);
+            line.push_str(&repeat(" ").take(range.end - range.start - string.len()).collect::<String>()[..]);
+            line.push_str(&data[range.end..]);
         }
         Ok(self)
     }
 
     fn clear(&mut self, index: usize, range: Range<usize>) -> Result<&mut Self> {
-        let (start, end) = try!(validate_range(range, self.width, None));
-        self.set(index, start, &repeat(" ").take(end - start).collect())
+        let range = try!(validate_range(range, self.width));
+        self.set(index, range.start, &repeat(" ").take(range.end - range.start).collect())
     }
 
     fn add_line(&mut self) -> Result<usize> {

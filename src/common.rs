@@ -78,19 +78,16 @@ pub trait FileError: Debug {
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidRangeError {
     StartOffEndOfLine,
-    EndOffEndOfLine,
-    LengthShorterThanString
+    EndOffEndOfLine
 }
 
-pub fn validate_range(range: Range<usize>, line_length: usize, string: Option<&String>) -> Result<(usize, usize), InvalidRangeError> {
+pub fn validate_range(range: Range<usize>, line_length: usize) -> Result<Range<usize>, InvalidRangeError> {
     if range.start >= line_length {
         Err(InvalidRangeError::StartOffEndOfLine)
     } else if range.end > line_length {
         Err(InvalidRangeError::EndOffEndOfLine)
-    } else if string.is_some() && range.end - range.start < string.unwrap().len() {
-        Err(InvalidRangeError::LengthShorterThanString)
     } else {
-        Ok((range.start, range.end))
+        Ok(range)
     }
 }
 
@@ -129,9 +126,9 @@ mod test {
 
     #[test]
     fn validate_range_works() {
-        assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), validate_range(7..79, 5, None));
-        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), validate_range(0..6, 5, None));
-        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), validate_range(3..3, 5, Some(&"dasadsads".to_string())));
+        assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), validate_range(7..79, 5));
+        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), validate_range(0..6, 5));
+        assert_eq!(Ok(4..7), validate_range(4..7, 10));
     }
 
     #[test]
