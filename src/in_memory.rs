@@ -73,10 +73,10 @@ impl FileTrait for File {
 }
 
 impl MutableFile for File {
-    fn set(&mut self, index: usize, range: Range<usize>, string: &String) -> Result<&mut Self> {
+    fn set(&mut self, index: usize, column_index: usize, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
-            let (start, end) = try!(validate_range(range, self.width, Some(string)));
+            let (start, end) = try!(validate_range(column_index..column_index + string.len(), self.width, Some(string)));
             let data = line.clone();
             line.truncate(0);
             line.push_str(&data[..start]);
@@ -89,7 +89,7 @@ impl MutableFile for File {
 
     fn clear(&mut self, index: usize, range: Range<usize>) -> Result<&mut Self> {
         let (start, end) = try!(validate_range(range, self.width, None));
-        self.set(index, start..end, &repeat(" ").take(end - start).collect())
+        self.set(index, start, &repeat(" ").take(end - start).collect())
     }
 
     fn add_line(&mut self) -> Result<usize> {
@@ -129,36 +129,37 @@ mod test {
 
     #[test]
     fn in_memory_file() {
-        let mut file = File::new(10);
-        let line1 = repeat("a").take(10).collect::<String>();
-        let line2 = repeat(" ").take(10).collect::<String>();
-        let line3 = repeat("c").take(10).collect::<String>();
+        let width = 10;
+        let mut file = File::new(width);
+        let line1 = repeat("a").take(width).collect::<String>();
+        let line2 = repeat(" ").take(width).collect::<String>();
+        let line3 = repeat("c").take(width).collect::<String>();
         let index1 = file.add_line().unwrap();
-        let _ = file.set(index1, .., &line1);
+        let _ = file.set(index1, 0, &line1);
         let index2 = file.add_line().unwrap();
-        let _ = file.set(index2, .., &line2);
+        let _ = file.set(index2, 0, &line2);
         let index3 = file.add_line().unwrap();
-        let _ = file.set(index3, .., &line3);
-        assert_eq!(line1, file.get(index1, ..).unwrap());
-        assert_eq!(line2, file.get(index2, ..).unwrap());
-        assert_eq!(line3, file.get(index3, ..).unwrap());
-        assert_eq!(Error::InvalidIndex(3), file.get(3, ..).unwrap_err());
+        let _ = file.set(index3, 0, &line3);
+        assert_eq!(line1, file.get(index1, 0..width).unwrap());
+        assert_eq!(line2, file.get(index2, 0..width).unwrap());
+        assert_eq!(line3, file.get(index3, 0..width).unwrap());
+        assert_eq!(Error::InvalidIndex(3), file.get(3, 0..3).unwrap_err());
         assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<String>>());
         assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(file.clone()).map(|r| r.unwrap()).collect::<Vec<String>>());
         assert_eq!(3, file.len());
         assert_eq!("aaaaaaaaaa\r\n          \r\ncccccccccc".to_string(), file.to_string());
-        assert_eq!(line1, file.get(index1, ..).unwrap());
+        assert_eq!(line1, file.get(index1, 0..line1.len()).unwrap());
         assert_eq!("aaaa".to_string(), file.get(index1, 1..5).unwrap());
-        assert_eq!(line2, file.get(index2, ..).unwrap());
-        assert_eq!("abbbbaaaaa".to_string(), file.set(index1, 1..5, &"bbbb".to_string()).unwrap().get(index1, ..).unwrap());
-        assert_eq!("abbbba  aa".to_string(), file.clear(index1, 6..8).unwrap().get(index1, ..).unwrap());
-        assert_eq!("   a      ".to_string(), file.set(index2, 3, &"a".to_string()).unwrap().get(index2, ..).unwrap());
-        assert_eq!("abbbba b a".to_string(), file.set(index1, 7..9, &"b".to_string()).unwrap().get(index1, ..).unwrap());
-        assert_eq!("b  a      ".to_string(), file.set(index2, 0, &"b".to_string()).unwrap().get(index2, ..).unwrap());
-        assert_eq!("b  a     b".to_string(), file.set(index2, 9, &"b".to_string()).unwrap().get(index2, ..).unwrap());
+        assert_eq!(line2, file.get(index2, 0..line2.len()).unwrap());
+        assert_eq!("abbbbaaaaa".to_string(), file.set(index1, 1, &"bbbb".to_string()).unwrap().get(index1, 0..width).unwrap());
+        assert_eq!("abbbba  aa".to_string(), file.clear(index1, 6..8).unwrap().get(index1, 0..width).unwrap());
+        assert_eq!("   a      ".to_string(), file.set(index2, 3, &"a".to_string()).unwrap().get(index2, 0..width).unwrap());
+        assert_eq!("abbbba b a".to_string(), file.set(index1, 7, &"b ".to_string()).unwrap().get(index1, 0..width).unwrap());
+        assert_eq!("b  a      ".to_string(), file.set(index2, 0, &"b".to_string()).unwrap().get(index2, 0..width).unwrap());
+        assert_eq!("b  a     b".to_string(), file.set(index2, 9, &"b".to_string()).unwrap().get(index2, 0..width).unwrap());
         assert_eq!(2, file.remove_line().unwrap());
-        assert_eq!("abbbba b a".to_string(), file.get(index1, ..).unwrap());
-        assert_eq!(Error::InvalidIndex(index3), file.get(index3, ..).unwrap_err());
+        assert_eq!("abbbba b a".to_string(), file.get(index1, 0..width).unwrap());
+        assert_eq!(Error::InvalidIndex(index3), file.get(index3, 0..width).unwrap_err());
         assert_eq!("abbbba b a\r\nb  a     b".to_string(), file.to_string());
     }
 

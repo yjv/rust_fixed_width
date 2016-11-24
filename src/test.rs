@@ -35,7 +35,7 @@ impl FileTrait for File {
 }
 
 impl MutableFile for File {
-    fn set(&mut self, _: usize, _: Range<usize>, _: &String) -> Result<&mut Self, Self::Error> {
+    fn set(&mut self, _: usize, _: usize, _: &String) -> Result<&mut Self, Self::Error> {
         unimplemented!()
     }
 

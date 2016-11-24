@@ -1,7 +1,6 @@
 use common::{File, MutableFile, validate_range, InvalidRangeError};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
-use std::ops::Range;
 
 #[derive(Debug)]
 pub enum Error<T: File, U: Padder> {
@@ -55,7 +54,7 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
                 let (end, start) = try!(validate_range(field_spec.range.clone(), self.file.width(), Some(value)));
                 try!(self.file.set(
                     index,
-                    field_spec.range.clone(),
+                    start,
                     &try!(self.padder.pad(value, end - start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed))
                 ).map_err(Error::FailedToSetData));
             }

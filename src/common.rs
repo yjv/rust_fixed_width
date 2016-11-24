@@ -1,6 +1,5 @@
 use std::ops::Range;
 use std::fmt::Debug;
-use std::cmp::min;
 
 pub trait File {
     type Error: FileError;
@@ -10,7 +9,7 @@ pub trait File {
 }
 
 pub trait MutableFile: File {
-    fn set(&mut self, line_index: usize, range: Range<usize>, string: &String) -> Result<&mut Self, Self::Error>;
+    fn set(&mut self, line_index: usize, column_index: usize, string: &String) -> Result<&mut Self, Self::Error>;
     fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
@@ -47,8 +46,8 @@ impl<'a, U> File for &'a mut U where U: 'a + File {
 }
 
 impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
-    fn set(&mut self, line_index: usize, range: Range<usize>, string: &String) -> Result<&mut Self, <Self as File>::Error> {
-        match (**self).set(line_index, range, string) {
+    fn set(&mut self, line_index: usize, column_index: usize, string: &String) -> Result<&mut Self, <Self as File>::Error> {
+        match (**self).set(line_index, column_index, string) {
             Ok(_) => Ok(self),
             Err(err) => Err(err)
         }
@@ -70,11 +69,6 @@ impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
         (**self).remove_line()
     }
 }
-//
-//pub trait Range: Clone {
-//    fn start(&self) -> Option<usize>;
-//    fn end(&self) -> Option<usize>;
-//}
 
 pub trait FileError: Debug {
     fn is_invalid_index(&self) -> bool;
@@ -132,13 +126,12 @@ mod test {
     use std::string::ToString;
     use super::{InvalidRangeError, validate_range, FileIterator};
     use super::super::test::*;
-    use std::ops::{Range as RangeStruct, RangeFull, RangeFrom, RangeTo};
 
     #[test]
     fn validate_range_works() {
         assert_eq!(Err(InvalidRangeError::StartOffEndOfLine), validate_range(7..79, 5, None));
-        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), validate_range(..6, 5, None));
-        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), validate_range(3, 5, Some(&"dasadsads".to_string())));
+        assert_eq!(Err(InvalidRangeError::EndOffEndOfLine), validate_range(0..6, 5, None));
+        assert_eq!(Err(InvalidRangeError::LengthShorterThanString), validate_range(3..3, 5, Some(&"dasadsads".to_string())));
     }
 
     #[test]
