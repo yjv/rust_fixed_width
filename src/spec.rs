@@ -289,6 +289,24 @@ impl FieldSpecBuilder {
         }
     }
 
+    pub fn new_number() -> Self {
+        FieldSpecBuilder {
+            range: None,
+            padding_direction: Some(PaddingDirection::Left),
+            padding: Some("0".to_string()),
+            default: None
+        }
+    }
+
+    pub fn new_string() -> Self {
+        FieldSpecBuilder {
+            range: None,
+            padding_direction: Some(PaddingDirection::Right),
+            padding: Some(" ".to_string()),
+            default: None
+        }
+    }
+
     pub fn with_range(self, range: Range<usize>) -> Self {
         FieldSpecBuilder {
             range: Some(range),
@@ -341,13 +359,125 @@ impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
 mod test {
     use super::*;
     use std::collections::HashMap;
+    use super::super::test::{File as TestFile};
+
+    #[test]
+    fn none_recognizer() {
+        let recognizer = NoneRecognizer;
+        assert_eq!(None, recognizer.recognize_for_data(&HashMap::new(), &HashMap::new()));
+        assert_eq!(None, recognizer.recognize_for_line(
+            &TestFile {width: 10, line_seperator: "".to_string(), lines: vec![]},
+            2,
+            &HashMap::new()
+        ));
+    }
 
     #[test]
     fn id_spec_recognizer() {
-        let mut record_specs: HashMap<String, RecordSpec> = HashMap::new();
-        record_specs.insert("record1".to_string(), RecordSpec {
-            field_specs: HashMap::new()
-        });
+        let specs = FileSpecBuilder::new()
+            .with_width(10)
+            .with_record(
+                "record1",
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "field1",
+                        FieldSpecBuilder::new()
+                            .with_default("foo")
+                            .with_range(0..3)
+                            .with_padding("dsasd")
+                            .with_padding_direction(PaddingDirection::Left)
+                    )
+                    .with_field(
+                        "field2",
+                        FieldSpecBuilder::new()
+                            .with_range(4..9)
+                            .with_padding("sdf".to_string())
+                            .with_padding_direction(PaddingDirection::Right)
+                    )
+            )
+            .with_record(
+                "record2",
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "$id",
+                        FieldSpecBuilder::new_string()
+                            .with_default("bar")
+                            .with_range(0..3)
+                    )
+                    .with_field(
+                        "field2".to_string(),
+                        FieldSpecBuilder::new_string()
+                            .with_range(4..9)
+                    )
+            ).with_record(
+                "record3",
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "field1",
+                        FieldSpecBuilder::new_string()
+                            .with_default("bar")
+                            .with_range(0..3)
+                    )
+                    .with_field(
+                        "field2",
+                        FieldSpecBuilder::new_string()
+                            .with_range(4..9)
+                    )
+            )
+            .with_record(
+                "record4",
+                RecordSpecBuilder::new()
+                    .with_field(
+                        "$id",
+                        FieldSpecBuilder::new_string()
+                            .with_default("foo")
+                            .with_range(0..3)
+                    )
+                    .with_field(
+                        "field2".to_string(),
+                        FieldSpecBuilder::new_string()
+                            .with_range(4..9)
+                    )
+            )
+            .build()
+            .record_specs
+        ;
+        let recognizer = IdFieldRecognizer::new();
+        let recognizer_with_field = IdFieldRecognizer::new_with_field("field1");
+        let mut data = HashMap::new();
+//        let mut file = TestFile {
+//            width: 10,
+//            line_seperator: String::new(),
+//            lines: []
+//        };
+
+        data.insert("$id".to_string(), "bar".to_string());
+        assert_eq!(Some("record2".to_string()), recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
+
+        data.insert("$id".to_string(), "foo".to_string());
+        assert_eq!(Some("record4".to_string()), recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
+
+        data.insert("$id".to_string(), "foobar".to_string());
+        assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
+
+        data.insert("field1".to_string(), "bar".to_string());
+        assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+        data.remove(&"$id".to_string());
+
+        assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+
+        data.insert("field1".to_string(), "foo".to_string());
+        assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+
+        data.insert("field1".to_string(), "foobar".to_string());
+        assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
     }
 
     #[test]
@@ -355,7 +485,7 @@ mod test {
         let spec = FileSpecBuilder::new()
             .with_width(10)
             .with_record(
-                "record1".to_string(),
+                "record1",
                 RecordSpecBuilder::new()
                     .with_field(
                         "field1".to_string(),
@@ -365,11 +495,9 @@ mod test {
                             .with_padding_direction(PaddingDirection::Left)
                     )
                     .with_field(
-                        "field2".to_string(),
-                        FieldSpecBuilder::new()
+                        "field2",
+                        FieldSpecBuilder::new_string()
                             .with_range(5..9)
-                            .with_padding("sdf".to_string())
-                            .with_padding_direction(PaddingDirection::Right)
                             .with_default("def")
                     )
                     .with_field(
@@ -429,7 +557,7 @@ mod test {
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             range: (5..9),
-            padding: "sdf".to_string(),
+            padding: " ".to_string(),
             padding_direction: PaddingDirection::Right,
             default: Some("def".to_string())
         });
