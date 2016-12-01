@@ -133,10 +133,10 @@ mod test {
 
     #[test]
     fn iterator_works() {
-        let line1 = "".to_string();
-        let line2 = "".to_string();
-        let line3 = "".to_string();
-        let file = File {line_seperator: "\r\n".to_string(), width: 10, lines: vec![
+        let line1 = "   ".to_string();
+        let line2 = "123".to_string();
+        let line3 = "fsd".to_string();
+        let file = File {line_seperator: "\r\n".to_string(), width: 3, lines: vec![
             Ok(line1.clone()),
             Ok(line2.clone()),
             Err(()),
