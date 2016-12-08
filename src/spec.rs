@@ -445,21 +445,10 @@ mod test {
         let recognizer = IdFieldRecognizer::new();
         let recognizer_with_field = IdFieldRecognizer::new_with_field("field1");
         let mut data = HashMap::new();
-        let mut file = TestFile {
-            width: 10,
-            line_seperator: String::new(),
-            lines: vec![
-                Ok("dsfdsfsdfd".to_string()),
-                Ok("barasdasdd".to_string())
-            ]
-        };
 
         data.insert("$id".to_string(), "bar".to_string());
         assert_eq!(Some("record2".to_string()), recognizer.recognize_for_data(&data, &specs));
         assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
-        assert_eq!(Some("record2".to_string()), recognizer.recognize_for_line(&file, 1, &specs));
-        assert_eq!(None, recognizer.recognize_for_line(&file, 0, &specs));
-        assert_eq!(None, recognizer_with_field.recognize_for_line(&file, 0, &specs));
 
         data.insert("$id".to_string(), "foo".to_string());
         assert_eq!(Some("record4".to_string()), recognizer.recognize_for_data(&data, &specs));
@@ -484,6 +473,23 @@ mod test {
         data.insert("field1".to_string(), "foobar".to_string());
         assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
         assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
+
+        let mut file = TestFile {
+            width: 10,
+            line_seperator: String::new(),
+            lines: vec![
+                Ok("dsfdsfsdfd".to_string()),
+                Ok("barasdasdd".to_string()),
+                Ok("foodsfsdfd".to_string())
+            ]
+        };
+
+        assert_eq!(None, recognizer.recognize_for_line(&file, 0, &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_line(&file, 0, &specs));
+        assert_eq!(Some("record2".to_string()), recognizer.recognize_for_line(&file, 1, &specs));
+        assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_line(&file, 1, &specs));
+        assert_eq!(Some("record4".to_string()), recognizer.recognize_for_line(&file, 2, &specs));
+        assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_line(&file, 2, &specs));
     }
 
     #[test]
