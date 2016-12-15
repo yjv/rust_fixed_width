@@ -90,8 +90,8 @@ impl Padder for DefaultPadder {
             length,
             try!(Self::get_char(padding)),
             match direction {
-                PaddingDirection::Left => Alignment::Left,
-                PaddingDirection::Right => Alignment::Right,
+                PaddingDirection::Left => Alignment::Right,
+                PaddingDirection::Right => Alignment::Left,
             },
             false
         ))
@@ -617,5 +617,28 @@ mod test {
             width: 10,
             record_specs: record_specs
         }, spec);
+    }
+
+    #[test]
+    fn default_padder() {
+        let padder = DefaultPadder;
+        let data = "qwer".to_string();
+        assert_eq!("qwer333333".to_string(), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right).unwrap());
+        let data = "qwer".to_string();
+        assert_eq!("333333qwer".to_string(), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left).unwrap());
+        let data = "qwer333333".to_string();
+        assert_eq!("qwer".to_string(), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right).unwrap());
+        let data = "333333qwer".to_string();
+        assert_eq!("qwer".to_string(), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left).unwrap());
+    }
+
+    #[test]
+    fn identity_padder() {
+        let padder = IdentityPadder;
+        let data = "qwer".to_string();
+        assert_eq!(data, padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right).unwrap());
+        assert_eq!(data, padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left).unwrap());
+        assert_eq!(data, padder.unpad(&data, &"3".to_string(), PaddingDirection::Right).unwrap());
+        assert_eq!(data, padder.unpad(&data, &"3".to_string(), PaddingDirection::Left).unwrap());
     }
 }
