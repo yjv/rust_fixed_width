@@ -12,14 +12,14 @@ pub enum Error<T: File, U: UnPadder> {
     UnPaddingFailed(U::Error)
 }
 
-pub struct FileReader<'a, T: File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> {
+pub struct FileReader<'a, T: 'a + File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> {
     spec: &'a FileSpec,
     file: T,
     recognizer: U,
     un_padder: V
 }
 
-impl<'a, T: File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> FileReader<'a, T, U, V> {
+impl<'a, T: 'a + File, U: 'a + LineRecordSpecRecognizer, V: 'a + UnPadder> FileReader<'a, T, U, V> {
     pub fn new(spec: &'a FileSpec, file: T) -> FileReader<'a, T, NoneRecognizer, IdentityPadder> {
         FileReader { spec: spec, file: file, recognizer: NoneRecognizer, un_padder: IdentityPadder }
     }
