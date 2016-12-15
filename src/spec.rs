@@ -272,6 +272,7 @@ impl SpecBuilder<RecordSpec> for RecordSpecBuilder {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct FieldSpecBuilder {
     range: Option<Range<usize>>,
     padding_direction: Option<PaddingDirection>,
@@ -490,6 +491,18 @@ mod test {
         assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_line(&file, 1, &specs));
         assert_eq!(Some("record4".to_string()), recognizer.recognize_for_line(&file, 2, &specs));
         assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_line(&file, 2, &specs));
+        assert_eq!(FieldSpecBuilder {
+            default: None,
+            padding: Some("0".to_string()),
+            padding_direction: Some(PaddingDirection::Left),
+            range: None
+        }, FieldSpecBuilder::new_number());
+        assert_eq!(FieldSpecBuilder {
+            default: None,
+            padding: Some(" ".to_string()),
+            padding_direction: Some(PaddingDirection::Right),
+            range: None
+        }, FieldSpecBuilder::new_string());
     }
 
     #[test]
