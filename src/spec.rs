@@ -68,7 +68,7 @@ use self::pad::{PadStr, Alignment};
 
 pub struct DefaultPadder;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PaddingError {
     PaddingLongerThanOne
 }
@@ -636,22 +636,24 @@ mod test {
     fn default_padder() {
         let padder = DefaultPadder;
         let data = "qwer".to_string();
-        assert_eq!("qwer333333".to_string(), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right).unwrap());
+        assert_eq!(Ok("qwer333333".to_string()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right));
         let data = "qwer".to_string();
-        assert_eq!("333333qwer".to_string(), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left).unwrap());
+        assert_eq!(Ok("333333qwer".to_string()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.pad(&data, 10, &"33".to_string(), PaddingDirection::Left));
         let data = "qwer333333".to_string();
-        assert_eq!("qwer".to_string(), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right).unwrap());
+        assert_eq!(Ok("qwer".to_string()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right));
         let data = "333333qwer".to_string();
-        assert_eq!("qwer".to_string(), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left).unwrap());
+        assert_eq!(Ok("qwer".to_string()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.unpad(&data, &"33".to_string(), PaddingDirection::Left));
     }
 
     #[test]
     fn identity_padder() {
         let padder = IdentityPadder;
         let data = "qwer".to_string();
-        assert_eq!(data, padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right).unwrap());
-        assert_eq!(data, padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left).unwrap());
-        assert_eq!(data, padder.unpad(&data, &"3".to_string(), PaddingDirection::Right).unwrap());
-        assert_eq!(data, padder.unpad(&data, &"3".to_string(), PaddingDirection::Left).unwrap());
+        assert_eq!(Ok(data.clone()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left));
     }
 }
