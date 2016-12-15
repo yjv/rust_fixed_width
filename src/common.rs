@@ -18,15 +18,15 @@ pub trait MutableFile: File {
 impl<'a, U> File for &'a U where U: 'a + File {
     type Error = U::Error;
     fn width(&self) -> usize {
-        (*self).width()
+        (**self).width()
     }
 
     fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error> {
-        (*self).get(line_index, range)
+        (**self).get(line_index, range)
     }
 
     fn len(&self) -> usize {
-        (*self).len()
+        (**self).len()
     }
 }
 

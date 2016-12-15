@@ -130,7 +130,7 @@ pub trait LineRecordSpecRecognizer {
 
 impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
     fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
-        (*self).recognize_for_line(file, index, record_specs)
+        (**self).recognize_for_line(file, index, record_specs)
     }
 }
 
@@ -140,7 +140,7 @@ pub trait DataRecordSpecRecognizer {
 
 impl<'a, U> DataRecordSpecRecognizer for &'a U where U: 'a + DataRecordSpecRecognizer {
     fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
-        (*self).recognize_for_data(data, record_specs)
+        (**self).recognize_for_data(data, record_specs)
     }
 }
 
