@@ -63,6 +63,13 @@ pub trait UnPadder {
     fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
 }
 
+impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
+    type Error = T::Error;
+    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        (**self).unpad(data, padding, direction)
+    }
+}
+
 extern crate pad;
 use self::pad::{PadStr, Alignment};
 
@@ -506,6 +513,18 @@ mod test {
     }
 
     #[test]
+    fn recognizer_reference() {
+        let recognizer = NoneRecognizer;
+        assert_eq!(None, DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &HashMap::new(), &HashMap::new()));
+        assert_eq!(None, LineRecordSpecRecognizer::recognize_for_line(
+            &&recognizer,
+            &TestFile {width: 10, line_seperator: "".to_string(), lines: vec![]},
+            2,
+            &HashMap::new()
+        ));
+    }
+
+    #[test]
     fn build() {
         let spec = FileSpecBuilder::new()
             .with_width(10)
@@ -655,5 +674,13 @@ mod test {
         assert_eq!(Ok(data.clone()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left));
         assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right));
         assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left));
+    }
+
+    #[test]
+    fn padder_reference() {
+        let padder = IdentityPadder;
+        let data = "qwer".to_string();
+        assert_eq!(Ok(data.clone()), Padder::pad(&&padder, &data, 10, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), UnPadder::unpad(&&padder, &data, &"3".to_string(), PaddingDirection::Right));
     }
 }
