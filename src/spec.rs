@@ -1,3 +1,5 @@
+extern crate pad;
+use self::pad::{PadStr, Alignment};
 use std::collections::HashMap;
 use common::File;
 use std::ops::Range;
@@ -69,9 +71,6 @@ impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
         (**self).unpad(data, padding, direction)
     }
 }
-
-extern crate pad;
-use self::pad::{PadStr, Alignment};
 
 pub struct DefaultPadder;
 
