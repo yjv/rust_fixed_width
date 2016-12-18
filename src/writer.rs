@@ -12,32 +12,27 @@ pub enum Error<T: File, U: Padder> {
     PaddingFailed(U::Error)
 }
 
-pub struct FileWriter<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> {
-    file: T,
+pub struct FileWriter<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> {
     spec: &'a FileSpec,
-    data_recognizer: U,
-    line_recognizer: V,
-    padder: W
+    data_recognizer: T,
+    line_recognizer: U,
+    padder: V
 }
 
-impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognizer, W: Padder> FileWriter<'a, T, U, V, W> {
-    pub fn new(file: T, spec: &'a FileSpec) -> FileWriter<'a, T, NoneRecognizer, NoneRecognizer, IdentityPadder> {
-        FileWriter { file: file, spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer, padder: IdentityPadder }
+impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> FileWriter<'a, T, U, V> {
+    pub fn new(spec: &'a FileSpec) -> FileWriter<'a, NoneRecognizer, NoneRecognizer, IdentityPadder> {
+        FileWriter { spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer, padder: IdentityPadder }
     }
 
-    pub fn new_with_recognizers_and_padder(file: T, spec: &'a FileSpec, data_recognizer: U, line_recognizer: V, padder: W) -> Self {
-        FileWriter { file: file, spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
+    pub fn new_with_recognizers_and_padder(spec: &'a FileSpec, data_recognizer: T, line_recognizer: U, padder: V) -> Self {
+        FileWriter { spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
     }
 
-    pub fn add_line(&'a mut self) -> Result<usize, Error<T, W>> {
-        Ok(try!(self.file.add_line().map_err(Error::FailedToAddLine)))
-    }
-
-    pub fn set_fields(&'a mut self, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a mut Self, Error<T, W>> {
+    pub fn set_fields<W: MutableFile>(&'a mut self, file: &mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a mut Self, Error<W, V>> {
         let record_spec_name = try!(
             spec_name
                 .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
-                .or_else(|| self.line_recognizer.recognize_for_line(&self.file, index, &self.spec.record_specs))
+                .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
                 .ok_or(Error::RecordSpecNameRequired)
         );
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
@@ -45,7 +40,7 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         for (name, field_spec) in &record_spec.field_specs {
             if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
                 let value = try!(self.padder.pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
-                try!(self.file.set(
+                try!(file.set(
                     index,
                     field_spec.range.start,
                     &value
@@ -56,14 +51,10 @@ impl<'a, T: MutableFile, U: DataRecordSpecRecognizer, V: LineRecordSpecRecognize
         Ok(self)
     }
 
-    pub fn set_field(&'a mut self, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a mut Self, Error<T, W>> {
+    pub fn set_field<W: MutableFile>(&'a mut self, file: &mut W, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a mut Self, Error<W, V>> {
         let mut data = HashMap::new();
         data.insert(key, value);
-        self.set_fields(index, &data, spec_name)
-    }
-
-    pub fn file(&'a self) -> &'a T {
-        &self.file
+        self.set_fields(file, index, &data, spec_name)
     }
 }
 //

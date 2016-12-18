@@ -15,61 +15,6 @@ pub trait MutableFile: File {
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
 }
 
-impl<'a, U> File for &'a U where U: 'a + File {
-    type Error = U::Error;
-    fn width(&self) -> usize {
-        (**self).width()
-    }
-
-    fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error> {
-        (**self).get(line_index, range)
-    }
-
-    fn len(&self) -> usize {
-        (**self).len()
-    }
-}
-
-impl<'a, U> File for &'a mut U where U: 'a + File {
-    type Error = U::Error;
-    fn width(&self) -> usize {
-        (**self).width()
-    }
-
-    fn get(&self, line_index: usize, range: Range<usize>) -> Result<String, Self::Error> {
-        (**self).get(line_index, range)
-    }
-
-    fn len(&self) -> usize {
-        (**self).len()
-    }
-}
-
-impl<'a, U> MutableFile for &'a mut U where U: 'a + MutableFile {
-    fn set(&mut self, line_index: usize, column_index: usize, string: &String) -> Result<&mut Self, <Self as File>::Error> {
-        match (**self).set(line_index, column_index, string) {
-            Ok(_) => Ok(self),
-            Err(err) => Err(err)
-        }
-
-    }
-
-    fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, <Self as File>::Error> {
-        match (**self).clear(line_index, range) {
-            Ok(_) => Ok(self),
-            Err(err) => Err(err)
-        }
-    }
-
-    fn add_line(&mut self) -> Result<usize, <Self as File>::Error> {
-        (**self).add_line()
-    }
-
-    fn remove_line(&mut self) -> Result<usize, <Self as File>::Error> {
-        (**self).remove_line()
-    }
-}
-
 pub trait FileError: Debug {
     fn is_invalid_index(&self) -> bool;
     fn is_invalid_range(&self) -> bool;
@@ -91,13 +36,13 @@ pub fn validate_range(range: Range<usize>, line_length: usize) -> Result<Range<u
     }
 }
 
-pub struct FileIterator<T: File> {
+pub struct FileIterator<'a, T: 'a + File> {
     position: usize,
-    file: T
+    file: &'a T
 }
 
-impl<T: File> FileIterator<T> {
-    pub fn new(file: T) -> Self {
+impl<'a, T: 'a + File> FileIterator<'a, T> {
+    pub fn new(file: &'a T) -> Self {
         FileIterator {
             position: 0,
             file: file
@@ -105,7 +50,7 @@ impl<T: File> FileIterator<T> {
     }
 }
 
-impl<T: File> Iterator for FileIterator<T> {
+impl<'a, T: 'a + File> Iterator for FileIterator<'a, T> {
     type Item = Result<String, T::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {

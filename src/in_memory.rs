@@ -144,7 +144,6 @@ mod test {
         assert_eq!(line3, file.get(index3, 0..width).unwrap());
         assert_eq!(Error::InvalidIndex(3), file.get(3, 0..3).unwrap_err());
         assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(&file).map(|r| r.unwrap()).collect::<Vec<String>>());
-        assert_eq!(vec![line1.clone(), line2.clone(), line3.clone()], FileIterator::new(file.clone()).map(|r| r.unwrap()).collect::<Vec<String>>());
         assert_eq!(3, file.len());
         assert_eq!("aaaaaaaaaa\r\n          \r\ncccccccccc".to_string(), file.to_string());
         assert_eq!(line1, file.get(index1, 0..line1.len()).unwrap());
