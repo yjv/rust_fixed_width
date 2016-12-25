@@ -94,22 +94,18 @@ impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> Iterator for FileIte
 #[cfg(test)]
 mod test {
 
-    use super::*;
-    use super::super::spec::*;
-    use super::super::test::*;
-
-    #[test]
-    fn read() {
-        let spec = FileSpecBuilder::new()
-            .with_width(10)
-            .with_record("record1", RecordSpecBuilder::new()
-                .with_field("field1", FieldSpecBuilder::new()
-                    .with_range(0..4)
-                    .with_default("hello".to_string())
-                    .with_padding("0")
-                    .with_padding_direction(PaddingDirection::Left)
-                )
-            )
-        ;
-    }
+//    use super::*;
+//    use super::super::spec::*;
+//    use super::super::test::*;
+//
+//    #[test]
+//    fn read() {
+//        let spec = test_spec();
+//        let reader = FileReader::new_with_recognizer_and_un_padder(&spec);
+//        let file = File {
+//            line_separator: "\r\n".to_string(),
+//            lines: vec![],
+//            width: 10
+//        };
+//    }
 }

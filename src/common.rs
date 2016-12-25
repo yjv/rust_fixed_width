@@ -13,6 +13,7 @@ pub trait MutableFile: File {
     fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
+    fn insert_line(&mut self, index: usize) -> Result<usize, Self::Error>;
 }
 
 pub trait FileError: Debug {
@@ -68,6 +69,7 @@ mod test {
     use std::string::ToString;
     use super::{InvalidRangeError, validate_range, FileIterator};
     use super::super::test::*;
+    use std::collections::HashMap;
 
     #[test]
     fn validate_range_works() {
@@ -81,12 +83,12 @@ mod test {
         let line1 = "   ".to_string();
         let line2 = "123".to_string();
         let line3 = "fsd".to_string();
-        let file = File {line_seperator: "\r\n".to_string(), width: 3, lines: vec![
-            Ok(line1.clone()),
-            Ok(line2.clone()),
-            Err(()),
-            Ok(line3.clone())
-        ]};
+        let mut file = MockFile::new(3, Some(vec![
+            &line1,
+            &line2,
+            &line3
+        ]));
+        file.add_read_error(2);
         let mut iterator = FileIterator::new(&file);
         assert_eq!(Some(Ok(line1)), iterator.next());
         assert_eq!(Some(Ok(line2)), iterator.next());

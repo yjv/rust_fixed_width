@@ -59,11 +59,10 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
 }
 //
 //pub struct FileWriterBuilder {
-//    file: T,
-//    spec: &'a FileSpec,
-//    data_recognizer: U,
-//    line_recognizer: V,
-//    padder: W
+//    spec: Option<&'a FileSpec>,
+//    data_recognizer: Option<U>,
+//    line_recognizer: Option<V>,
+//    padder: Option<W>
 //}
 
 #[cfg(test)]

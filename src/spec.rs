@@ -366,14 +366,14 @@ impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
 mod test {
     use super::*;
     use std::collections::HashMap;
-    use super::super::test::{File as TestFile};
+    use super::super::test::{MockFile, test_spec};
 
     #[test]
     fn none_recognizer() {
         let recognizer = NoneRecognizer;
         assert_eq!(None, recognizer.recognize_for_data(&HashMap::new(), &HashMap::new()));
         assert_eq!(None, recognizer.recognize_for_line(
-            &TestFile {width: 10, line_seperator: "".to_string(), lines: vec![]},
+            &MockFile::new(10, None),
             2,
             &HashMap::new()
         ));
@@ -481,15 +481,14 @@ mod test {
         assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
         assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
 
-        let mut file = TestFile {
-            width: 10,
-            line_seperator: String::new(),
-            lines: vec![
-                Ok("dsfdsfsdfd".to_string()),
-                Ok("barasdasdd".to_string()),
-                Ok("foodsfsdfd".to_string())
-            ]
-        };
+        let file = MockFile::new(
+            10,
+            Some(vec![
+                &"dsfdsfsdfd".to_string(),
+                &"barasdasdd".to_string(),
+                &"foodsfsdfd".to_string()
+            ])
+        );
 
         assert_eq!(None, recognizer.recognize_for_line(&file, 0, &specs));
         assert_eq!(None, recognizer_with_field.recognize_for_line(&file, 0, &specs));
@@ -517,7 +516,7 @@ mod test {
         assert_eq!(None, DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &HashMap::new(), &HashMap::new()));
         assert_eq!(None, LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
-            &TestFile {width: 10, line_seperator: "".to_string(), lines: vec![]},
+            &MockFile::new(10, None),
             2,
             &HashMap::new()
         ));
@@ -525,71 +524,7 @@ mod test {
 
     #[test]
     fn build() {
-        let spec = FileSpecBuilder::new()
-            .with_width(10)
-            .with_record(
-                "record1",
-                RecordSpecBuilder::new()
-                    .with_field(
-                        "field1".to_string(),
-                        FieldSpecBuilder::new()
-                            .with_range(0..4)
-                            .with_padding("dsasd")
-                            .with_padding_direction(PaddingDirection::Left)
-                    )
-                    .with_field(
-                        "field2",
-                        FieldSpecBuilder::new_string()
-                            .with_range(5..9)
-                            .with_default("def")
-                    )
-                    .with_field(
-                        "field3".to_string(),
-                        FieldSpecBuilder::new()
-                            .with_range(10..45)
-                            .with_padding("xcvcxv".to_string())
-                            .with_padding_direction(PaddingDirection::Right)
-                    )
-            )
-            .with_record(
-                "record2".to_string(),
-                RecordSpecBuilder::new()
-                    .with_field(
-                        "field1".to_string(),
-                        FieldSpecBuilder::new()
-                            .with_range((0..3))
-                            .with_padding("dsasd".to_string())
-                            .with_padding_direction(PaddingDirection::Left)
-                    )
-                    .with_field(
-                        "field2".to_string(),
-                        FieldSpecBuilder::new()
-                            .with_range((4..8))
-                            .with_padding("sdf".to_string())
-                            .with_padding_direction(PaddingDirection::Right)
-                    )
-                    .with_field(
-                        "field3",
-                        FieldSpecBuilder::new()
-                            .with_range((9..36))
-                            .with_padding("xcvcxv".to_string())
-                            .with_padding_direction(PaddingDirection::Right)
-                    )
-                    .with_field(
-                        "field4".to_string(),
-                        FieldSpec {
-                            range: (37..45),
-                            padding: "sdfsd".to_string(),
-                            padding_direction: PaddingDirection::Left,
-                            default: None
-                        }
-                    )
-            )
-            .with_record("record3".to_string(), RecordSpec {
-                field_specs: HashMap::new()
-            })
-            .build()
-        ;
+        let spec = test_spec();
         let mut record_specs = HashMap::new();
         let mut field_specs = HashMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {

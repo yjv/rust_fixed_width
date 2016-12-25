@@ -3,7 +3,7 @@ use std::iter::repeat;
 use std::ops::Range;
 use common::{File as FileTrait, MutableFile, validate_range, InvalidRangeError, FileError};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct File {
     width: usize,
     lines: Vec<String>,
@@ -76,12 +76,10 @@ impl MutableFile for File {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));
             let range = try!(validate_range(column_index..column_index + string.len(), self.width));
-            let data = line.clone();
-            line.truncate(0);
-            line.push_str(&data[..range.start]);
+            let end = &line[range.end..].to_string();
+            line.truncate(range.start);
             line.push_str(&string[..]);
-            line.push_str(&repeat(" ").take(range.end - range.start - string.len()).collect::<String>()[..]);
-            line.push_str(&data[range.end..]);
+            line.push_str(end);
         }
         Ok(self)
     }
@@ -99,6 +97,11 @@ impl MutableFile for File {
     fn remove_line(&mut self) -> Result<usize> {
         self.lines.pop();
         Ok(self.lines.len())
+    }
+
+    fn insert_line(&mut self, index: usize) -> Result<usize>{
+        self.lines.insert(index, repeat(" ").take(self.width).collect::<String>());
+        Ok(index)
     }
 }
 
