@@ -162,6 +162,8 @@ mod test {
         assert_eq!("abbbba b a".to_string(), file.get(index1, 0..width).unwrap());
         assert_eq!(Error::InvalidIndex(index3), file.get(index3, 0..width).unwrap_err());
         assert_eq!("abbbba b a\r\nb  a     b".to_string(), file.to_string());
+        let _ = file.insert_line(1);
+        assert_eq!("abbbba b a\r\n          \r\nb  a     b".to_string(), file.to_string());
     }
 
     #[test]
