@@ -1,5 +1,5 @@
 use common::{File, MutableFile};
-use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
+use spec::{FileSpec, FieldSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
 use spec::RecordSpec;
 use std::iter::{Iterator, Extend};
@@ -29,13 +29,8 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
         FileWriter { spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
     }
 
-    pub fn set_line<W: MutableFile>(&'a self, file: &mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
-        let record_spec_name = try!(
-            spec_name
-                .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
-                .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
-                .ok_or(Error::RecordSpecNameRequired)
-        );
+    pub fn set_line<'b, W: 'b + MutableFile>(&'a self, file: &'b mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
+        let record_spec_name = try!(self.get_spec(spec_name, data, file, index));
         let record_spec: &RecordSpec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
 
         let mut defaults: HashMap<&String, &String> = record_spec.field_specs.iter()
@@ -46,37 +41,44 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
         defaults.extend(data);
         for (name, value) in defaults {
             let field_spec = try!(record_spec.field_specs.get(name).ok_or_else(|| Error::FieldSpecNotFound(record_spec_name.clone(), name.clone())));
-            let value = try!(self.padder.pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
-            try!(file.set(
-                index,
-                field_spec.range.start,
-                &value
-            ).map_err(Error::FailedToSetData));
+            let value = try!(self.pad(value, field_spec, file));
+            try!(Self::set_string(file, index, field_spec, &value));
         }
 
         Ok(self)
     }
 
-    pub fn set_field<W: MutableFile>(&'a self, file: &mut W, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
+    pub fn set_field<'b, W: 'b + MutableFile>(&'a self, file: &'b mut W, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
         let mut data = HashMap::new();
         data.insert(key.clone(), value.clone());
-        let record_spec_name = try!(
-            spec_name
-                .or_else(|| self.data_recognizer.recognize_for_data(&data, &self.spec.record_specs))
-                .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
-                .ok_or(Error::RecordSpecNameRequired)
-        );
+        let record_spec_name = try!(self.get_spec(spec_name, &data, file, index));
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
         let field_spec = try!(record_spec.field_specs.get(&key).ok_or_else(|| Error::FieldSpecNotFound(record_spec_name, key)));
 
-        let value = try!(self.padder.pad(&value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
-        try!(file.set(
+        let value = try!(self.pad(&value, field_spec, file));
+        try!(Self::set_string(file, index, field_spec, &value));
+        Ok(self)
+    }
+
+    fn pad<W: MutableFile>(&self, value: &String, field_spec: &FieldSpec, _: &mut W) -> Result<String, Error<W, V>> {
+        self.padder
+            .pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction)
+            .map_err(Error::PaddingFailed)
+    }
+
+    fn get_spec<W: MutableFile>(&self, spec_name: Option<String>, data: &HashMap<String, String>, file: &mut W, index: usize) -> Result<String, Error<W, V>> {
+        spec_name
+            .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
+            .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
+            .ok_or(Error::RecordSpecNameRequired)
+    }
+
+    fn set_string<'b, W: 'b + MutableFile>(file: &'b mut W, index: usize, field_spec: &FieldSpec, value: &String) -> Result<&'b mut W, Error<W, V>> {
+        file.set(
             index,
             field_spec.range.start,
             &value
-        ).map_err(Error::FailedToSetData));
-
-        Ok(self)
+        ).map_err(Error::FailedToSetData)
     }
 }
 //
