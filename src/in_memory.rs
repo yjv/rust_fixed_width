@@ -12,7 +12,6 @@ pub struct File {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
-    DataLongerThanRange,
     InvalidRange(InvalidRangeError),
     InvalidIndex(usize)
 }

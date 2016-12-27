@@ -4,10 +4,8 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error<T: File, U: Padder> {
-    FailedToAddLine(T::Error),
     RecordSpecNameRequired,
     FailedToSetData(T::Error),
-    FailedToGetLine(T::Error),
     RecordSpecNotFound(String),
     PaddingFailed(U::Error)
 }
@@ -78,7 +76,6 @@ mod test {
     fn writing() {
         let spec = test_spec();
         let line1: String = repeat("line1").take(9).collect();
-        let line2: String = repeat("line2").take(9).collect();
         let mut data1 = HashMap::new();
         data1.insert("field1".to_string(), "field1_value".to_string());
         data1.insert("field2".to_string(), "field2_value".to_string());
@@ -87,19 +84,28 @@ mod test {
         let mut data2 = HashMap::new();
         data2.insert("field2".to_string(), "field1_value".to_string());
         let mut data3 = HashMap::new();
-        data3.insert("field1".to_string(), "field1_value2".to_string());
-        data3.insert("field2".to_string(), "field2_value2".to_string());
-        data3.insert("field3".to_string(), "field3_value2".to_string());
-
+        data3.insert("field2".to_string(), "field2_value".to_string());
+        let mut data4 = HashMap::new();
+        data4.insert("field1".to_string(), "field1_value2".to_string());
+        data4.insert("field2".to_string(), "field2_value2".to_string());
+        data4.insert("field3".to_string(), "field3_value2".to_string());
+        let mut data5 = HashMap::new();
+        data5.insert("dsffds".to_string(), "sdfdsfsd".to_string());
         let mut file = MockFile::new(45, None);
-        file.add_write_error(2);
+        file.add_write_error(1);
         let mut recognizer1: MockRecognizer<MockFile> = MockRecognizer::new();
         let mut recognizer2: MockRecognizer<MockFile> = MockRecognizer::new();
         let mut padder = MockPadder::new();
         recognizer1.add_data_recognize_call(&data1, &spec.record_specs, Some("record2".to_string()));
         recognizer1.add_data_recognize_call(&data2, &spec.record_specs, Some("record2".to_string()));
         recognizer1.add_data_recognize_call(&data3, &spec.record_specs, None);
-//        recognizer2.add_line_recognize_call(&file, 1, &spec.record_specs, Some("record1".to_string()));
+        recognizer2.add_line_recognize_call(unsafe {
+            &*(&file as *const MockFile)
+        }, 1, &spec.record_specs, Some("record1".to_string()));
+        recognizer1.add_data_recognize_call(&data5, &spec.record_specs, None);
+        recognizer2.add_line_recognize_call(unsafe {
+            &*(&file as *const MockFile)
+        }, 2, &spec.record_specs, None);
         padder.add_pad_call(
             "field1_value".to_string(),
             spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().range.end
@@ -142,16 +148,16 @@ mod test {
         );
         padder.add_pad_call(
             "field2_value2".to_string(),
-            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.end
-                - spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.start,
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.end
+                - spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.start,
             spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
             spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
             Err(())
         );
         padder.add_pad_call(
             "field3_value2".to_string(),
-            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().range.end
-                - spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().range.start,
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().range.end
+                - spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().range.start,
             spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding.clone(),
             spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding_direction,
             Err(())
@@ -164,52 +170,41 @@ mod test {
             spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
             Ok("yay".to_string())
         );
-        file.add_line();
+        padder.add_pad_call(
+            "field2_value".to_string(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.end
+                - spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.start,
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
+            Ok("yay2".to_string())
+        );
+        let _ = file.add_line();
         let writer = FileWriter::new_with_recognizers_and_padder(&spec, recognizer1, recognizer2, padder);
-        writer.set_fields(&mut file, 0, &data1, None);
+        assert!(writer.set_fields(&mut file, 0, &data1, None).is_ok());
         assert_eq!("lin 1lin 1line1line1line1line1line1l ne1line1".to_string(), file.get(0, 0..45).unwrap());
-        writer.set_field(&mut file, 0, "field2".to_string(), "field1_value".to_string(), None);
+        assert!(writer.set_field(&mut file, 0, "field2".to_string(), "field1_value".to_string(), None).is_ok());
         assert_eq!("lin yayn 1line1line1line1line1line1l ne1line1".to_string(), file.get(0, 0..45).unwrap());
-        file.add_line();
-        //        assert_eq!(data, writer.fields(&file, 0, None).unwrap());
-//        match writer.fields(&file, 1, None).unwrap_err() {
-//            Error::RecordSpecNameRequired => (),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.fields(&file, 1, Some("record5".to_string())).unwrap_err() {
-//            Error::RecordSpecNotFound(name) => assert_eq!("record5".to_string(), name),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.fields(&file, 1, Some("record2".to_string())).unwrap_err() {
-//            Error::GetFailed(field, ()) => assert!(
-//            field == "field1".to_string()
-//                || field == "field2".to_string()
-//                || field == "field3".to_string()
-//                || field == "field4".to_string()
-//            ),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.fields(&file, 2, Some("record1".to_string())).unwrap_err() {
-//            Error::UnPaddingFailed(()) => (),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//
-//        assert_eq!("field2_value".to_string(), writer.field(&file, 0, "field2".to_string(), None).unwrap());
-//        match writer.field(&file, 1, "field1".to_string(), None).unwrap_err() {
-//            Error::RecordSpecNameRequired => (),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.field(&file, 1, "field1".to_string(), Some("record5".to_string())).unwrap_err() {
-//            Error::RecordSpecNotFound(name) => assert_eq!("record5".to_string(), name),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.field(&file, 1, "field3".to_string(), Some("record2".to_string())).unwrap_err() {
-//            Error::GetFailed(field, ()) => assert_eq!(field, "field3".to_string()),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
-//        match writer.field(&file, 2, "field2".to_string(), Some("record1".to_string())).unwrap_err() {
-//            Error::UnPaddingFailed(()) => (),
-//            e => panic!("did not return correct error {:?}", e)
-//        }
+
+        let _ = file.add_line();
+        match writer.set_fields(&mut file, 1, &data3, None) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::FailedToSetData(_)) => (),
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
+        match writer.set_fields(&mut file, 0, &data4, Some("record1".to_string())) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::PaddingFailed(_)) => (),
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
+        match writer.set_fields(&mut file, 0, &data4, Some("record4".to_string())) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::RecordSpecNotFound(name)) => assert_eq!("record4".to_string(), name),
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
+        match writer.set_fields(&mut file, 2, &data5, None) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::RecordSpecNameRequired) => (),
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
     }
 }
