@@ -69,7 +69,6 @@ mod test {
     use std::string::ToString;
     use super::{InvalidRangeError, validate_range, FileIterator};
     use super::super::test::*;
-    use std::collections::HashMap;
 
     #[test]
     fn validate_range_works() {
