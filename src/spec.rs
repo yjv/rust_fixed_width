@@ -534,13 +534,13 @@ mod test {
             default: None
         });
         field_specs.insert("field2".to_string(), FieldSpec {
-            range: (5..9),
+            range: (4..9),
             padding: " ".to_string(),
             padding_direction: PaddingDirection::Right,
             default: Some("def".to_string())
         });
         field_specs.insert("field3".to_string(), FieldSpec {
-            range: (10..45),
+            range: (9..45),
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
             default: None

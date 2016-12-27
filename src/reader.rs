@@ -94,18 +94,64 @@ impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> Iterator for FileIte
 #[cfg(test)]
 mod test {
 
-//    use super::*;
-//    use super::super::spec::*;
-//    use super::super::test::*;
-//
-//    #[test]
-//    fn read() {
-//        let spec = test_spec();
-//        let reader = FileReader::new_with_recognizer_and_un_padder(&spec);
-//        let file = File {
-//            line_separator: "\r\n".to_string(),
-//            lines: vec![],
-//            width: 10
-//        };
-//    }
+    use super::*;
+    use super::super::spec::*;
+    use super::super::test::*;
+    use std::iter::repeat;
+    use std::collections::HashMap;
+
+    #[test]
+    fn read() {
+        let spec = test_spec();
+        let line1 = repeat("line1").take(9).collect();
+        let line2 = repeat("line2").take(9).collect();
+        let line3 = repeat("line3").take(9).collect();
+        let line4 = repeat("line4").take(9).collect();
+        let mut file = MockFile::new(45, Some(vec![
+            &line1,
+            &line2,
+            &line3,
+            &line4
+        ]));
+        file.add_read_error(1);
+        let mut recognizer = MockRecognizer::new();
+        let mut padder = MockPadder::new();
+        recognizer.add_line_recognize_call(&file, 0, &spec.record_specs, Some("record2".to_string()));
+        recognizer.add_line_recognize_call(&file, 1, &spec.record_specs, None);
+        recognizer.add_line_recognize_call(&file, 3, &spec.record_specs, Some("record1".to_string()));
+        padder.add_unpad_call(
+            line1[0..3].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding_direction,
+            Ok("field1_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[4..8].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
+            Ok("field2_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[9..36].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding_direction,
+            Ok("field3_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[37..45].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field4".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field4".to_string()).unwrap().padding_direction,
+            Ok("field4_value".to_string())
+        );
+        let reader = FileReader::new_with_recognizer_and_un_padder(&spec, recognizer, padder);
+        let mut data = HashMap::new();
+        data.insert("field1".to_string(), "field1_value".to_string());
+        data.insert("field2".to_string(), "field2_value".to_string());
+        data.insert("field3".to_string(), "field3_value".to_string());
+        data.insert("field4".to_string(), "field4_value".to_string());
+        assert_eq!(data, reader.fields(&file, 0, None).unwrap());
+//        reader.fields(&file, 1, None);
+//        reader.fields(&file, 2, Some("record2".to_string()));
+//        reader.field(&file, 3, None);
+    }
 }

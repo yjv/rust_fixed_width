@@ -22,7 +22,7 @@ impl MockFile {
         if let Some(lines) = initial_lines {
             for line in lines {
                 let index = file.add_line().unwrap();
-                file.set(index, 0, line);
+                let _ = file.set(index, 0, line);
             }
         }
 
@@ -31,7 +31,7 @@ impl MockFile {
 
     pub fn add_read_error(&mut self, index: usize) -> &mut Self {
         if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() {
-            self.inner_file.insert_line(index);
+            let _ = self.inner_file.insert_line(index);
         }
         self.read_errors.insert(index, ());
         self
@@ -39,7 +39,7 @@ impl MockFile {
 
     pub fn add_write_error(&mut self, index: usize) -> &mut Self {
         if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() {
-            self.inner_file.insert_line(index);
+            let _ = self.inner_file.insert_line(index);
         }
         self.write_errors.insert(index, ());
         self
@@ -107,14 +107,21 @@ impl MutableFile for MockFile {
     }
 }
 
-pub struct TestRecognizer<'a, T: 'a + File> {
+#[derive(Debug)]
+pub struct MockRecognizer<'a, T: 'a + File> {
     line_recognize_calls: Vec<(&'a T, usize, &'a HashMap<String, RecordSpec>, Option<String>)>,
     data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Option<String>)>
 }
 
-impl<'a, T: 'a + File> TestRecognizer<'a, T> {
-    pub fn add_line_recognize_call(&mut self, file: &'a T, index: usize, record_spec: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
-        self.line_recognize_calls.push((file, index, record_spec, return_value));
+impl<'a, T: 'a + File> MockRecognizer<'a, T> {
+    pub fn new() -> Self {
+        MockRecognizer {
+            data_recognize_calls: Vec::new(),
+            line_recognize_calls: Vec::new()
+        }
+    }
+    pub fn add_line_recognize_call(&mut self, file: &'a T, index: usize, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
+        self.line_recognize_calls.push((file, index, record_specs, return_value));
         self
     }
 
@@ -124,7 +131,7 @@ impl<'a, T: 'a + File> TestRecognizer<'a, T> {
     }
 }
 
-impl<'a, T: 'a + File> LineRecordSpecRecognizer for TestRecognizer<'a, T> {
+impl<'a, T: 'a + File> LineRecordSpecRecognizer for MockRecognizer<'a, T> {
     fn recognize_for_line<W: File>(&self, file: &W, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for &(ref expected_file, expected_index, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_file as *const T as *const W == file as *const W
@@ -135,11 +142,11 @@ impl<'a, T: 'a + File> LineRecordSpecRecognizer for TestRecognizer<'a, T> {
             }
         }
 
-        panic!("Method was not expected to be called with {:?}", (index, record_specs))
+        panic!("Method recognize_for_line was not expected to be called with {:?}", (index, record_specs))
     }
 }
 
-impl<'a, T: 'a + File> DataRecordSpecRecognizer for TestRecognizer<'a, T> {
+impl<'a, T: 'a + File> DataRecordSpecRecognizer for MockRecognizer<'a, T> {
     fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data as *const HashMap<String, String> == data as *const HashMap<String, String>
@@ -149,7 +156,63 @@ impl<'a, T: 'a + File> DataRecordSpecRecognizer for TestRecognizer<'a, T> {
                 }
         }
 
-        panic!("Method was not expected to be called with {:?}", (data, record_specs))
+        panic!("Method recognize_for_data was not expected to be called with {:?}", (data, record_specs))
+    }
+}
+
+#[derive(Debug)]
+pub struct MockPadder {
+    pad_calls: Vec<(String, usize, String, PaddingDirection, Result<String, ()>)>,
+    unpad_calls: Vec<(String, String, PaddingDirection, Result<String, ()>)>
+}
+
+impl MockPadder {
+    pub fn new() -> Self {
+        MockPadder {
+            pad_calls: Vec::new(),
+            unpad_calls: Vec::new()
+        }
+    }
+
+    pub fn add_pad_call(&mut self, data: String, length: usize, padding: String, direction: PaddingDirection, return_value: Result<String, ()>) -> &mut Self {
+        self.pad_calls.push((data, length, padding, direction, return_value));
+        self
+    }
+
+    pub fn add_unpad_call(&mut self, data: String, padding: String, direction: PaddingDirection, return_value: Result<String, ()>) -> &mut Self {
+        self.unpad_calls.push((data, padding, direction, return_value));
+        self
+    }
+}
+
+impl Padder for MockPadder {
+    type Error = ();
+    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
+            if expected_data == data
+                && expected_length == length
+                && expected_padding == padding
+                && expected_direction == direction {
+                return return_value.clone();
+            }
+        }
+
+        panic!("Method pad was not expected to be called with {:?}", (data, length, padding, direction))
+    }
+}
+
+impl UnPadder for MockPadder {
+    type Error = ();
+    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+        for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
+            if expected_data == data
+                && expected_padding == padding
+                && expected_direction == direction {
+                return return_value.clone();
+            }
+        }
+
+        panic!("Method unpad was not expected to be called with {:?}", (data, padding, direction))
     }
 }
 
@@ -169,13 +232,13 @@ pub fn test_spec() -> FileSpec {
                 .with_field(
                     "field2",
                     FieldSpecBuilder::new_string()
-                        .with_range(5..9)
+                        .with_range(4..9)
                         .with_default("def")
                 )
                 .with_field(
                     "field3".to_string(),
                     FieldSpecBuilder::new()
-                        .with_range(10..45)
+                        .with_range(9..45)
                         .with_padding("xcvcxv".to_string())
                         .with_padding_direction(PaddingDirection::Right)
                 )
