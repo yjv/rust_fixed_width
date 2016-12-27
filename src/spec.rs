@@ -559,7 +559,7 @@ mod test {
             range: (4..8),
             padding: "sdf".to_string(),
             padding_direction: PaddingDirection::Right,
-            default: None
+            default: Some("defa".to_string())
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             range: (9..36),

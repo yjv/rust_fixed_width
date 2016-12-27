@@ -102,7 +102,6 @@ mod test {
         let line1: String = repeat("line1").take(9).collect();
         let mut data1 = HashMap::new();
         data1.insert("field1".to_string(), "field1_value".to_string());
-        data1.insert("field2".to_string(), "field2_value".to_string());
         data1.insert("field3".to_string(), "field3_value".to_string());
         data1.insert("field4".to_string(), "field4_value".to_string());
         let mut data2 = HashMap::new();
@@ -139,7 +138,7 @@ mod test {
             Ok(line1[0..3].to_string())
         );
         padder.add_pad_call(
-            "field2_value".to_string(),
+            "defa".to_string(),
             spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.end
                 - spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().range.start,
             spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
@@ -218,6 +217,22 @@ mod test {
         match writer.set_line(&mut file, 0, &data4, Some("record1".to_string())) {
             Ok(_) => panic!("expected error"),
             Err(Error::PaddingFailed(_)) => (),
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
+        match writer.set_line(&mut file, 0, &data5, Some("record2".to_string())) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::FieldSpecNotFound(record_name, name)) => {
+                assert_eq!("record2".to_string(), record_name);
+                assert_eq!("dsffds".to_string(), name);
+            },
+            Err(e) => panic!("wrong error type {:?}", e)
+        }
+        match writer.set_field(&mut file, 0, "dsffds".to_string(), "dsffsdsdf".to_string(), Some("record1".to_string())) {
+            Ok(_) => panic!("expected error"),
+            Err(Error::FieldSpecNotFound(record_name, name)) => {
+                assert_eq!("record1".to_string(), record_name);
+                assert_eq!("dsffds".to_string(), name);
+            },
             Err(e) => panic!("wrong error type {:?}", e)
         }
         match writer.set_line(&mut file, 0, &data4, Some("record4".to_string())) {

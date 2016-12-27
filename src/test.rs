@@ -261,6 +261,7 @@ pub fn test_spec() -> FileSpec {
                         .with_range((4..8))
                         .with_padding("sdf".to_string())
                         .with_padding_direction(PaddingDirection::Right)
+                        .with_default("defa")
                 )
                 .with_field(
                     "field3",
