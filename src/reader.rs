@@ -42,7 +42,7 @@ impl<'a, T: 'a + LineRecordSpecRecognizer, U: 'a + UnPadder> FileReader<'a, T, U
         Ok(try!(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(Error::UnPaddingFailed)))
     }
 
-    pub fn fields<W: File>(&self, file: &W, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<W, U>> {
+    pub fn line<W: File>(&self, file: &W, index: usize, spec_name: Option<String>) -> Result<HashMap<String, String>, Error<W, U>> {
         let record_spec_name = try!(spec_name.or_else(|| self.recognizer.recognize_for_line(file, index, &self.spec.record_specs)).ok_or(Error::RecordSpecNameRequired));
         let record_spec = try!(self.spec.record_specs.get(
             &record_spec_name
@@ -85,7 +85,7 @@ impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> Iterator for FileIte
         if self.position > self.file.len() {
             None
         } else {
-            Some(self.reader.fields(self.file, self.position - 1, None))
+            Some(self.reader.line(self.file, self.position - 1, None))
         }
     }
 }
@@ -165,16 +165,16 @@ mod test {
         data.insert("field2".to_string(), "field2_value".to_string());
         data.insert("field3".to_string(), "field3_value".to_string());
         data.insert("field4".to_string(), "field4_value".to_string());
-        assert_eq!(data, reader.fields(&file, 0, None).unwrap());
-        match reader.fields(&file, 1, None).unwrap_err() {
+        assert_eq!(data, reader.line(&file, 0, None).unwrap());
+        match reader.line(&file, 1, None).unwrap_err() {
             Error::RecordSpecNameRequired => (),
             e => panic!("did not return correct error {:?}", e)
         }
-        match reader.fields(&file, 1, Some("record5".to_string())).unwrap_err() {
+        match reader.line(&file, 1, Some("record5".to_string())).unwrap_err() {
             Error::RecordSpecNotFound(name) => assert_eq!("record5".to_string(), name),
             e => panic!("did not return correct error {:?}", e)
         }
-        match reader.fields(&file, 1, Some("record2".to_string())).unwrap_err() {
+        match reader.line(&file, 1, Some("record2".to_string())).unwrap_err() {
             Error::GetFailed(field, ()) => assert!(
                 field == "field1".to_string()
                 || field == "field2".to_string()
@@ -183,7 +183,7 @@ mod test {
             ),
             e => panic!("did not return correct error {:?}", e)
         }
-        match reader.fields(&file, 2, Some("record1".to_string())).unwrap_err() {
+        match reader.line(&file, 2, Some("record1".to_string())).unwrap_err() {
             Error::UnPaddingFailed(()) => (),
             e => panic!("did not return correct error {:?}", e)
         }

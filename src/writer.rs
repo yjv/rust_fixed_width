@@ -1,12 +1,15 @@
 use common::{File, MutableFile};
 use spec::{FileSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
+use spec::RecordSpec;
+use std::iter::{Iterator, Extend};
 
 #[derive(Debug)]
 pub enum Error<T: File, U: Padder> {
     RecordSpecNameRequired,
     FailedToSetData(T::Error),
     RecordSpecNotFound(String),
+    FieldSpecNotFound(String, String),
     PaddingFailed(U::Error)
 }
 
@@ -26,24 +29,30 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
         FileWriter { spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
     }
 
-    pub fn set_fields<W: MutableFile>(&'a self, file: &mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
+    pub fn set_line<W: MutableFile>(&'a self, file: &mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
         let record_spec_name = try!(
             spec_name
                 .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
                 .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
                 .ok_or(Error::RecordSpecNameRequired)
         );
-        let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or(Error::RecordSpecNotFound(record_spec_name)));
+        let record_spec: &RecordSpec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
 
-        for (name, field_spec) in &record_spec.field_specs {
-            if let Some(value) = data.get(name).or(field_spec.default.as_ref()) {
-                let value = try!(self.padder.pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
-                try!(file.set(
-                    index,
-                    field_spec.range.start,
-                    &value
-                ).map_err(Error::FailedToSetData));
-            }
+        let mut defaults: HashMap<&String, &String> = record_spec.field_specs.iter()
+            .map(|(name, field_spec)| (name, field_spec.default.as_ref()))
+            .filter(|&(_, default)| default.is_some())
+            .map(|(name, default)| (name, default.unwrap()))
+            .collect()
+        ;
+        defaults.extend(data);
+        for (name, value) in defaults {
+            let field_spec = try!(record_spec.field_specs.get(name).ok_or_else(|| Error::FieldSpecNotFound(record_spec_name.clone(), name.clone())));
+            let value = try!(self.padder.pad(value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
+            try!(file.set(
+                index,
+                field_spec.range.start,
+                &value
+            ).map_err(Error::FailedToSetData));
         }
 
         Ok(self)
@@ -51,8 +60,24 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
 
     pub fn set_field<W: MutableFile>(&'a self, file: &mut W, index: usize, key: String, value: String, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
         let mut data = HashMap::new();
-        data.insert(key, value);
-        self.set_fields(file, index, &data, spec_name)
+        data.insert(key.clone(), value.clone());
+        let record_spec_name = try!(
+            spec_name
+                .or_else(|| self.data_recognizer.recognize_for_data(&data, &self.spec.record_specs))
+                .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
+                .ok_or(Error::RecordSpecNameRequired)
+        );
+        let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
+        let field_spec = try!(record_spec.field_specs.get(&key).ok_or_else(|| Error::FieldSpecNotFound(record_spec_name, key)));
+
+        let value = try!(self.padder.pad(&value, field_spec.range.end - field_spec.range.start, &field_spec.padding, field_spec.padding_direction).map_err(Error::PaddingFailed));
+        try!(file.set(
+            index,
+            field_spec.range.start,
+            &value
+        ).map_err(Error::FailedToSetData));
+
+        Ok(self)
     }
 }
 //
@@ -180,28 +205,28 @@ mod test {
         );
         let _ = file.add_line();
         let writer = FileWriter::new_with_recognizers_and_padder(&spec, recognizer1, recognizer2, padder);
-        assert!(writer.set_fields(&mut file, 0, &data1, None).is_ok());
+        assert!(writer.set_line(&mut file, 0, &data1, None).is_ok());
         assert_eq!("lin 1lin 1line1line1line1line1line1l ne1line1".to_string(), file.get(0, 0..45).unwrap());
         assert!(writer.set_field(&mut file, 0, "field2".to_string(), "field1_value".to_string(), None).is_ok());
         assert_eq!("lin yayn 1line1line1line1line1line1l ne1line1".to_string(), file.get(0, 0..45).unwrap());
 
         let _ = file.add_line();
-        match writer.set_fields(&mut file, 1, &data3, None) {
+        match writer.set_line(&mut file, 1, &data3, None) {
             Ok(_) => panic!("expected error"),
             Err(Error::FailedToSetData(_)) => (),
             Err(e) => panic!("wrong error type {:?}", e)
         }
-        match writer.set_fields(&mut file, 0, &data4, Some("record1".to_string())) {
+        match writer.set_line(&mut file, 0, &data4, Some("record1".to_string())) {
             Ok(_) => panic!("expected error"),
             Err(Error::PaddingFailed(_)) => (),
             Err(e) => panic!("wrong error type {:?}", e)
         }
-        match writer.set_fields(&mut file, 0, &data4, Some("record4".to_string())) {
+        match writer.set_line(&mut file, 0, &data4, Some("record4".to_string())) {
             Ok(_) => panic!("expected error"),
             Err(Error::RecordSpecNotFound(name)) => assert_eq!("record4".to_string(), name),
             Err(e) => panic!("wrong error type {:?}", e)
         }
-        match writer.set_fields(&mut file, 2, &data5, None) {
+        match writer.set_line(&mut file, 2, &data5, None) {
             Ok(_) => panic!("expected error"),
             Err(Error::RecordSpecNameRequired) => (),
             Err(e) => panic!("wrong error type {:?}", e)
