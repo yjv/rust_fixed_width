@@ -82,7 +82,7 @@ impl<'a, T: File, U: LineRecordSpecRecognizer, V: UnPadder> Iterator for FileIte
 
     fn next(&mut self) -> Option<Self::Item> {
         self.position = self.position + 1;
-        if self.position >= self.file.len() {
+        if self.position > self.file.len() {
             None
         } else {
             Some(self.reader.fields(self.file, self.position - 1, None))
@@ -205,5 +205,76 @@ mod test {
             Error::UnPaddingFailed(()) => (),
             e => panic!("did not return correct error {:?}", e)
         }
+    }
+
+    #[test]
+    fn iterate() {
+        let spec = test_spec();
+        let line1 = repeat("line1").take(9).collect();
+        let line2 = repeat("line2").take(9).collect();
+        let mut file = MockFile::new(45, Some(vec![
+            &line1,
+            &line2
+        ]));
+        let mut recognizer = MockRecognizer::new();
+        let mut padder = MockPadder::new();
+        recognizer.add_line_recognize_call(&file, 0, &spec.record_specs, Some("record2".to_string()));
+        recognizer.add_line_recognize_call(&file, 1, &spec.record_specs, Some("record1".to_string()));
+        padder.add_unpad_call(
+            line1[0..3].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding_direction,
+            Ok("field1_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[4..8].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
+            Ok("field2_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[9..36].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding_direction,
+            Ok("field3_value".to_string())
+        );
+        padder.add_unpad_call(
+            line1[37..45].to_string(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field4".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record2".to_string()).unwrap().field_specs.get(&"field4".to_string()).unwrap().padding_direction,
+            Ok("field4_value".to_string())
+        );
+        padder.add_unpad_call(
+            line2[0..4].to_string(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field1".to_string()).unwrap().padding_direction,
+            Ok("field1_value2".to_string())
+        );
+        padder.add_unpad_call(
+            line2[4..9].to_string(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field2".to_string()).unwrap().padding_direction,
+            Ok("field2_value2".to_string())
+        );
+        padder.add_unpad_call(
+            line2[9..45].to_string(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding.clone(),
+            spec.record_specs.get(&"record1".to_string()).unwrap().field_specs.get(&"field3".to_string()).unwrap().padding_direction,
+            Ok("field3_value2".to_string())
+        );
+        let reader = FileReader::new_with_recognizer_and_un_padder(&spec, recognizer, padder);
+        let mut iterator = FileIterator::new(&reader, &file);
+        let mut data = HashMap::new();
+        data.insert("field1".to_string(), "field1_value".to_string());
+        data.insert("field2".to_string(), "field2_value".to_string());
+        data.insert("field3".to_string(), "field3_value".to_string());
+        data.insert("field4".to_string(), "field4_value".to_string());
+        assert_eq!(Some(data), iterator.next().map(|r| r.unwrap()));
+        let mut data = HashMap::new();
+        data.insert("field1".to_string(), "field1_value2".to_string());
+        data.insert("field2".to_string(), "field2_value2".to_string());
+        data.insert("field3".to_string(), "field3_value2".to_string());
+        assert_eq!(Some(data), iterator.next().map(|r| r.unwrap()));
+        assert!(iterator.next().is_none());
     }
 }
