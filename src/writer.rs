@@ -1,7 +1,6 @@
 use common::{File, MutableFile};
 use spec::{FileSpec, FieldSpec, DataRecordSpecRecognizer, LineRecordSpecRecognizer, NoneRecognizer, Padder, IdentityPadder};
 use std::collections::HashMap;
-use spec::RecordSpec;
 use std::iter::{Iterator, Extend};
 
 #[derive(Debug)]
@@ -31,7 +30,7 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
 
     pub fn set_line<'b, W: 'b + MutableFile>(&'a self, file: &'b mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
         let record_spec_name = try!(self.get_spec(spec_name, data, file, index));
-        let record_spec: &RecordSpec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
+        let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
 
         let mut defaults: HashMap<&String, &String> = record_spec.field_specs.iter()
             .filter(|&(_, field_spec)| field_spec.default.is_some())
