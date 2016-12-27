@@ -39,9 +39,8 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
         let record_spec: &RecordSpec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
 
         let mut defaults: HashMap<&String, &String> = record_spec.field_specs.iter()
-            .map(|(name, field_spec)| (name, field_spec.default.as_ref()))
-            .filter(|&(_, default)| default.is_some())
-            .map(|(name, default)| (name, default.unwrap()))
+            .filter(|&(_, field_spec)| field_spec.default.is_some())
+            .map(|(name, field_spec)| (name, field_spec.default.as_ref().unwrap()))
             .collect()
         ;
         defaults.extend(data);
