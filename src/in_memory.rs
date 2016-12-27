@@ -53,6 +53,11 @@ impl File {
             line_separator: line_separator
         }
     }
+
+    pub fn insert_line(&mut self, index: usize) -> Result<usize>{
+        self.lines.insert(index, repeat(" ").take(self.width).collect::<String>());
+        Ok(index)
+    }
 }
 
 impl FileTrait for File {
@@ -97,11 +102,6 @@ impl MutableFile for File {
     fn remove_line(&mut self) -> Result<usize> {
         self.lines.pop();
         Ok(self.lines.len())
-    }
-
-    fn insert_line(&mut self, index: usize) -> Result<usize>{
-        self.lines.insert(index, repeat(" ").take(self.width).collect::<String>());
-        Ok(index)
     }
 }
 

@@ -212,7 +212,7 @@ mod test {
         let spec = test_spec();
         let line1 = repeat("line1").take(9).collect();
         let line2 = repeat("line2").take(9).collect();
-        let mut file = MockFile::new(45, Some(vec![
+        let file = MockFile::new(45, Some(vec![
             &line1,
             &line2
         ]));

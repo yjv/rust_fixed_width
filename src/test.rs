@@ -30,7 +30,7 @@ impl MockFile {
     }
 
     pub fn add_read_error(&mut self, index: usize) -> &mut Self {
-        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() {
+        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() && self.inner_file.len() >= index {
             let _ = self.inner_file.insert_line(index);
         }
         self.read_errors.insert(index, ());
@@ -38,7 +38,7 @@ impl MockFile {
     }
 
     pub fn add_write_error(&mut self, index: usize) -> &mut Self {
-        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() {
+        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() && self.inner_file.len() >= index {
             let _ = self.inner_file.insert_line(index);
         }
         self.write_errors.insert(index, ());
@@ -95,15 +95,17 @@ impl MutableFile for MockFile {
     }
 
     fn add_line(&mut self) -> Result<usize, Self::Error> {
-        Ok(self.inner_file.add_line().unwrap())
+        let mut index = self.inner_file.add_line().unwrap();
+
+        while self.write_errors.get(&index).is_some() || self.read_errors.get(&index).is_some() {
+            index = self.inner_file.add_line().unwrap();
+        }
+
+        Ok(index)
     }
 
     fn remove_line(&mut self) -> Result<usize, Self::Error> {
         Ok(self.inner_file.remove_line().unwrap())
-    }
-
-    fn insert_line(&mut self, index: usize) -> Result<usize, Self::Error> {
-        Ok(self.inner_file.insert_line(index).unwrap())
     }
 }
 
@@ -125,8 +127,8 @@ impl<'a, T: 'a + File> MockRecognizer<'a, T> {
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: &'a HashMap<String, String>, record_spec: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
-        self.data_recognize_calls.push((data, record_spec, return_value));
+    pub fn add_data_recognize_call(&mut self, data: &'a HashMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
+        self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
 }
@@ -149,7 +151,7 @@ impl<'a, T: 'a + File> LineRecordSpecRecognizer for MockRecognizer<'a, T> {
 impl<'a, T: 'a + File> DataRecordSpecRecognizer for MockRecognizer<'a, T> {
     fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
-            if *expected_data as *const HashMap<String, String> == data as *const HashMap<String, String>
+            if *expected_data == data
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
                     return return_value.clone();

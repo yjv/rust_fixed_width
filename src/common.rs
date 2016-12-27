@@ -13,7 +13,6 @@ pub trait MutableFile: File {
     fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
     fn remove_line(&mut self) -> Result<usize, Self::Error>;
-    fn insert_line(&mut self, index: usize) -> Result<usize, Self::Error>;
 }
 
 pub trait FileError: Debug {
