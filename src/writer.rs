@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::iter::{Iterator, Extend};
 
 #[derive(Debug)]
-pub enum Error<T: File, U: Padder> {
+pub enum Error<T: MutableFile, U: Padder> {
     RecordSpecNameRequired,
     FailedToSetData(T::Error),
     RecordSpecNotFound(String),
@@ -60,7 +60,7 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
     fn get_spec<W: MutableFile>(&self, spec_name: Option<String>, data: &HashMap<String, String>, file: &mut W, index: usize) -> Result<String, Error<W, V>> {
         spec_name
             .or_else(|| self.data_recognizer.recognize_for_data(data, &self.spec.record_specs))
-            .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
+//            .or_else(|| self.line_recognizer.recognize_for_line(file, index, &self.spec.record_specs))
             .ok_or(Error::RecordSpecNameRequired)
     }
 

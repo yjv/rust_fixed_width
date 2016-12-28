@@ -76,6 +76,7 @@ impl FileTrait for File {
 }
 
 impl MutableFile for File {
+    type Error = Error;
     fn set(&mut self, index: usize, column_index: usize, string: &String) -> Result<&mut Self> {
         {
             let line = try!(self.lines.get_mut(index).ok_or(Error::InvalidIndex(index)));

@@ -1,5 +1,8 @@
 use std::ops::Range;
 use std::fmt::Debug;
+use spec::FileSpec;
+use std::io::{Read, Seek, SeekFrom, Error as IoError, Write, ErrorKind};
+use std::cmp::min;
 
 pub trait File {
     type Error: FileError;
@@ -8,7 +11,8 @@ pub trait File {
     fn len(&self) -> usize;
 }
 
-pub trait MutableFile: File {
+pub trait MutableFile {
+    type Error: FileError;
     fn set(&mut self, line_index: usize, column_index: usize, string: &String) -> Result<&mut Self, Self::Error>;
     fn clear(&mut self, line_index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error>;
     fn add_line(&mut self) -> Result<usize, Self::Error>;
@@ -61,6 +65,83 @@ impl<'a, T: 'a + File> Iterator for FileIterator<'a, T> {
             Some(self.file.get(self.position - 1, 0..self.file.width()))
         }
     }
+}
+
+pub struct Reader<T: Read> {
+    reader: T,
+    line_separator: String,
+    line_length: usize,
+    position: Position
+}
+
+pub enum Error {
+    Io(IoError),
+    NotEnoughRead(usize),
+    NotEnoughWritten(usize)
+}
+
+impl From<IoError> for Error {
+    fn from(e: IoError) -> Self {
+        Error::Io(e)
+    }
+}
+
+//type Result<T> = ::std::result::Result<T, Error>;
+
+pub struct Position {
+    pub position: usize,
+    pub line: usize,
+    pub column: usize
+}
+
+impl Position {
+    pub fn recalculate(&mut self, line_length: usize) {
+        if self.position == 0 {
+            self.line = 0;
+            self.column = 0;
+            return;
+        }
+
+        self.line = self.position / line_length;
+        self.line = self.position % line_length;
+    }
+}
+
+impl<T: Read> Read for Reader<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        let mut total_amount = 0;
+        let length = buf.len();
+
+        while total_amount < length {
+            let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
+            let amount = match self.reader.read(&mut buf[total_amount..total_amount + remaining_amount]) {
+                Ok(0) => return Ok(total_amount),
+                Ok(len) => len,
+                Err(e) => return Err(e),
+            };
+
+            total_amount += amount;
+            self.position.position += amount;
+            self.position.recalculate(self.line_length + self.line_separator.len());
+            if self.position.column == self.line_length {
+                let mut line_separator = String::new();
+                self.position.position += self.reader.by_ref().take(self.line_separator.len() as u64).read_to_string(&mut line_separator)?;
+                if line_separator.len() != 0 && line_separator != self.line_separator {
+                    return Err(IoError::new(ErrorKind::Other, "dsaadsasd"));
+                }
+                self.position.recalculate(self.line_length + self.line_separator.len());
+            }
+        }
+
+        Ok(total_amount)
+    }
+}
+
+struct Writer<T: Write> {
+    writer: T,
+    line_separator: String,
+    line_length: usize,
+    position: Position
 }
 
 #[cfg(test)]

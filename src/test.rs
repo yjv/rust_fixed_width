@@ -76,6 +76,7 @@ impl File for MockFile {
 }
 
 impl MutableFile for MockFile {
+    type Error = ();
     fn set(&mut self, index: usize, column_index: usize, string: &String) -> Result<&mut Self, Self::Error> {
         if let Some(e) = self.write_errors.get(&index) {
             return Err(e.clone());
