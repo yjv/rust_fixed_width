@@ -20,14 +20,6 @@ pub struct FileWriter<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecogniz
 }
 
 impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> FileWriter<'a, T, U, V> {
-    pub fn new(spec: &'a FileSpec) -> FileWriter<'a, NoneRecognizer, NoneRecognizer, IdentityPadder> {
-        FileWriter { spec: spec, data_recognizer: NoneRecognizer, line_recognizer: NoneRecognizer, padder: IdentityPadder }
-    }
-
-    pub fn new_with_recognizers_and_padder(spec: &'a FileSpec, data_recognizer: T, line_recognizer: U, padder: V) -> Self {
-        FileWriter { spec: spec, data_recognizer: data_recognizer, line_recognizer: line_recognizer, padder: padder }
-    }
-
     pub fn set_line<'b, W: 'b + MutableFile>(&'a self, file: &'b mut W, index: usize, data: &HashMap<String, String>, spec_name: Option<String>) -> Result<&'a Self, Error<W, V>> {
         let record_spec_name = try!(self.get_spec(spec_name, data, file, index));
         let record_spec = try!(self.spec.record_specs.get(&record_spec_name).ok_or_else(|| Error::RecordSpecNotFound(record_spec_name.clone())));
@@ -80,13 +72,71 @@ impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> Fi
         ).map_err(Error::FailedToSetData)
     }
 }
-//
-//pub struct FileWriterBuilder {
-//    spec: Option<&'a FileSpec>,
-//    data_recognizer: Option<U>,
-//    line_recognizer: Option<V>,
-//    padder: Option<W>
-//}
+
+pub struct FileWriterBuilder<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> {
+    spec: Option<&'a FileSpec>,
+    data_recognizer: T,
+    line_recognizer: U,
+    padder: V
+}
+
+impl<'a> FileWriterBuilder<'a, NoneRecognizer, NoneRecognizer, IdentityPadder> {
+    pub fn new() -> Self {
+        FileWriterBuilder {
+            spec: None,
+            data_recognizer: NoneRecognizer,
+            line_recognizer: NoneRecognizer,
+            padder: IdentityPadder
+        }
+    }
+}
+
+impl<'a, T: DataRecordSpecRecognizer, U: LineRecordSpecRecognizer, V: Padder> FileWriterBuilder<'a, T, U, V> {
+    pub fn with_spec(self, spec: &'a FileSpec) -> Self {
+        FileWriterBuilder {
+            spec: Some(spec),
+            data_recognizer: self.data_recognizer,
+            line_recognizer: self.line_recognizer,
+            padder: self.padder
+        }
+    }
+
+    pub fn with_data_recognizer<W: DataRecordSpecRecognizer>(self, recognizer: W) -> FileWriterBuilder<'a, W, U, V> {
+        FileWriterBuilder {
+            spec: self.spec,
+            data_recognizer: recognizer,
+            line_recognizer: self.line_recognizer,
+            padder: self.padder
+        }
+    }
+
+    pub fn with_line_recognizer<W: LineRecordSpecRecognizer>(self, recognizer: W) -> FileWriterBuilder<'a, T, W, V> {
+        FileWriterBuilder {
+            spec: self.spec,
+            data_recognizer: self.data_recognizer,
+            line_recognizer: recognizer,
+            padder: self.padder
+        }
+    }
+
+    pub fn with_padder<W: Padder>(self, padder: W) -> FileWriterBuilder<'a, T, U, W> {
+        FileWriterBuilder {
+            spec: self.spec,
+            data_recognizer: self.data_recognizer,
+            line_recognizer: self.line_recognizer,
+            padder: padder
+        }
+    }
+
+    pub fn build(self) -> FileWriter<'a, T, U, V> {
+        FileWriter {
+            spec: self.spec.expect("spec must be set in order to build"),
+            data_recognizer: self.data_recognizer,
+            line_recognizer: self.line_recognizer,
+            padder: self.padder
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -203,7 +253,13 @@ mod test {
             Ok("yay2".to_string())
         );
         let _ = file.add_line();
-        let writer = FileWriter::new_with_recognizers_and_padder(&spec, recognizer1, recognizer2, padder);
+        let writer = FileWriterBuilder::new()
+            .with_spec(&spec)
+            .with_data_recognizer(recognizer1)
+            .with_line_recognizer(&recognizer2)
+            .with_padder(padder)
+            .build()
+        ;
         assert!(writer.set_line(&mut file, 0, &data1, None).is_ok());
         assert_eq!("lin 1lin 1line1line1line1line1line1l ne1line1".to_string(), file.get(0, 0..45).unwrap());
         assert!(writer.set_field(&mut file, 0, "field2".to_string(), "field1_value".to_string(), None).is_ok());
