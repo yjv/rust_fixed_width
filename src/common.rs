@@ -1,8 +1,9 @@
 use std::ops::Range;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Error as FmtError, Formatter};
 use spec::FileSpec;
 use std::io::{Read, Seek, SeekFrom, Error as IoError, Write, ErrorKind};
 use std::cmp::min;
+use std::error::Error as ErrorTrait;
 
 pub trait File {
     type Error: FileError;
@@ -67,27 +68,33 @@ impl<'a, T: 'a + File> Iterator for FileIterator<'a, T> {
     }
 }
 
-pub struct Reader<T: Read> {
-    reader: T,
-    line_separator: String,
-    line_length: usize,
-    position: Position
-}
-
+#[derive(Debug)]
 pub enum Error {
-    Io(IoError),
-    NotEnoughRead(usize),
-    NotEnoughWritten(usize)
+    StringDoesntMatchLineSeparator(String, String)
 }
 
-impl From<IoError> for Error {
-    fn from(e: IoError) -> Self {
-        Error::Io(e)
+impl ErrorTrait for Error {
+    fn description(&self) -> &str {
+        match self {
+            &Error::StringDoesntMatchLineSeparator(_, _) => "line separator was not the one expected"
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            &Error::StringDoesntMatchLineSeparator(
+                ref expected_line_separator,
+                ref actual_line_separator
+            ) => write!(f, "StringDoesntMatchLineSeparator: line separator was expected to be '{}' was actually '{}'", expected_line_separator, actual_line_separator)
+        }
     }
 }
 
 //type Result<T> = ::std::result::Result<T, Error>;
 
+#[derive(Debug)]
 pub struct Position {
     pub position: usize,
     pub line: usize,
@@ -103,8 +110,15 @@ impl Position {
         }
 
         self.line = self.position / line_length;
-        self.line = self.position % line_length;
+        self.column = self.position % line_length;
     }
+}
+
+pub struct Reader<T: Read> {
+    reader: T,
+    line_separator: String,
+    line_length: usize,
+    position: Position
 }
 
 impl<T: Read> Read for Reader<T> {
@@ -127,7 +141,10 @@ impl<T: Read> Read for Reader<T> {
                 let mut line_separator = String::new();
                 self.position.position += self.reader.by_ref().take(self.line_separator.len() as u64).read_to_string(&mut line_separator)?;
                 if line_separator.len() != 0 && line_separator != self.line_separator {
-                    return Err(IoError::new(ErrorKind::Other, "dsaadsasd"));
+                    return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
+                        self.line_separator.clone(),
+                        line_separator
+                    )));
                 }
                 self.position.recalculate(self.line_length + self.line_separator.len());
             }
@@ -137,11 +154,41 @@ impl<T: Read> Read for Reader<T> {
     }
 }
 
-struct Writer<T: Write> {
+pub struct Writer<T: Write> {
     writer: T,
     line_separator: String,
     line_length: usize,
     position: Position
+}
+
+impl<T: Write> Write for Writer<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+        let mut total_amount = 0;
+        let length = buf.len();
+
+        while total_amount < length {
+            let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
+            let amount = match self.writer.write(&buf[total_amount..total_amount + remaining_amount]) {
+                Ok(0) => return Ok(total_amount),
+                Ok(len) => len,
+                Err(e) => return Err(e),
+            };
+
+            total_amount += amount;
+            self.position.position += amount;
+            self.position.recalculate(self.line_length + self.line_separator.len());
+            if self.position.column == self.line_length {
+                self.position.position += self.writer.write(self.line_separator.as_bytes())?;
+                self.position.recalculate(self.line_length + self.line_separator.len());
+            }
+        }
+
+        Ok(total_amount)
+    }
+
+    fn flush(&mut self) -> Result<(), IoError> {
+        self.writer.flush()
+    }
 }
 
 #[cfg(test)]
