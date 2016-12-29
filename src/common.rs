@@ -70,13 +70,15 @@ impl<'a, T: 'a + File> Iterator for FileIterator<'a, T> {
 
 #[derive(Debug)]
 pub enum Error {
-    StringDoesntMatchLineSeparator(String, String)
+    StringDoesntMatchLineSeparator(String, String),
+    BufferOverflowsEndOfLine(usize, usize)
 }
 
 impl ErrorTrait for Error {
     fn description(&self) -> &str {
         match self {
-            &Error::StringDoesntMatchLineSeparator(_, _) => "line separator was not the one expected"
+            &Error::StringDoesntMatchLineSeparator(_, _) => "line separator was not the one expected",
+            &Error::BufferOverflowsEndOfLine(_, _) => "the buffer given is larger than what remains until the end of the line"
         }
     }
 }
@@ -87,7 +89,11 @@ impl Display for Error {
             &Error::StringDoesntMatchLineSeparator(
                 ref expected_line_separator,
                 ref actual_line_separator
-            ) => write!(f, "StringDoesntMatchLineSeparator: line separator was expected to be '{}' was actually '{}'", expected_line_separator, actual_line_separator)
+            ) => write!(f, "StringDoesntMatchLineSeparator: line separator was expected to be '{}' was actually '{}'", expected_line_separator, actual_line_separator),
+            &Error::BufferOverflowsEndOfLine(
+                ref buffer_length,
+                ref bytes_to_end_of_line
+            ) => write!(f, "BufferOverflowsEndOfLine: the buffer length {} is more than the {} bytes which are left until the end of the line", buffer_length, bytes_to_end_of_line),
         }
     }
 }
@@ -118,13 +124,18 @@ pub struct Reader<T: Read> {
     reader: T,
     line_separator: String,
     line_length: usize,
-    position: Position
+    position: Position,
+    end_of_line_validation: bool
 }
 
 impl<T: Read> Read for Reader<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         let mut total_amount = 0;
         let length = buf.len();
+
+        if self.end_of_line_validation && length > self.line_length - self.position.column {
+            return IoError(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column));
+        }
 
         while total_amount < length {
             let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
@@ -158,13 +169,18 @@ pub struct Writer<T: Write> {
     writer: T,
     line_separator: String,
     line_length: usize,
-    position: Position
+    position: Position,
+    end_of_line_validation: bool
 }
 
 impl<T: Write> Write for Writer<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let mut total_amount = 0;
         let length = buf.len();
+
+        if self.end_of_line_validation && length > self.line_length - self.position.column {
+            return IoError(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column));
+        }
 
         while total_amount < length {
             let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
