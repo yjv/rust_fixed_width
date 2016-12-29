@@ -134,7 +134,7 @@ impl<T: Read> Read for Reader<T> {
         let length = buf.len();
 
         if self.end_of_line_validation && length > self.line_length - self.position.column {
-            return IoError(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column));
+            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column)));
         }
 
         while total_amount < length {
@@ -179,7 +179,7 @@ impl<T: Write> Write for Writer<T> {
         let length = buf.len();
 
         if self.end_of_line_validation && length > self.line_length - self.position.column {
-            return IoError(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column));
+            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column)));
         }
 
         while total_amount < length {
