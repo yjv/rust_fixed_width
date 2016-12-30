@@ -10,7 +10,7 @@ pub enum Error<T: UnPadder> {
     RecordSpecNameRequired,
     UnPaddingFailed(T::Error),
     IoError(IoError),
-    NotEnoughLeftInReader(usize, usize)
+    NotEnoughRead(usize, usize)
 }
 
 impl<T: UnPadder> From<IoError> for Error<T> {
@@ -19,13 +19,12 @@ impl<T: UnPadder> From<IoError> for Error<T> {
     }
 }
 
-pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer> {
+pub struct Reader<T: UnPadder> {
     un_padder: T,
-    recognizer: U,
     spec: FileSpec
 }
 
-impl<T: UnPadder, U: LineRecordSpecRecognizer> Reader<T, U> {
+impl<T: UnPadder> Reader<T> {
     pub fn read_field<'a, V: 'a + Read>(&self, reader: &'a mut V, record_name: String, name: String) -> Result<String, Error<T>> {
         let field_spec = self.spec.record_specs
             .get(&record_name)
@@ -36,7 +35,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer> Reader<T, U> {
         Ok(self._read_field(reader, field_spec)?)
     }
 
-    pub fn read_line<'a, V: 'a + Read>(&self, reader: &'a mut V, record_name: String) -> Result<HashMap<String, String>, Error<T>> {
+    pub fn read_record<'a, V: 'a + Read>(&self, reader: &'a mut V, record_name: String) -> Result<HashMap<String, String>, Error<T>> {
         let record_spec = self.spec.record_specs
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
@@ -54,6 +53,9 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer> Reader<T, U> {
         let data = {
             let mut string = String::new();
             let amount = reader.by_ref().take(length as u64).read_to_string(&mut string)?;
+            if amount != length {
+                return Err(Error::NotEnoughRead(length, amount))
+            }
             string
         };
         Ok(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?)

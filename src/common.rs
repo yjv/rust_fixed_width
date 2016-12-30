@@ -121,11 +121,18 @@ impl Position {
 }
 
 pub struct Reader<T: Read> {
-    reader: T,
-    line_separator: String,
-    line_length: usize,
+    inner: T,
+    file_spec: FileSpec,
     position: Position,
     end_of_line_validation: bool
+}
+
+impl <T: Read> Reader<T> {
+    pub fn get_ref(&self) -> &T { &self.inner }
+
+    pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
+
+    pub fn into_inner(mut self) -> T { self.inner }
 }
 
 impl<T: Read> Read for Reader<T> {
@@ -133,13 +140,13 @@ impl<T: Read> Read for Reader<T> {
         let mut total_amount = 0;
         let length = buf.len();
 
-        if self.end_of_line_validation && length > self.line_length - self.position.column {
-            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_length - self.position.column)));
+        if self.end_of_line_validation && length > self.file_spec.line_length - self.position.column {
+            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.file_spec.line_length - self.position.column)));
         }
 
         while total_amount < length {
-            let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
-            let amount = match self.reader.read(&mut buf[total_amount..total_amount + remaining_amount]) {
+            let remaining_amount = min(self.file_spec.line_length - self.position.column, buf.len() - total_amount);
+            let amount = match self.inner.read(&mut buf[total_amount..total_amount + remaining_amount]) {
                 Ok(0) => return Ok(total_amount),
                 Ok(len) => len,
                 Err(e) => return Err(e),
@@ -147,17 +154,17 @@ impl<T: Read> Read for Reader<T> {
 
             total_amount += amount;
             self.position.position += amount;
-            self.position.recalculate(self.line_length + self.line_separator.len());
-            if self.position.column == self.line_length {
+            self.position.recalculate(self.file_spec.line_length + self.file_spec.line_separator.len());
+            if self.position.column == self.file_spec.line_length {
                 let mut line_separator = String::new();
-                self.position.position += self.reader.by_ref().take(self.line_separator.len() as u64).read_to_string(&mut line_separator)?;
-                if line_separator.len() != 0 && line_separator != self.line_separator {
+                self.position.position += self.inner.by_ref().take(self.file_spec.line_separator.len() as u64).read_to_string(&mut line_separator)?;
+                if line_separator.len() != 0 && line_separator != self.file_spec.line_separator {
                     return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
-                        self.line_separator.clone(),
+                        self.file_spec.line_separator.clone(),
                         line_separator
                     )));
                 }
-                self.position.recalculate(self.line_length + self.line_separator.len());
+                self.position.recalculate(self.file_spec.line_length + self.file_spec.line_separator.len());
             }
         }
 
@@ -166,11 +173,19 @@ impl<T: Read> Read for Reader<T> {
 }
 
 pub struct Writer<T: Write> {
-    writer: T,
+    inner: T,
     line_separator: String,
     line_length: usize,
     position: Position,
     end_of_line_validation: bool
+}
+
+impl <T: Write> Writer<T> {
+    pub fn get_ref(&self) -> &T { &self.inner }
+
+    pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
+
+    pub fn into_inner(mut self) -> T { self.inner }
 }
 
 impl<T: Write> Write for Writer<T> {
@@ -184,7 +199,7 @@ impl<T: Write> Write for Writer<T> {
 
         while total_amount < length {
             let remaining_amount = min(self.line_length - self.position.column, buf.len() - total_amount);
-            let amount = match self.writer.write(&buf[total_amount..total_amount + remaining_amount]) {
+            let amount = match self.inner.write(&buf[total_amount..total_amount + remaining_amount]) {
                 Ok(0) => return Ok(total_amount),
                 Ok(len) => len,
                 Err(e) => return Err(e),
@@ -194,7 +209,7 @@ impl<T: Write> Write for Writer<T> {
             self.position.position += amount;
             self.position.recalculate(self.line_length + self.line_separator.len());
             if self.position.column == self.line_length {
-                self.position.position += self.writer.write(self.line_separator.as_bytes())?;
+                self.position.position += self.inner.write(self.line_separator.as_bytes())?;
                 self.position.recalculate(self.line_length + self.line_separator.len());
             }
         }
@@ -203,7 +218,7 @@ impl<T: Write> Write for Writer<T> {
     }
 
     fn flush(&mut self) -> Result<(), IoError> {
-        self.writer.flush()
+        self.inner.flush()
     }
 }
 

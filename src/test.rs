@@ -221,7 +221,7 @@ impl UnPadder for MockPadder {
 
 pub fn test_spec() -> FileSpec {
     FileSpecBuilder::new()
-        .with_width(10)
+        .with_line_length(10)
         .with_record(
             "record1",
             RecordSpecBuilder::new()
