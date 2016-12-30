@@ -2,7 +2,7 @@ use super::common::{File, MutableFile, FileError};
 use super::in_memory::File as InMemoryFile;
 use std::ops::Range;
 use super::spec::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 #[derive(Debug)]
 pub struct MockFile {
@@ -190,9 +190,9 @@ impl MockPadder {
 
 impl Padder for MockPadder {
     type Error = ();
-    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
-            if expected_data == data
+            if *expected_data == data
                 && expected_length == length
                 && expected_padding == padding
                 && expected_direction == direction {
@@ -206,9 +206,9 @@ impl Padder for MockPadder {
 
 impl UnPadder for MockPadder {
     type Error = ();
-    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
-            if expected_data == data
+            if *expected_data == data
                 && expected_padding == padding
                 && expected_direction == direction {
                 return return_value.clone();
@@ -282,7 +282,7 @@ pub fn test_spec() -> FileSpec {
                 )
         )
         .with_record("record3".to_string(), RecordSpec {
-            field_specs: HashMap::new()
+            field_specs: BTreeMap::new()
         })
         .build()
 }

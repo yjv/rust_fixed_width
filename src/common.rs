@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::fmt::{Debug, Display, Error as FmtError, Formatter};
 use spec::FileSpec;
-use std::io::{Read, Seek, SeekFrom, Error as IoError, Write, ErrorKind};
+use std::io::{Read, Error as IoError, Write, ErrorKind};
 use std::cmp::min;
 use std::error::Error as ErrorTrait;
 
@@ -132,7 +132,7 @@ impl <T: Read> Reader<T> {
 
     pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
 
-    pub fn into_inner(mut self) -> T { self.inner }
+    pub fn into_inner(self) -> T { self.inner }
 }
 
 impl<T: Read> Read for Reader<T> {
@@ -185,7 +185,7 @@ impl <T: Write> Writer<T> {
 
     pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
 
-    pub fn into_inner(mut self) -> T { self.inner }
+    pub fn into_inner(self) -> T { self.inner }
 }
 
 impl<T: Write> Write for Writer<T> {

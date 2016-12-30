@@ -1,6 +1,6 @@
 extern crate pad;
 use self::pad::{PadStr, Alignment};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use common::File;
 use std::ops::Range;
 use std::fmt::Debug;
@@ -26,7 +26,7 @@ impl<'a> SpecBuilder<&'a FileSpec> for &'a FileSpec {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct RecordSpec {
-    pub field_specs: HashMap<String, FieldSpec>
+    pub field_specs: BTreeMap<String, FieldSpec>
 }
 
 impl SpecBuilder<RecordSpec> for RecordSpec {
@@ -57,24 +57,24 @@ pub enum PaddingDirection {
 
 pub trait Padder {
     type Error: Debug;
-    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
 }
 
 impl<'a, T> Padder for &'a T where T: 'a + Padder {
     type Error = T::Error;
-    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         (**self).pad(data, length, padding, direction)
     }
 }
 
 pub trait UnPadder {
     type Error: Debug;
-    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error>;
 }
 
 impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
     type Error = T::Error;
-    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         (**self).unpad(data, padding, direction)
     }
 }
@@ -98,10 +98,10 @@ impl DefaultPadder {
 
 impl Padder for DefaultPadder {
     type Error = PaddingError;
-    fn pad(&self, data: &String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         Ok(data.pad(
             length,
-            try!(Self::get_char(padding)),
+            Self::get_char(padding)?,
             match direction {
                 PaddingDirection::Left => Alignment::Right,
                 PaddingDirection::Right => Alignment::Left,
@@ -113,10 +113,10 @@ impl Padder for DefaultPadder {
 
 impl UnPadder for DefaultPadder {
     type Error = PaddingError;
-    fn unpad(&self, data: &String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
         Ok(match direction {
-            PaddingDirection::Left => data.trim_left_matches(try!(Self::get_char(padding))).to_string(),
-            PaddingDirection::Right => data.trim_right_matches(try!(Self::get_char(padding))).to_string(),
+            PaddingDirection::Left => data.trim_left_matches(Self::get_char(padding)?).to_string(),
+            PaddingDirection::Right => data.trim_right_matches(Self::get_char(padding)?).to_string(),
         })
     }
 }
@@ -125,15 +125,15 @@ pub struct IdentityPadder;
 
 impl Padder for IdentityPadder {
     type Error = ();
-    fn pad(&self, data: &String, _: usize, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
-        Ok(data.clone())
+    fn pad(&self, data: String, _: usize, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data)
     }
 }
 
 impl UnPadder for IdentityPadder {
     type Error = ();
-    fn unpad(&self, data: &String, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
-        Ok(data.clone())
+    fn unpad(&self, data: String, _: &String, _: PaddingDirection) -> Result<String, Self::Error> {
+        Ok(data)
     }
 }
 
@@ -273,13 +273,13 @@ impl SpecBuilder<FileSpec> for FileSpecBuilder {
 }
 
 pub struct RecordSpecBuilder {
-    field_specs: HashMap<String, FieldSpec>,
+    field_specs: BTreeMap<String, FieldSpec>,
 }
 
 impl RecordSpecBuilder {
     pub fn new() -> Self {
         RecordSpecBuilder {
-            field_specs: HashMap::new()
+            field_specs: BTreeMap::new()
         }
     }
 
@@ -384,7 +384,7 @@ impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, BTreeMap};
     use super::super::test::{MockFile, test_spec};
 
     #[test]
@@ -545,7 +545,7 @@ mod test {
     fn build() {
         let spec = test_spec();
         let mut record_specs = HashMap::new();
-        let mut field_specs = HashMap::new();
+        let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
             range: (0..4),
             padding: "dsasd".to_string(),
@@ -567,7 +567,7 @@ mod test {
         record_specs.insert("record1".to_string(), RecordSpec {
             field_specs: field_specs
         });
-        let mut field_specs = HashMap::new();
+        let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
             range: (0..3),
             padding: "dsasd".to_string(),
@@ -596,7 +596,7 @@ mod test {
             field_specs: field_specs
         });
         record_specs.insert("record3".to_string(), RecordSpec {
-            field_specs: HashMap::new()
+            field_specs: BTreeMap::new()
         });
         assert_eq!(FileSpec {
             line_length: 10,
@@ -609,32 +609,32 @@ mod test {
     fn default_padder() {
         let padder = DefaultPadder;
         let data = "qwer".to_string();
-        assert_eq!(Ok("qwer333333".to_string()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok("qwer333333".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
         let data = "qwer".to_string();
-        assert_eq!(Ok("333333qwer".to_string()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left));
-        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.pad(&data, 10, &"33".to_string(), PaddingDirection::Left));
+        assert_eq!(Ok("333333qwer".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left));
         let data = "qwer333333".to_string();
-        assert_eq!(Ok("qwer".to_string()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Right));
         let data = "333333qwer".to_string();
-        assert_eq!(Ok("qwer".to_string()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left));
-        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.unpad(&data, &"33".to_string(), PaddingDirection::Left));
+        assert_eq!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Err(PaddingError::PaddingLongerThanOne), padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left));
     }
 
     #[test]
     fn identity_padder() {
         let padder = IdentityPadder;
         let data = "qwer".to_string();
-        assert_eq!(Ok(data.clone()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Right));
-        assert_eq!(Ok(data.clone()), padder.pad(&data, 10, &"3".to_string(), PaddingDirection::Left));
-        assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Right));
-        assert_eq!(Ok(data.clone()), padder.unpad(&data, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Ok(data.clone()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Left));
+        assert_eq!(Ok(data.clone()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Left));
     }
 
     #[test]
     fn padder_reference() {
         let padder = IdentityPadder;
         let data = "qwer".to_string();
-        assert_eq!(Ok(data.clone()), Padder::pad(&&padder, &data, 10, &"3".to_string(), PaddingDirection::Right));
-        assert_eq!(Ok(data.clone()), UnPadder::unpad(&&padder, &data, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), Padder::pad(&&padder, data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
+        assert_eq!(Ok(data.clone()), UnPadder::unpad(&&padder, data.clone(), &"3".to_string(), PaddingDirection::Right));
     }
 }

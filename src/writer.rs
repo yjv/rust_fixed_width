@@ -1,6 +1,5 @@
 use spec::{FileSpec, FieldSpec, Padder};
 use std::collections::HashMap;
-use std::iter::{Iterator, Extend};
 use std::io::{Write, Error as IoError};
 
 #[derive(Debug)]
@@ -50,12 +49,8 @@ impl<T: Padder> Writer<T> {
 
     fn _write_field<'a, V: 'a + Write>(&self, writer: &'a mut V, field_spec: &FieldSpec, value: String) -> Result<(), Error<T>> {
         let length = field_spec.range.end - field_spec.range.start;
-        let value = self.padder.pad(&value, length, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::PaddingFailed(e))?;
-        let amount = writer.write(value.as_bytes())?;
-        if amount != length {
-            return Err(Error::NotEnoughWritten(length, amount))
-        }
-        Ok(())
+        let value = self.padder.pad(value, length, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::PaddingFailed(e))?;
+        Ok(writer.write_all(value.as_bytes())?)
     }
 }
 #[cfg(test)]

@@ -1,7 +1,6 @@
-use common::File;
-use spec::{FileSpec, FieldSpec, LineRecordSpecRecognizer, NoneRecognizer, UnPadder, IdentityPadder};
+use spec::{FileSpec, FieldSpec, UnPadder};
 use std::collections::HashMap;
-use std::io::{Read, Write, Error as IoError};
+use std::io::{Read, Error as IoError};
 
 #[derive(Debug)]
 pub enum Error<T: UnPadder> {
@@ -58,7 +57,7 @@ impl<T: UnPadder> Reader<T> {
             }
             string
         };
-        Ok(self.un_padder.unpad(&data, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?)
+        Ok(self.un_padder.unpad(data, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?)
     }
 }
 
