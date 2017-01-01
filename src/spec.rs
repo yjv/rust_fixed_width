@@ -250,10 +250,10 @@ impl FileSpecBuilder {
         }
     }
 
-    pub fn with_line_separator(self, line_separator: String) -> Self {
+    pub fn with_line_separator<T: Into<String>>(self, line_separator: T) -> Self {
         FileSpecBuilder {
             line_length: self.line_length,
-            line_separator: Some(line_separator),
+            line_separator: Some(line_separator.into()),
             record_specs: self.record_specs
         }
     }
@@ -280,7 +280,7 @@ impl RecordSpecBuilder {
         }
     }
 
-    pub fn with_field<U: Into<String>, V: SpecBuilder<FieldSpec>>(mut self, name: U, field: V) -> Self {
+    pub fn with_field<T: Into<String>, U: SpecBuilder<FieldSpec>>(mut self, name: T, field: U) -> Self {
         self.field_specs.insert(name.into(), field.build());
         self
     }
@@ -348,7 +348,7 @@ impl FieldSpecBuilder {
         }
     }
 
-    pub fn with_padding<U: Into<String>>(self, padding: U) -> Self {
+    pub fn with_padding<T: Into<String>>(self, padding: T) -> Self {
         FieldSpecBuilder {
             range: self.range,
             padding_direction: self.padding_direction,
@@ -357,7 +357,7 @@ impl FieldSpecBuilder {
         }
     }
 
-    pub fn with_default<U: Into<String>>(self, default: U) -> Self {
+    pub fn with_default<T: Into<String>>(self, default: T) -> Self {
         FieldSpecBuilder {
             range: self.range,
             padding_direction: self.padding_direction,
@@ -585,8 +585,8 @@ mod test {
             field_specs: BTreeMap::new()
         });
         assert_eq!(FileSpec {
-            line_length: 10,
-            line_separator: "".to_string(),
+            line_length: 45,
+            line_separator: "\n".to_string(),
             record_specs: record_specs
         }, spec);
     }

@@ -1,5 +1,5 @@
 use std::fmt::{Display, Error as FmtError, Formatter};
-use spec::FileSpec;
+use spec::{FileSpec, SpecBuilder};
 use std::io::{Read, Error as IoError, Write, Seek, SeekFrom, ErrorKind};
 use std::cmp::min;
 use std::error::Error as ErrorTrait;
@@ -126,16 +126,16 @@ impl<'a, T: Read> Read for Handler<'a, T> {
     }
 }
 
-impl <'a, T: Read> Handler<'a, T> {
+impl<'a, T: Read> Handler<'a, T> {
     fn absorb_line_separator(&mut self) -> Result<(), IoError> {
         if self.position.column >= self.file_spec.line_length {
             let mut line_separator = String::new();
             let read_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
             self.position = self.position.add(self.inner.by_ref().take(read_length as u64).read_to_string(&mut line_separator)?);
             let check_range = self.file_spec.line_separator.len() - read_length..self.file_spec.line_separator.len();
-            if line_separator.len() != 0 && &line_separator[check_range.clone()] != &self.file_spec.line_separator[check_range] {
+            if line_separator.len() != 0 && &line_separator[..] != &self.file_spec.line_separator[check_range.clone()] {
                 return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
-                    self.file_spec.line_separator.clone(),
+                    self.file_spec.line_separator[check_range.clone()].to_string(),
                     line_separator
                 )));
             }
@@ -191,7 +191,11 @@ impl <'a, T: Write> Handler<'a, T> {
 
 impl <'a, T: Seek> Seek for Handler<'a, T> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, IoError> {
-        self.inner.seek(pos)
+        self.position = Position::new(
+            self.inner.seek(pos)? as usize,
+            self.file_spec
+        );
+        Ok(self.position.get_position() as u64)
     }
 }
 
@@ -204,8 +208,118 @@ impl <'a, T: Seek> Handler<'a, T> {
     }
 }
 
+#[derive(Clone)]
+pub struct HandlerBuilder<'a, T, U: SpecBuilder<&'a FileSpec>> {
+    inner: Option<T>,
+    file_spec: Option<U>,
+    position: Option<Position<'a>>,
+    end_of_line_validation: bool
+}
+
+impl<'a, T, U: SpecBuilder<&'a FileSpec>> HandlerBuilder<'a, T, U> {
+    pub fn new() -> Self {
+        HandlerBuilder {
+            inner: None,
+            file_spec: None,
+            position: None,
+            end_of_line_validation: false
+        }
+    }
+
+    pub fn with_inner(self, inner: T) -> Self {
+        HandlerBuilder {
+            inner: Some(inner),
+            file_spec: self.file_spec,
+            position: self.position,
+            end_of_line_validation: self.end_of_line_validation
+        }
+    }
+
+    pub fn with_file_spec(self, file_spec: U) -> Self {
+        HandlerBuilder {
+            inner: self.inner,
+            file_spec: Some(file_spec),
+            position: self.position,
+            end_of_line_validation: self.end_of_line_validation
+        }
+    }
+
+    pub fn with_position(self, position: Position<'a>) -> Self {
+        HandlerBuilder {
+            inner: self.inner,
+            file_spec: self.file_spec,
+            position: Some(position),
+            end_of_line_validation: self.end_of_line_validation
+        }
+    }
+
+    pub fn with_end_of_line_validation(self) -> Self {
+        HandlerBuilder {
+            inner: self.inner,
+            file_spec: self.file_spec,
+            position: self.position,
+            end_of_line_validation: true
+        }
+    }
+
+    pub fn build(self) -> Handler<'a, T> {
+        let file_spec = self.file_spec.expect("file_spec is required in order to build").build();
+        Handler {
+            inner: self.inner.expect("inner is required in oder to build"),
+            file_spec: file_spec,
+            position: self.position.unwrap_or_else(|| Position {
+                position: 0,
+                line: 0,
+                column: 0,
+                spec: file_spec
+            }),
+            end_of_line_validation: self.end_of_line_validation
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::string::ToString;
-    use super::super::test::*;
+    use super::*;
+    use test::*;
+    use spec::FileSpec;
+    use std::collections::HashMap;
+    use std::io::{Read, Write, Seek, SeekFrom, Cursor};
+
+    #[test]
+    pub fn read() {
+        let spec = FileSpec {
+            line_length: 10,
+            line_separator: "h\n".to_string(),
+            record_specs: HashMap::new()
+        };
+        let mut handler = HandlerBuilder::new()
+            .with_file_spec(&spec)
+            .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
+            .build()
+        ;
+        let mut buf = String::new();
+        handler.read_to_string(&mut buf).unwrap();
+        assert_eq!("123456789009876543211234567890".to_string(), buf);
+
+        handler.seek(SeekFrom::Start(9)).unwrap();
+        let mut buf = String::new();
+        handler.read_to_string(&mut buf).unwrap();
+        assert_eq!("009876543211234567890".to_string(), buf);
+
+        handler.seek(SeekFrom::Start(10)).unwrap();
+        let mut buf = String::new();
+        handler.read_to_string(&mut buf).unwrap();
+        assert_eq!("09876543211234567890".to_string(), buf);
+
+        handler.seek(SeekFrom::Start(11)).unwrap();
+        let mut buf = String::new();
+        handler.read_to_string(&mut buf).unwrap();
+        assert_eq!("09876543211234567890".to_string(), buf);
+
+        handler.seek(SeekFrom::Start(12)).unwrap();
+        let mut buf = String::new();
+        handler.read_to_string(&mut buf).unwrap();
+        assert_eq!("09876543211234567890".to_string(), buf);
+    }
 }
