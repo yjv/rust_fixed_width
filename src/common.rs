@@ -327,6 +327,14 @@ mod test {
         handler.read(buf).unwrap();
         assert_eq!("12345678900".as_bytes(), buf);
 
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        let buf = &mut [0; 10];
+        handler.read(buf).unwrap();
+        assert_eq!("1234567890".as_bytes(), buf);
+        let buf = &mut [0; 10];
+        handler.read(buf).unwrap();
+        assert_eq!("0987654321".as_bytes(), buf);
+
         let mut handler = HandlerBuilder::new()
             .with_file_spec(&spec)
             .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
@@ -339,6 +347,19 @@ mod test {
         match handler.read(buf) {
             Err(e)  => (),
             _ => panic!("overflow end of line not returned")
+        }
+
+        let mut handler = HandlerBuilder::new()
+            .with_file_spec(&spec)
+            .with_inner(Cursor::new("1234567890h20987654321h\n1234567890".as_bytes()))
+            .build()
+        ;
+
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        let mut buf = String::new();
+        match handler.read_to_string(&mut buf) {
+            Err(e)  => (),
+            _ => panic!("bad line ending not returned")
         }
     }
 }
