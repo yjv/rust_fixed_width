@@ -1,7 +1,6 @@
 extern crate pad;
 use self::pad::{PadStr, Alignment};
 use std::collections::{HashMap, BTreeMap};
-use common::File;
 use std::ops::Range;
 use std::fmt::Debug;
 
@@ -138,12 +137,12 @@ impl UnPadder for IdentityPadder {
 }
 
 pub trait LineRecordSpecRecognizer {
-    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String>;
+    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Option<String>;
 }
 
 impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
-    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
-        (**self).recognize_for_line(file, index, record_specs)
+    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
+        (**self).recognize_for_line(line, record_specs)
     }
 }
 
@@ -172,14 +171,12 @@ impl IdFieldRecognizer {
 }
 
 impl LineRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_line<T: File>(&self, file: &T, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
+    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if let Ok(string) = file.get(index, field_spec.range.clone()) {
-                        if &string == default {
-                            return Some(name.clone());
-                        }
+                    if &line[field_spec.range.clone()] == default {
+                        return Some(name.clone());
                     }
                 }
             }
@@ -210,7 +207,7 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
 pub struct NoneRecognizer;
 
 impl LineRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_line<T: File>(&self, _: &T, _: usize, _: &HashMap<String, RecordSpec>) -> Option<String> {
+    fn recognize_for_line(&self, _: &String, _: &HashMap<String, RecordSpec>) -> Option<String> {
         None
     }
 }
@@ -385,15 +382,14 @@ impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
 mod test {
     use super::*;
     use std::collections::{HashMap, BTreeMap};
-    use super::super::test::{MockFile, test_spec};
+    use super::super::test::test_spec;
 
     #[test]
     fn none_recognizer() {
         let recognizer = NoneRecognizer;
         assert_eq!(None, recognizer.recognize_for_data(&HashMap::new(), &HashMap::new()));
         assert_eq!(None, recognizer.recognize_for_line(
-            &MockFile::new(10, None),
-            2,
+            &String::new(),
             &HashMap::new()
         ));
     }
@@ -500,21 +496,12 @@ mod test {
         assert_eq!(None, recognizer.recognize_for_data(&data, &specs));
         assert_eq!(None, recognizer_with_field.recognize_for_data(&data, &specs));
 
-        let file = MockFile::new(
-            10,
-            Some(vec![
-                &"dsfdsfsdfd".to_string(),
-                &"barasdasdd".to_string(),
-                &"foodsfsdfd".to_string()
-            ])
-        );
-
-        assert_eq!(None, recognizer.recognize_for_line(&file, 0, &specs));
-        assert_eq!(None, recognizer_with_field.recognize_for_line(&file, 0, &specs));
-        assert_eq!(Some("record2".to_string()), recognizer.recognize_for_line(&file, 1, &specs));
-        assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_line(&file, 1, &specs));
-        assert_eq!(Some("record4".to_string()), recognizer.recognize_for_line(&file, 2, &specs));
-        assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_line(&file, 2, &specs));
+        assert_eq!(None, recognizer.recognize_for_line(&"dsfdsfsdfd".to_string(), &specs));
+        assert_eq!(None, recognizer_with_field.recognize_for_line(&"dsfdsfsdfd".to_string(), &specs));
+        assert_eq!(Some("record2".to_string()), recognizer.recognize_for_line(&"barasdasdd".to_string(), &specs));
+        assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_line(&"barasdasdd".to_string(), &specs));
+        assert_eq!(Some("record4".to_string()), recognizer.recognize_for_line(&"foodsfsdfd".to_string(), &specs));
+        assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_line(&"foodsfsdfd".to_string(), &specs));
         assert_eq!(FieldSpecBuilder {
             default: None,
             padding: Some("0".to_string()),
@@ -535,8 +522,7 @@ mod test {
         assert_eq!(None, DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &HashMap::new(), &HashMap::new()));
         assert_eq!(None, LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
-            &MockFile::new(10, None),
-            2,
+            &String::new(),
             &HashMap::new()
         ));
     }

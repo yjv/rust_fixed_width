@@ -1,130 +1,22 @@
-use super::common::{File, MutableFile, FileError};
-use super::in_memory::File as InMemoryFile;
 use std::ops::Range;
 use super::spec::*;
 use std::collections::{HashMap, BTreeMap};
 
 #[derive(Debug)]
-pub struct MockFile {
-    inner_file: InMemoryFile,
-    read_errors: HashMap<usize, ()>,
-    write_errors: HashMap<usize, ()>
-}
-
-impl MockFile {
-    pub fn new(width: usize, initial_lines: Option<Vec<&String>>) -> Self {
-        let mut file = MockFile {
-            inner_file: InMemoryFile::new(width),
-            read_errors: HashMap::new(),
-            write_errors: HashMap::new()
-        };
-
-        if let Some(lines) = initial_lines {
-            for line in lines {
-                let index = file.add_line().unwrap();
-                let _ = file.set(index, 0, line);
-            }
-        }
-
-        file
-    }
-
-    pub fn add_read_error(&mut self, index: usize) -> &mut Self {
-        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() && self.inner_file.len() >= index {
-            let _ = self.inner_file.insert_line(index);
-        }
-        self.read_errors.insert(index, ());
-        self
-    }
-
-    pub fn add_write_error(&mut self, index: usize) -> &mut Self {
-        if self.read_errors.get(&index).is_none() && self.write_errors.get(&index).is_none() && self.inner_file.len() >= index {
-            let _ = self.inner_file.insert_line(index);
-        }
-        self.write_errors.insert(index, ());
-        self
-    }
-}
-
-impl FileError for () {
-    fn is_invalid_index(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn is_invalid_range(&self) -> bool {
-        unimplemented!()
-    }
-}
-
-impl File for MockFile {
-    type Error = ();
-
-    fn width(&self) -> usize {
-        self.inner_file.width()
-    }
-
-    fn get(&self, index: usize, range: Range<usize>) -> Result<String, Self::Error> {
-        if let Some(e) = self.read_errors.get(&index) {
-            return Err(e.clone());
-        }
-        Ok(self.inner_file.get(index, range).unwrap())
-    }
-
-    fn len(&self) -> usize {
-        self.inner_file.len()
-    }
-}
-
-impl MutableFile for MockFile {
-    type Error = ();
-    fn set(&mut self, index: usize, column_index: usize, string: &String) -> Result<&mut Self, Self::Error> {
-        if let Some(e) = self.write_errors.get(&index) {
-            return Err(e.clone());
-        }
-
-        self.inner_file.set(index, column_index, string).unwrap();
-        Ok(self)
-    }
-
-    fn clear(&mut self, index: usize, range: Range<usize>) -> Result<&mut Self, Self::Error> {
-        if let Some(e) = self.write_errors.get(&index) {
-            return Err(e.clone());
-        }
-
-        self.inner_file.clear(index, range).unwrap();
-        Ok(self)
-    }
-
-    fn add_line(&mut self) -> Result<usize, Self::Error> {
-        let mut index = self.inner_file.add_line().unwrap();
-
-        while self.write_errors.get(&index).is_some() || self.read_errors.get(&index).is_some() {
-            index = self.inner_file.add_line().unwrap();
-        }
-
-        Ok(index)
-    }
-
-    fn remove_line(&mut self) -> Result<usize, Self::Error> {
-        Ok(self.inner_file.remove_line().unwrap())
-    }
-}
-
-#[derive(Debug)]
-pub struct MockRecognizer<'a, T: 'a + File> {
-    line_recognize_calls: Vec<(&'a T, usize, &'a HashMap<String, RecordSpec>, Option<String>)>,
+pub struct MockRecognizer<'a> {
+    line_recognize_calls: Vec<(&'a String, &'a HashMap<String, RecordSpec>, Option<String>)>,
     data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Option<String>)>
 }
 
-impl<'a, T: 'a + File> MockRecognizer<'a, T> {
+impl<'a> MockRecognizer<'a> {
     pub fn new() -> Self {
         MockRecognizer {
             data_recognize_calls: Vec::new(),
             line_recognize_calls: Vec::new()
         }
     }
-    pub fn add_line_recognize_call(&mut self, file: &'a T, index: usize, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
-        self.line_recognize_calls.push((file, index, record_specs, return_value));
+    pub fn add_line_recognize_call(&mut self, line: &'a String, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
+        self.line_recognize_calls.push((line, record_specs, return_value));
         self
     }
 
@@ -134,22 +26,21 @@ impl<'a, T: 'a + File> MockRecognizer<'a, T> {
     }
 }
 
-impl<'a, T: 'a + File> LineRecordSpecRecognizer for MockRecognizer<'a, T> {
-    fn recognize_for_line<W: File>(&self, file: &W, index: usize, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
-        for &(ref expected_file, expected_index, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
-            if *expected_file as *const T as *const W == file as *const W
-                && expected_index == index
+impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
+    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
+        for &(ref expected_line, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
+            if *expected_line as *const String == line as *const String
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
             {
                 return return_value.clone();
             }
         }
 
-        panic!("Method recognize_for_line was not expected to be called with {:?}", (index, record_specs))
+        panic!("Method recognize_for_line was not expected to be called with {:?}", (line, record_specs))
     }
 }
 
-impl<'a, T: 'a + File> DataRecordSpecRecognizer for MockRecognizer<'a, T> {
+impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
     fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data == data

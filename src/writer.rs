@@ -60,7 +60,6 @@ mod test {
     use test::*;
     use std::iter::repeat;
     use std::collections::HashMap;
-    use common::{File, MutableFile};
 
     #[test]
     fn writing() {
