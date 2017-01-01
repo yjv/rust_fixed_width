@@ -362,4 +362,57 @@ mod test {
             _ => panic!("bad line ending not returned")
         }
     }
+
+    #[test]
+    pub fn write() {
+        let spec = FileSpec {
+            line_length: 10,
+            line_separator: "h\n".to_string(),
+            record_specs: HashMap::new()
+        };
+        let mut handler = HandlerBuilder::new()
+            .with_file_spec(&spec)
+            .with_inner(Cursor::new(Vec::new()))
+            .build()
+        ;
+        handler.write_all("123456789009876543211234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        handler.seek(SeekFrom::Start(9)).unwrap();
+        handler.write_all("009876543211234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        handler.seek(SeekFrom::Start(10)).unwrap();
+        handler.write_all("09876543211234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        handler.seek(SeekFrom::Start(11)).unwrap();
+        handler.write_all("09876543211234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        handler.seek(SeekFrom::Start(12)).unwrap();
+        handler.write_all("09876543211234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        handler.write_all("1234567890".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+        handler.write_all("0987654321".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+        handler.write_all("0987654321".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n0987654321h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().clone()).unwrap());
+
+        let mut handler = HandlerBuilder::new()
+            .with_file_spec(&spec)
+            .with_inner(Cursor::new(Vec::new()))
+            .with_end_of_line_validation()
+            .build()
+        ;
+
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        match handler.write_all("12345678900".as_bytes()) {
+            Err(e)  => (),
+            _ => panic!("overflow end of line not returned")
+        }
+    }
 }
