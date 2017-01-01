@@ -284,7 +284,7 @@ mod test {
     use test::*;
     use spec::FileSpec;
     use std::collections::HashMap;
-    use std::io::{Read, Write, Seek, SeekFrom, Cursor};
+    use std::io::{Read, Write, Seek, SeekFrom, Cursor, Error as IoError};
 
     #[test]
     pub fn read() {
@@ -321,5 +321,24 @@ mod test {
         let mut buf = String::new();
         handler.read_to_string(&mut buf).unwrap();
         assert_eq!("09876543211234567890".to_string(), buf);
+
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        let buf = &mut [0; 11];
+        handler.read(buf).unwrap();
+        assert_eq!("12345678900".as_bytes(), buf);
+
+        let mut handler = HandlerBuilder::new()
+            .with_file_spec(&spec)
+            .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
+            .with_end_of_line_validation()
+            .build()
+        ;
+
+        handler.seek(SeekFrom::Start(0)).unwrap();
+        let buf = &mut [0; 11];
+        match handler.read(buf) {
+            Err(e)  => (),
+            _ => panic!("overflow end of line not returned")
+        }
     }
 }
