@@ -1,6 +1,6 @@
 use spec::{FileSpec, FieldSpec, UnPadder};
 use std::collections::HashMap;
-use std::io::{Read, Error as IoError};
+use std::io::{Read, Error as IoError, ErrorKind};
 
 #[derive(Debug)]
 pub enum Error<T: UnPadder> {
@@ -49,15 +49,13 @@ impl<T: UnPadder> Reader<T> {
 
     fn _read_field<'a, V: 'a + Read>(&self, reader: &'a mut V, field_spec: &FieldSpec) -> Result<String, Error<T>> {
         let length = field_spec.range.end - field_spec.range.start;
-        let data = {
-            let mut string = String::new();
-            let amount = reader.by_ref().take(length as u64).read_to_string(&mut string)?;
-            if amount != length {
-                return Err(Error::NotEnoughRead(length, amount))
-            }
-            string
-        };
-        Ok(self.un_padder.unpad(data, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?)
+        let mut data = Vec::new();
+        data.resize(length, 0);
+        reader.read_exact(&mut data[..])?;
+        Ok(self.un_padder.unpad(
+            String::from_utf8(data).map_err(|_| IoError::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))?,
+            &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?
+        )
     }
 }
 
