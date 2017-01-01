@@ -1,5 +1,4 @@
-use std::ops::Range;
-use std::fmt::{Debug, Display, Error as FmtError, Formatter};
+use std::fmt::{Display, Error as FmtError, Formatter};
 use spec::FileSpec;
 use std::io::{Read, Error as IoError, Write, Seek, SeekFrom, ErrorKind};
 use std::cmp::min;
@@ -84,6 +83,7 @@ impl <'a, T> Handler<'a, T> {
 
 impl<'a, T: Read> Read for Handler<'a, T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.absorb_line_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
 
@@ -101,27 +101,38 @@ impl<'a, T: Read> Read for Handler<'a, T> {
 
             total_amount += amount;
             self.position = Position::new(self.position.position + amount, self.file_spec);
-            if self.position.column == self.file_spec.line_length {
-                let mut line_separator = String::new();
-                self.position = Position::new(
-                    self.position.position + self.inner.by_ref().take(self.file_spec.line_separator.len() as u64).read_to_string(&mut line_separator)?,
-                    self.file_spec
-                );
-                if line_separator.len() != 0 && line_separator != self.file_spec.line_separator {
-                    return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
-                        self.file_spec.line_separator.clone(),
-                        line_separator
-                    )));
-                }
-            }
+            self.absorb_line_separator()?;
         }
 
         Ok(total_amount)
     }
 }
 
+impl <'a, T: Read> Handler<'a, T> {
+    fn absorb_line_separator(&mut self) -> Result<(), IoError> {
+        if self.position.column >= self.file_spec.line_length {
+            let mut line_separator = String::new();
+            let read_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
+            self.position = Position::new(
+                self.position.position + self.inner.by_ref().take(read_length as u64).read_to_string(&mut line_separator)?,
+                self.file_spec
+            );
+            let check_range = self.file_spec.line_separator.len() - read_length..self.file_spec.line_separator.len();
+            if line_separator.len() != 0 && &line_separator[check_range.clone()] != &self.file_spec.line_separator[check_range] {
+                return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
+                    self.file_spec.line_separator.clone(),
+                    line_separator
+                )));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl<'a, T: Write> Write for Handler<'a, T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+        self.write_line_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
 
@@ -139,12 +150,7 @@ impl<'a, T: Write> Write for Handler<'a, T> {
 
             total_amount += amount;
             self.position = Position::new(self.position.position + amount, self.file_spec);
-            if self.position.column == self.file_spec.line_length {
-                self.position = Position::new(
-                    self.position.position + self.inner.write(self.file_spec.line_separator.as_bytes())?,
-                    self.file_spec
-                );
-            }
+            self.write_line_separator()?;
         }
 
         Ok(total_amount)
@@ -152,6 +158,22 @@ impl<'a, T: Write> Write for Handler<'a, T> {
 
     fn flush(&mut self) -> Result<(), IoError> {
         self.inner.flush()
+    }
+}
+
+
+impl <'a, T: Write> Handler<'a, T> {
+    fn write_line_separator(&mut self) -> Result<(), IoError> {
+        if self.position.column >= self.file_spec.line_length {
+            let write_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
+            let write_range = self.file_spec.line_separator.len() - write_length..self.file_spec.line_separator.len();
+            self.position = Position::new(
+                self.position.position + self.inner.write((&self.file_spec.line_separator[write_range]).as_bytes())?,
+                self.file_spec
+            );
+        }
+
+        Ok(())
     }
 }
 
