@@ -4,6 +4,8 @@ use std::io::{Read, Error as IoError, Write, Seek, SeekFrom, ErrorKind};
 use std::cmp::min;
 use std::error::Error as ErrorTrait;
 
+type Result<T> = ::std::result::Result<T, IoError>;
+
 #[derive(Debug)]
 pub enum Error {
     StringDoesntMatchLineSeparator(String, String),
@@ -20,7 +22,7 @@ impl ErrorTrait for Error {
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match self {
             &Error::StringDoesntMatchLineSeparator(
                 ref expected_line_separator,
@@ -33,8 +35,6 @@ impl Display for Error {
         }
     }
 }
-
-//type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
 pub struct Position<'a> {
@@ -100,7 +100,7 @@ impl <'a, T> Handler<'a, T> {
 }
 
 impl<'a, T: Read> Read for Handler<'a, T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.absorb_line_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
@@ -127,7 +127,7 @@ impl<'a, T: Read> Read for Handler<'a, T> {
 }
 
 impl<'a, T: Read> Handler<'a, T> {
-    fn absorb_line_separator(&mut self) -> Result<(), IoError> {
+    fn absorb_line_separator(&mut self) -> Result<()> {
         if self.position.column >= self.file_spec.line_length {
             let mut line_separator = String::new();
             let read_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
@@ -146,7 +146,7 @@ impl<'a, T: Read> Handler<'a, T> {
 }
 
 impl<'a, T: Write> Write for Handler<'a, T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.write_line_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
@@ -171,14 +171,14 @@ impl<'a, T: Write> Write for Handler<'a, T> {
         Ok(total_amount)
     }
 
-    fn flush(&mut self) -> Result<(), IoError> {
+    fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }
 }
 
 
 impl <'a, T: Write> Handler<'a, T> {
-    fn write_line_separator(&mut self) -> Result<(), IoError> {
+    fn write_line_separator(&mut self) -> Result<()> {
         if self.position.column >= self.file_spec.line_length {
             let write_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
             let write_range = self.file_spec.line_separator.len() - write_length..self.file_spec.line_separator.len();
@@ -190,7 +190,7 @@ impl <'a, T: Write> Handler<'a, T> {
 }
 
 impl <'a, T: Seek> Seek for Handler<'a, T> {
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, IoError> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         self.position = Position::new(
             self.inner.seek(pos)? as usize,
             self.file_spec
@@ -200,7 +200,7 @@ impl <'a, T: Seek> Seek for Handler<'a, T> {
 }
 
 impl <'a, T: Seek> Handler<'a, T> {
-    pub fn seek_to_position(&mut self, position: Position<'a>) -> Result<Position, IoError> {
+    pub fn seek_to_position(&mut self, position: Position<'a>) -> Result<Position> {
         let current_position = self.inner.seek(SeekFrom::Current(0))?;
         self.inner.seek(SeekFrom::Current(position.position as i64 - current_position as i64))?;
         self.position = position;

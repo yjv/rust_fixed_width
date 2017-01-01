@@ -62,8 +62,7 @@ impl<T: UnPadder> Reader<T> {
     }
 
     fn _read_string<'a, V: 'a + Read>(&self, reader: &'a mut V, length: usize) -> Result<String, IoError> {
-        let mut data = Vec::new();
-        data.resize(length, 0);
+        let mut data = vec![0; length];
         reader.read_exact(&mut data[..])?;
         String::from_utf8(data).map_err(|_| IoError::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))
     }

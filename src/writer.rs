@@ -40,8 +40,19 @@ impl<T: Padder> Writer<T> {
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
+        let mut end = 0;
+
         for (name, field_spec) in &record_spec.field_specs {
+            if field_spec.range.start > end {
+                writer.write_all(&mut vec![0; field_spec.range.start - end][..])?;
+            }
+
+            end = field_spec.range.end;
             self._write_field(writer, field_spec, data.get(name).or_else(|| field_spec.default.as_ref().clone()).ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone()))?.clone())?;
+        }
+
+        if end < self.spec.line_length {
+            writer.write_all(&mut vec![0; self.spec.line_length - end][..])?;
         }
 
         Ok(())
