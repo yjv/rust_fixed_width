@@ -37,16 +37,18 @@ impl Display for Error {
 //type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
-pub struct Position {
-    pub position: usize,
-    pub line: usize,
-    pub column: usize
+pub struct Position<'a> {
+    spec: &'a FileSpec,
+    position: usize,
+    line: usize,
+    column: usize
 }
 
-impl Position {
-    pub fn new(position: usize, spec: &FileSpec) -> Self {
+impl<'a> Position<'a> {
+    pub fn new(position: usize, spec: &'a FileSpec) -> Self {
         let line_length = spec.line_length + spec.line_separator.len();
         Position {
+            spec: spec,
             position: position,
             line: if position == 0 {
                 0
@@ -60,12 +62,28 @@ impl Position {
             }
         }
     }
+
+    pub fn add(&self, amount: usize) -> Self {
+        Self::new(self.position + amount, self.spec)
+    }
+
+    pub fn get_position(&self) -> usize {
+        self.position
+    }
+
+    pub fn get_line(&self) -> usize {
+        self.line
+    }
+
+    pub fn get_column(&self) -> usize {
+        self.column
+    }
 }
 
 pub struct Handler<'a, T> {
     inner: T,
     file_spec: &'a FileSpec,
-    position: Position,
+    position: Position<'a>,
     end_of_line_validation: bool
 }
 
@@ -100,7 +118,7 @@ impl<'a, T: Read> Read for Handler<'a, T> {
             };
 
             total_amount += amount;
-            self.position = Position::new(self.position.position + amount, self.file_spec);
+            self.position = self.position.add(amount);
             self.absorb_line_separator()?;
         }
 
@@ -113,10 +131,7 @@ impl <'a, T: Read> Handler<'a, T> {
         if self.position.column >= self.file_spec.line_length {
             let mut line_separator = String::new();
             let read_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
-            self.position = Position::new(
-                self.position.position + self.inner.by_ref().take(read_length as u64).read_to_string(&mut line_separator)?,
-                self.file_spec
-            );
+            self.position = self.position.add(self.inner.by_ref().take(read_length as u64).read_to_string(&mut line_separator)?);
             let check_range = self.file_spec.line_separator.len() - read_length..self.file_spec.line_separator.len();
             if line_separator.len() != 0 && &line_separator[check_range.clone()] != &self.file_spec.line_separator[check_range] {
                 return Err(IoError::new(ErrorKind::Other, Error::StringDoesntMatchLineSeparator(
@@ -149,7 +164,7 @@ impl<'a, T: Write> Write for Handler<'a, T> {
             };
 
             total_amount += amount;
-            self.position = Position::new(self.position.position + amount, self.file_spec);
+            self.position = self.position.add(amount);
             self.write_line_separator()?;
         }
 
@@ -167,10 +182,7 @@ impl <'a, T: Write> Handler<'a, T> {
         if self.position.column >= self.file_spec.line_length {
             let write_length = self.file_spec.line_separator.len() - (self.position.column - self.file_spec.line_length);
             let write_range = self.file_spec.line_separator.len() - write_length..self.file_spec.line_separator.len();
-            self.position = Position::new(
-                self.position.position + self.inner.write((&self.file_spec.line_separator[write_range]).as_bytes())?,
-                self.file_spec
-            );
+            self.position = self.position.add(self.inner.write((&self.file_spec.line_separator[write_range]).as_bytes())?);
         }
 
         Ok(())
@@ -184,7 +196,7 @@ impl <'a, T: Seek> Seek for Handler<'a, T> {
 }
 
 impl <'a, T: Seek> Handler<'a, T> {
-    pub fn seek_to_position(&mut self, position: Position) -> Result<Position, IoError> {
+    pub fn seek_to_position(&mut self, position: Position<'a>) -> Result<Position, IoError> {
         let current_position = self.inner.seek(SeekFrom::Current(0))?;
         self.inner.seek(SeekFrom::Current(position.position as i64 - current_position as i64))?;
         self.position = position;
