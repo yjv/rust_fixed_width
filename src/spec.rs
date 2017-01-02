@@ -184,6 +184,10 @@ impl FieldSpecBuilder {
         }
     }
 
+    pub fn new_empty_number() -> Self {
+        Self::new_number().with_default("0")
+    }
+
     pub fn new_string() -> Self {
         FieldSpecBuilder {
             range: None,
@@ -191,6 +195,10 @@ impl FieldSpecBuilder {
             padding: Some(" ".to_string()),
             default: None
         }
+    }
+
+    pub fn new_empty_string() -> Self {
+        Self::new_string().with_default("")
     }
 
     pub fn with_range(self, range: Range<usize>) -> Self {
