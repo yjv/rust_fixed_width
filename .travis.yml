@@ -8,7 +8,7 @@ before_script: |
   PKGNAME="rust_fixed_width" # must match with cargo.toml
   LOCAL="~/.local" # install here to avoid `sudo`
   export PATH=$LOCAL/bin:$PATH
-script: cargo test --features "test" --verbose
+script: cargo test --features "all" --verbose
 addons:
   apt:
     packages:
