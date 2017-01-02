@@ -1,9 +1,6 @@
 pub mod common;
-#[cfg(feature = "spec")]
 pub mod spec;
-#[cfg(feature = "reader")]
 pub mod reader;
-#[cfg(feature = "writer")]
 pub mod writer;
 pub mod padders;
 pub mod recognizers;

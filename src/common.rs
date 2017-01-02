@@ -273,7 +273,7 @@ impl<'a, T> HandlerBuilder<'a, T> {
 mod test {
     use super::*;
     use spec::LineSpec;
-    use std::io::{Read, Write, Seek, SeekFrom, Cursor, Error as IoError};
+    use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 
     #[test]
     pub fn read() {
@@ -333,7 +333,7 @@ mod test {
         handler.seek(SeekFrom::Start(0)).unwrap();
         let buf = &mut [0; 11];
         match handler.read(buf) {
-            Err(e)  => (),
+            Err(_)  => (),
             _ => panic!("overflow end of line not returned")
         }
 
@@ -346,7 +346,7 @@ mod test {
         handler.seek(SeekFrom::Start(0)).unwrap();
         let mut buf = String::new();
         match handler.read_to_string(&mut buf) {
-            Err(e)  => (),
+            Err(_)  => (),
             _ => panic!("bad line ending not returned")
         }
     }
@@ -398,7 +398,7 @@ mod test {
 
         handler.seek(SeekFrom::Start(0)).unwrap();
         match handler.write_all("12345678900".as_bytes()) {
-            Err(e)  => (),
+            Err(_)  => (),
             _ => panic!("overflow end of line not returned")
         }
     }

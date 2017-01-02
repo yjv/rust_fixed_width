@@ -9,13 +9,8 @@ repository = "https://github.com/yjv/rust_fixed_width"
 documentation = "http://yjv.github.io/rust_fixed_width/rust_fixed_width/"
 
 [features]
-default = ["in_memory"]
-in_memory = []
-io = []
-spec = []
-reader = ["spec", "pad"]
-writer = ["spec", "pad"]
-all = ["in_memory", "io", "reader", "writer", "spec"]
+default = ["all"]
+all = ["pad"]
 test = ["all"]
 
 [dependencies]
