@@ -81,9 +81,8 @@ mod test {
 
     use super::*;
     use test::*;
-    use std::iter::repeat;
     use std::collections::HashMap;
-    use std::io::{Read, Seek, Cursor};
+    use std::io::Cursor;
     use spec::PaddingDirection;
 
     #[test]
@@ -105,7 +104,7 @@ mod test {
         let spec = test_spec();
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
+        let un_padder = MockPadder::new();
         let reader = Reader::new(&un_padder, spec.record_specs);
         match reader.read_record(&mut buf, "record5".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
@@ -153,7 +152,7 @@ mod test {
         let spec = test_spec();
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
+        let un_padder = MockPadder::new();
         let reader = Reader::new(&un_padder, spec.record_specs);
         match reader.read_field(&mut buf, "record5".to_string(), "field1".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
