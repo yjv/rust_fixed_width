@@ -87,8 +87,7 @@ impl DataRecordSpecRecognizer for NoneRecognizer {
 mod test {
     use super::*;
     use spec::*;
-    use std::collections::{HashMap, BTreeMap};
-    use super::super::test::test_spec;
+    use std::collections::HashMap;
 
     #[test]
     fn none_recognizer() {

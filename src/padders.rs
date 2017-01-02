@@ -90,8 +90,6 @@ impl UnPadder for IdentityPadder {
 mod test {
     use super::*;
     use spec::*;
-    use std::collections::{HashMap, BTreeMap};
-    use super::super::test::test_spec;
 
     #[test]
     fn default_padder() {

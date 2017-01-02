@@ -48,19 +48,9 @@ impl<T: Padder> Writer<T> {
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        let mut end = 0;
 
         for (name, field_spec) in &record_spec.field_specs {
-            if field_spec.index > end {
-                writer.write_all(&mut vec![0; field_spec.index - end][..])?;
-            }
-
-            end = field_spec.index + field_spec.length;
             self._write_field(writer, field_spec, data.get(name).or_else(|| field_spec.default.as_ref().clone()).ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone()))?.clone())?;
-        }
-
-        if end < record_spec.line_spec.length {
-            writer.write_all(&mut vec![0; record_spec.line_spec.length - end][..])?;
         }
 
         Ok(())
@@ -76,9 +66,8 @@ mod test {
 
     use super::*;
     use test::*;
-    use std::iter::repeat;
     use std::collections::HashMap;
-    use std::io::{Write, Seek, Cursor};
+    use std::io::Cursor;
     use spec::PaddingDirection;
 
     #[test]
@@ -101,7 +90,7 @@ mod test {
     fn write_record_with_bad_record_name() {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
-        let mut padder = MockPadder::new();
+        let padder = MockPadder::new();
         let writer = Writer::new(&padder, spec.record_specs);
         match writer.write_record(&mut buf, "record5".to_string(), HashMap::new()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
@@ -151,7 +140,7 @@ mod test {
     fn write_field_with_bad_record_name() {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
-        let mut padder = MockPadder::new();
+        let padder = MockPadder::new();
         let writer = Writer::new(&padder, spec.record_specs);
         match writer.write_field(&mut buf, "record5".to_string(), "field1".to_string(), "hello".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
@@ -162,9 +151,8 @@ mod test {
     #[test]
     fn write_field_with_bad_field_name() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(Vec::new());
-        let mut padder = MockPadder::new();
+        let padder = MockPadder::new();
         let writer = Writer::new(&padder, spec.record_specs);
         match writer.write_field(&mut buf, "record1".to_string(), "field5".to_string(), "hello".to_string()) {
             Err(Error::FieldSpecNotFound(record_name, field_name)) => {
