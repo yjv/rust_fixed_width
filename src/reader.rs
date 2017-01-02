@@ -49,14 +49,16 @@ impl<T: UnPadder> Reader<T> {
         ;
         let line = self._read_string(reader, record_spec.line_spec.length)?;
         let mut data: HashMap<String, String> = HashMap::new();
+        let mut current_index = 0;
+
         for (name, field_spec) in &record_spec.field_specs {
-            if field_spec.ignore {
-                continue;
+            if !field_spec.ignore {
+                data.insert(name.clone(), self._unpad_field(
+                    line[current_index..current_index + field_spec.length].to_string(),
+                    &field_spec
+                )?);
             }
-            data.insert(name.clone(), self._unpad_field(
-                line[field_spec.index..field_spec.index + field_spec.length].to_string(),
-                &field_spec
-            )?);
+            current_index += field_spec.length;
         }
 
         Ok(data)

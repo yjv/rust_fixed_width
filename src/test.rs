@@ -120,7 +120,7 @@ pub fn test_spec() -> FileSpec {
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
-                        .with_range(0..4)
+                        .with_length(4)
                         .with_padding("dsasd")
                         .with_padding_direction(PaddingDirection::Left)
                         .ignore()
@@ -128,13 +128,13 @@ pub fn test_spec() -> FileSpec {
                 .with_field(
                     "field2",
                     FieldSpecBuilder::new_string()
-                        .with_range(4..9)
+                        .with_length(5)
                         .with_default("def")
                 )
                 .with_field(
                     "field3".to_string(),
                     FieldSpecBuilder::new()
-                        .with_range(9..45)
+                        .with_length(36)
                         .with_padding("xcvcxv".to_string())
                         .with_padding_direction(PaddingDirection::Right)
                 )
@@ -145,14 +145,14 @@ pub fn test_spec() -> FileSpec {
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
-                        .with_range((0..3))
+                        .with_length(3)
                         .with_padding("dsasd".to_string())
                         .with_padding_direction(PaddingDirection::Left)
                 )
                 .with_field(
                     "field2".to_string(),
                     FieldSpecBuilder::new()
-                        .with_range((4..8))
+                        .with_length(4)
                         .with_padding("sdf".to_string())
                         .with_padding_direction(PaddingDirection::Right)
                         .with_default("defa")
@@ -160,14 +160,13 @@ pub fn test_spec() -> FileSpec {
                 .with_field(
                     "field3",
                     FieldSpecBuilder::new()
-                        .with_range((9..36))
+                        .with_length(27)
                         .with_padding("xcvcxv".to_string())
                         .with_padding_direction(PaddingDirection::Right)
                 )
                 .with_field(
                     "field4".to_string(),
                     FieldSpec {
-                        index: 37,
                         length: 8,
                         padding: "sdfsd".to_string(),
                         padding_direction: PaddingDirection::Left,

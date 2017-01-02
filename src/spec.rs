@@ -96,6 +96,21 @@ pub struct RecordSpec {
     pub field_specs: BTreeMap<String, FieldSpec>
 }
 
+impl RecordSpec {
+    pub fn get_field_index(&self, name: &String) -> usize {
+        let mut index = 0;
+        for (field_name, field_spec) in &self.field_specs {
+            if name == field_name {
+                break;
+            }
+
+            index += field_spec.length;
+        }
+
+        index
+    }
+}
+
 impl SpecBuilder<RecordSpec> for RecordSpec {
     fn build(self) -> Self {
         self
@@ -139,7 +154,6 @@ pub enum PaddingDirection {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldSpec {
-    pub index: usize,
     pub length: usize,
     pub padding_direction: PaddingDirection,
     pub padding: String,
@@ -159,7 +173,6 @@ pub trait SpecBuilder<T> {
 
 #[derive(Clone)]
 pub struct FieldSpecBuilder {
-    index: Option<usize>,
     length: Option<usize>,
     padding_direction: Option<PaddingDirection>,
     padding: Option<String>,
@@ -170,7 +183,6 @@ pub struct FieldSpecBuilder {
 impl FieldSpecBuilder {
     pub fn new() -> Self {
         FieldSpecBuilder {
-            index: None,
             length: None,
             padding_direction: None,
             padding: None,
@@ -196,12 +208,7 @@ impl FieldSpecBuilder {
     }
 
     pub fn with_range(self, range: Range<usize>) -> Self {
-        self.with_index(range.start).with_length(range.end - range.start)
-    }
-
-    pub fn with_index(mut self, index: usize) -> Self {
-        self.index = Some(index);
-        self
+        self.with_length(range.end - range.start)
     }
 
     pub fn with_length(mut self, length: usize) -> Self {
@@ -233,7 +240,6 @@ impl FieldSpecBuilder {
 impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
     fn build(self) -> FieldSpec {
         FieldSpec {
-            index: self.index.unwrap_or_default(),
             length: self.length.expect("length must be set in order to build"),
             padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
             padding: self.padding.expect("padding must be set in order to build"),
@@ -259,7 +265,6 @@ mod test {
         let mut record_specs = HashMap::new();
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
-            index: 0,
             length: 4,
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
@@ -267,7 +272,6 @@ mod test {
             ignore: true
         });
         field_specs.insert("field2".to_string(), FieldSpec {
-            index: 4,
             length: 5,
             padding: " ".to_string(),
             padding_direction: PaddingDirection::Right,
@@ -275,7 +279,6 @@ mod test {
             ignore: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
-            index: 9,
             length: 36,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
@@ -288,7 +291,6 @@ mod test {
         });
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
-            index: 0,
             length: 3,
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
@@ -296,7 +298,6 @@ mod test {
             ignore: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
-            index: 4,
             length: 4,
             padding: "sdf".to_string(),
             padding_direction: PaddingDirection::Right,
@@ -304,7 +305,6 @@ mod test {
             ignore: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
-            index: 9,
             length: 27,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
@@ -312,7 +312,6 @@ mod test {
             ignore: false
         });
         field_specs.insert("field4".to_string(), FieldSpec {
-            index: 37,
             length: 8,
             padding: "sdfsd".to_string(),
             padding_direction: PaddingDirection::Left,

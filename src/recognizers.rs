@@ -40,7 +40,8 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if &line[field_spec.index..field_spec.index + field_spec.length] == default {
+                    let field_index = record_spec.get_field_index(&self.id_field);
+                    if &line[field_index..field_index + field_spec.length] == default {
                         return Some(name.clone());
                     }
                 }
