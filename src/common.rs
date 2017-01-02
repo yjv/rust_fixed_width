@@ -227,7 +227,7 @@ impl<'a, T> HandlerBuilder<'a, T> {
             inner: None,
             line_spec: None,
             position: None,
-            end_of_line_validation: false
+            end_of_line_validation: true
         }
     }
 
@@ -258,12 +258,12 @@ impl<'a, T> HandlerBuilder<'a, T> {
         }
     }
 
-    pub fn with_end_of_line_validation(self) -> Self {
+    pub fn without_end_of_line_validation(self) -> Self {
         HandlerBuilder {
             inner: self.inner,
             line_spec: self.line_spec,
             position: self.position,
-            end_of_line_validation: true
+            end_of_line_validation: false
         }
     }
 
@@ -298,6 +298,7 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
+            .without_end_of_line_validation()
             .build()
         ;
         let mut buf = String::new();
@@ -340,7 +341,6 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
-            .with_end_of_line_validation()
             .build()
         ;
 
@@ -354,6 +354,7 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h20987654321h\n1234567890".as_bytes()))
+            .without_end_of_line_validation()
             .build()
         ;
 
@@ -374,6 +375,7 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new(Vec::new()))
+            .without_end_of_line_validation()
             .build()
         ;
         handler.write_all("123456789009876543211234567890".as_bytes()).unwrap();
@@ -406,7 +408,6 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new(Vec::new()))
-            .with_end_of_line_validation()
             .build()
         ;
 
