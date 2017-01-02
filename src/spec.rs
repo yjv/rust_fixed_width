@@ -2,9 +2,8 @@ extern crate pad;
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileSpec {
-    pub line_spec: LineSpec,
     pub record_specs: HashMap<String, RecordSpec>
 }
 
@@ -14,15 +13,14 @@ impl SpecBuilder<FileSpec> for FileSpec {
     }
 }
 
+#[derive(Clone)]
 pub struct FileSpecBuilder {
-    line_spec: Option<LineSpec>,
     record_specs: HashMap<String, RecordSpec>
 }
 
 impl FileSpecBuilder {
     pub fn new() -> Self {
         FileSpecBuilder {
-            line_spec: None,
             record_specs: HashMap::new()
         }
     }
@@ -31,25 +29,17 @@ impl FileSpecBuilder {
         self.record_specs.insert(name.into(), record.build());
         self
     }
-
-    pub fn with_line_spec<T: SpecBuilder<LineSpec>>(self, line_spec: T) -> Self {
-        FileSpecBuilder {
-            line_spec: Some(line_spec.build()),
-            record_specs: self.record_specs
-        }
-    }
 }
 
 impl SpecBuilder<FileSpec> for FileSpecBuilder {
     fn build(self) -> FileSpec {
         FileSpec {
-            line_spec: self.line_spec.expect("line spec must be set in order to build"),
             record_specs: self.record_specs
         }
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LineSpec {
     pub length: usize,
     pub separator: String,
@@ -61,6 +51,7 @@ impl SpecBuilder<LineSpec> for LineSpec {
     }
 }
 
+#[derive(Clone)]
 pub struct LineSpecBuilder {
     length: Option<usize>,
     separator: Option<String>
@@ -73,18 +64,14 @@ impl LineSpecBuilder {
             separator: None
         }
     }
-    pub fn with_length(self, length: usize) -> Self {
-        LineSpecBuilder {
-            length: Some(length),
-            separator: self.separator
-        }
+    pub fn with_length(mut self, length: usize) -> Self {
+        self.length = Some(length);
+        self
     }
 
-    pub fn with_separator<T: Into<String>>(self, separator: T) -> Self {
-        LineSpecBuilder {
-            length: self.length,
-            separator: Some(separator.into())
-        }
+    pub fn with_separator<T: Into<String>>(mut self, separator: T) -> Self {
+        self.separator = Some(separator.into());
+        self
     }
 }
 
@@ -97,8 +84,9 @@ impl SpecBuilder<LineSpec> for LineSpecBuilder {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSpec {
+    pub line_spec: LineSpec,
     pub field_specs: BTreeMap<String, FieldSpec>
 }
 
@@ -108,13 +96,16 @@ impl SpecBuilder<RecordSpec> for RecordSpec {
     }
 }
 
+#[derive(Clone)]
 pub struct RecordSpecBuilder {
+    line_spec: LineSpec,
     field_specs: BTreeMap<String, FieldSpec>,
 }
 
 impl RecordSpecBuilder {
-    pub fn new() -> Self {
+    pub fn new<T: SpecBuilder<LineSpec>>(line_spec: T) -> Self {
         RecordSpecBuilder {
+            line_spec: line_spec.build(),
             field_specs: BTreeMap::new()
         }
     }
@@ -128,6 +119,7 @@ impl RecordSpecBuilder {
 impl SpecBuilder<RecordSpec> for RecordSpecBuilder {
     fn build(self) -> RecordSpec {
         RecordSpec {
+            line_spec: self.line_spec,
             field_specs: self.field_specs
         }
     }
@@ -139,12 +131,14 @@ pub enum PaddingDirection {
     Right
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldSpec {
-    pub range: Range<usize>,
+    pub index: usize,
+    pub length: usize,
     pub padding_direction: PaddingDirection,
     pub padding: String,
-    pub default: Option<String>
+    pub default: Option<String>,
+    pub ignore: bool
 }
 
 impl SpecBuilder<FieldSpec> for FieldSpec {
@@ -157,31 +151,30 @@ pub trait SpecBuilder<T> {
     fn build(self) -> T;
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct FieldSpecBuilder {
-    range: Option<Range<usize>>,
+    index: Option<usize>,
+    length: Option<usize>,
     padding_direction: Option<PaddingDirection>,
     padding: Option<String>,
-    default: Option<String>
+    default: Option<String>,
+    ignore: bool
 }
 
 impl FieldSpecBuilder {
     pub fn new() -> Self {
         FieldSpecBuilder {
-            range: None,
+            index: None,
+            length: None,
             padding_direction: None,
             padding: None,
-            default: None
+            default: None,
+            ignore: false
         }
     }
 
     pub fn new_number() -> Self {
-        FieldSpecBuilder {
-            range: None,
-            padding_direction: Some(PaddingDirection::Left),
-            padding: Some("0".to_string()),
-            default: None
-        }
+        Self::new().with_padding("0").with_padding_direction(PaddingDirection::Left)
     }
 
     pub fn new_empty_number() -> Self {
@@ -189,12 +182,7 @@ impl FieldSpecBuilder {
     }
 
     pub fn new_string() -> Self {
-        FieldSpecBuilder {
-            range: None,
-            padding_direction: Some(PaddingDirection::Right),
-            padding: Some(" ".to_string()),
-            default: None
-        }
+        Self::new().with_padding(" ").with_padding_direction(PaddingDirection::Right)
     }
 
     pub fn new_empty_string() -> Self {
@@ -202,49 +190,49 @@ impl FieldSpecBuilder {
     }
 
     pub fn with_range(self, range: Range<usize>) -> Self {
-        FieldSpecBuilder {
-            range: Some(range),
-            padding_direction: self.padding_direction,
-            padding: self.padding,
-            default: self.default
-        }
+        self.with_index(range.start).with_length(range.end - range.start)
     }
 
-    pub fn with_padding_direction(self, padding_direction: PaddingDirection) -> Self {
-        FieldSpecBuilder {
-            range: self.range,
-            padding_direction: Some(padding_direction),
-            padding: self.padding,
-            default: self.default
-        }
+    pub fn with_index(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
     }
 
-    pub fn with_padding<T: Into<String>>(self, padding: T) -> Self {
-        FieldSpecBuilder {
-            range: self.range,
-            padding_direction: self.padding_direction,
-            padding: Some(padding.into()),
-            default: self.default
-        }
+    pub fn with_length(mut self, length: usize) -> Self {
+        self.length = Some(length);
+        self
     }
 
-    pub fn with_default<T: Into<String>>(self, default: T) -> Self {
-        FieldSpecBuilder {
-            range: self.range,
-            padding_direction: self.padding_direction,
-            padding: self.padding,
-            default: Some(default.into())
-        }
+    pub fn with_padding_direction(mut self, padding_direction: PaddingDirection) -> Self {
+        self.padding_direction = Some(padding_direction);
+        self
+    }
+
+    pub fn with_padding<T: Into<String>>(mut self, padding: T) -> Self {
+        self.padding = Some(padding.into());
+        self
+    }
+
+    pub fn with_default<T: Into<String>>(mut self, default: T) -> Self {
+        self.default = Some(default.into());
+        self
+    }
+
+    pub fn ignore(mut self) -> Self {
+        self.ignore = true;
+        self
     }
 }
 
 impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
     fn build(self) -> FieldSpec {
         FieldSpec {
-            range: self.range.expect("range must be set in order to build"),
+            index: self.index.unwrap_or_default(),
+            length: self.length.expect("length must be set in order to build"),
             padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
             padding: self.padding.expect("padding must be set in order to build"),
-            default: self.default
+            default: self.default,
+            ignore: self.ignore
         }
     }
 }
@@ -258,66 +246,95 @@ mod test {
     #[test]
     fn build() {
         let spec = test_spec();
+        let line_spec = LineSpec {
+            length: 45,
+            separator: "\n".to_string()
+        };
         let mut record_specs = HashMap::new();
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
-            range: (0..4),
+            index: 0,
+            length: 4,
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            ignore: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
-            range: (4..9),
+            index: 4,
+            length: 5,
             padding: " ".to_string(),
             padding_direction: PaddingDirection::Right,
-            default: Some("def".to_string())
+            default: Some("def".to_string()),
+            ignore: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
-            range: (9..45),
+            index: 9,
+            length: 36,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
-            default: None
+            default: None,
+            ignore: false
         });
         record_specs.insert("record1".to_string(), RecordSpec {
+            line_spec: line_spec.clone(),
             field_specs: field_specs
         });
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
-            range: (0..3),
+            index: 0,
+            length: 3,
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            ignore: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
-            range: (4..8),
+            index: 4,
+            length: 4,
             padding: "sdf".to_string(),
             padding_direction: PaddingDirection::Right,
-            default: Some("defa".to_string())
+            default: Some("defa".to_string()),
+            ignore: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
-            range: (9..36),
+            index: 9,
+            length: 27,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
-            default: None
+            default: None,
+            ignore: false
         });
         field_specs.insert("field4".to_string(), FieldSpec {
-            range: (37..45),
+            index: 37,
+            length: 8,
             padding: "sdfsd".to_string(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            ignore: false
         });
         record_specs.insert("record2".to_string(), RecordSpec {
+            line_spec: line_spec.clone(),
             field_specs: field_specs
         });
         record_specs.insert("record3".to_string(), RecordSpec {
+            line_spec: line_spec.clone(),
             field_specs: BTreeMap::new()
         });
         assert_eq!(FileSpec {
-            line_spec: LineSpec {
-                length: 45,
-                separator: "\n".to_string()
-            },
             record_specs: record_specs
         }, spec);
+        assert_eq!(FieldSpecBuilder::new()
+            .with_padding("0".to_string())
+            .with_padding_direction(PaddingDirection::Left)
+            .with_length(0)
+            .build()
+        , FieldSpecBuilder::new_number().with_length(0).build());
+        assert_eq!(FieldSpecBuilder::new()
+            .with_padding(" ".to_string())
+            .with_padding_direction(PaddingDirection::Right)
+            .with_length(0)
+            .build()
+        , FieldSpecBuilder::new_string().with_length(0).build());
     }
 }

@@ -40,7 +40,7 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if &line[field_spec.range.clone()] == default {
+                    if &line[field_spec.index..field_spec.index + field_spec.length] == default {
                         return Some(name.clone());
                     }
                 }
@@ -103,10 +103,9 @@ mod test {
     #[test]
     fn id_spec_recognizer() {
         let specs = FileSpecBuilder::new()
-            .with_line_spec(LineSpecBuilder::new().with_length(10))
             .with_record(
                 "record1",
-                RecordSpecBuilder::new()
+                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "field1",
                         FieldSpecBuilder::new()
@@ -125,7 +124,7 @@ mod test {
             )
             .with_record(
                 "record2",
-                RecordSpecBuilder::new()
+                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()
@@ -139,7 +138,7 @@ mod test {
                     )
             ).with_record(
             "record3",
-            RecordSpecBuilder::new()
+            RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
                 .with_field(
                     "field1",
                     FieldSpecBuilder::new_string()
@@ -154,7 +153,7 @@ mod test {
         )
             .with_record(
                 "record4",
-                RecordSpecBuilder::new()
+                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()
@@ -208,14 +207,6 @@ mod test {
         assert_eq!(Some("record3".to_string()), recognizer_with_field.recognize_for_line(&"barasdasdd".to_string(), &specs));
         assert_eq!(Some("record4".to_string()), recognizer.recognize_for_line(&"foodsfsdfd".to_string(), &specs));
         assert_eq!(Some("record1".to_string()), recognizer_with_field.recognize_for_line(&"foodsfsdfd".to_string(), &specs));
-        assert_eq!(FieldSpecBuilder::new()
-            .with_padding("0".to_string())
-            .with_padding_direction(PaddingDirection::Left)
-        , FieldSpecBuilder::new_number());
-        assert_eq!(FieldSpecBuilder::new()
-            .with_padding(" ".to_string())
-            .with_padding_direction(PaddingDirection::Right)
-        , FieldSpecBuilder::new_string());
     }
 
     #[test]
