@@ -4,5 +4,5 @@ pub mod reader;
 pub mod writer;
 pub mod padders;
 pub mod recognizers;
-#[cfg(feature = "test")]
+#[cfg(test)]
 pub mod test;
