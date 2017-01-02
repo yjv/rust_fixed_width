@@ -123,6 +123,7 @@ pub fn test_spec() -> FileSpec {
                         .with_range(0..4)
                         .with_padding("dsasd")
                         .with_padding_direction(PaddingDirection::Left)
+                        .ignore()
                 )
                 .with_field(
                     "field2",

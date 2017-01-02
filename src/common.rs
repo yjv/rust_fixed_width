@@ -37,34 +37,33 @@ impl Display for Error {
 }
 
 #[derive(Debug, Clone)]
-pub struct Position<'a> {
-    spec: &'a LineSpec,
+pub struct Position {
+    line_length: usize,
     position: usize,
     line: usize,
     column: usize
 }
 
-impl<'a> Position<'a> {
-    pub fn new(position: usize, spec: &'a LineSpec) -> Self {
-        let length = spec.length + spec.separator.len();
+impl Position {
+    pub fn new(position: usize, line_length: usize) -> Self {
         Position {
-            spec: spec,
+            line_length: line_length,
             position: position,
-            line: if position == 0 {
+            line: if line_length == 0 {
                 0
             } else {
-                position / length
+                position / line_length
             },
-            column: if position == 0 {
+            column: if line_length == 0 {
                 0
             } else {
-                position % length
+                position % line_length
             }
         }
     }
 
     pub fn add(&self, amount: usize) -> Self {
-        Self::new(self.position + amount, self.spec)
+        Self::new(self.position + amount, self.line_length)
     }
 
     pub fn get_position(&self) -> usize {
@@ -80,10 +79,25 @@ impl<'a> Position<'a> {
     }
 }
 
+impl From<(usize, usize)> for Position {
+    fn from(tuple: (usize, usize)) -> Self {
+        Position::new(
+            tuple.0,
+            tuple.1
+        )
+    }
+}
+
+impl Into<(usize, usize)> for Position {
+    fn into(self) -> (usize, usize) {
+        (self.position, self.line_length)
+    }
+}
+
 pub struct Handler<'a, T> {
     inner: T,
     line_spec: &'a LineSpec,
-    position: Position<'a>,
+    position: Position,
     end_of_line_validation: bool
 }
 
@@ -193,7 +207,7 @@ impl <'a, T: Seek> Seek for Handler<'a, T> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         self.position = Position::new(
             self.inner.seek(pos)? as usize,
-            self.line_spec
+            self.line_spec.len()
         );
         Ok(self.position.get_position() as u64)
     }
@@ -203,7 +217,7 @@ impl <'a, T: Seek> Seek for Handler<'a, T> {
 pub struct HandlerBuilder<'a, T> {
     inner: Option<T>,
     line_spec: Option<&'a LineSpec>,
-    position: Option<Position<'a>>,
+    position: Option<Position>,
     end_of_line_validation: bool
 }
 
@@ -235,11 +249,11 @@ impl<'a, T> HandlerBuilder<'a, T> {
         }
     }
 
-    pub fn with_position(self, position: Position<'a>) -> Self {
+    pub fn with_position<U: Into<Position>>(self, position: U) -> Self {
         HandlerBuilder {
             inner: self.inner,
             line_spec: self.line_spec,
-            position: Some(position),
+            position: Some(position.into()),
             end_of_line_validation: self.end_of_line_validation
         }
     }
@@ -254,15 +268,15 @@ impl<'a, T> HandlerBuilder<'a, T> {
     }
 
     pub fn build(self) -> Handler<'a, T> {
-        let line_spec = self.line_spec.expect("file_spec is required in order to build");
+        let line_spec = self.line_spec.expect("line_spec is required in order to build");
         Handler {
-            inner: self.inner.expect("inner is required in oder to build"),
+            inner: self.inner.expect("inner is required in order to build"),
             line_spec: line_spec,
             position: self.position.unwrap_or_else(|| Position {
                 position: 0,
                 line: 0,
                 column: 0,
-                spec: line_spec
+                line_length: line_spec.len()
             }),
             end_of_line_validation: self.end_of_line_validation
         }

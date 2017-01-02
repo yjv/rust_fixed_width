@@ -45,6 +45,12 @@ pub struct LineSpec {
     pub separator: String,
 }
 
+impl LineSpec {
+    pub fn len(&self) -> usize {
+        self.length + self.separator.len()
+    }
+}
+
 impl SpecBuilder<LineSpec> for LineSpec {
     fn build(self) -> LineSpec {
         self
@@ -258,7 +264,7 @@ mod test {
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            ignore: false
+            ignore: true
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             index: 4,
