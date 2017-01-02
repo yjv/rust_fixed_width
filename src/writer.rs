@@ -1,4 +1,5 @@
-use spec::{FileSpec, FieldSpec, Padder};
+use spec::{FileSpec, FieldSpec};
+use padders::Padder;
 use std::collections::HashMap;
 use std::io::{Write, Error as IoError};
 
@@ -51,8 +52,8 @@ impl<T: Padder> Writer<T> {
             self._write_field(writer, field_spec, data.get(name).or_else(|| field_spec.default.as_ref().clone()).ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone()))?.clone())?;
         }
 
-        if end < self.spec.line_length {
-            writer.write_all(&mut vec![0; self.spec.line_length - end][..])?;
+        if end < self.spec.line_spec.length {
+            writer.write_all(&mut vec![0; self.spec.line_spec.length - end][..])?;
         }
 
         Ok(())

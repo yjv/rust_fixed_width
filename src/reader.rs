@@ -1,4 +1,5 @@
-use spec::{FileSpec, FieldSpec, UnPadder};
+use spec::{FileSpec, FieldSpec};
+use padders::UnPadder;
 use std::collections::HashMap;
 use std::io::{Read, Error as IoError, ErrorKind};
 
@@ -39,10 +40,7 @@ impl<T: UnPadder> Reader<T> {
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        let mut data = Vec::new();
-        data.resize(self.spec.line_length, 0);
-        reader.read_exact(&mut data[..])?;
-        let line = self._read_string(reader, self.spec.line_length)?;
+        let line = self._read_string(reader, self.spec.line_spec.length)?;
         let mut data: HashMap<String, String> = HashMap::new();
         for (name, field_spec) in &record_spec.field_specs {
             data.insert(name.clone(), self._unpad_field(

@@ -1,4 +1,6 @@
 use super::spec::*;
+use super::padders::*;
+use super::recognizers::*;
 use std::collections::{HashMap, BTreeMap};
 
 #[derive(Debug)]
@@ -111,8 +113,11 @@ impl UnPadder for MockPadder {
 
 pub fn test_spec() -> FileSpec {
     FileSpecBuilder::new()
-        .with_line_length(45)
-        .with_line_separator("\n")
+        .with_line_spec(
+            LineSpecBuilder::new()
+                .with_length(45)
+                .with_separator("\n")
+        )
         .with_record(
             "record1",
             RecordSpecBuilder::new()

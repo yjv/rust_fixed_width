@@ -5,5 +5,7 @@ pub mod spec;
 pub mod reader;
 #[cfg(feature = "writer")]
 pub mod writer;
+pub mod padders;
+pub mod recognizers;
 #[cfg(feature = "test")]
 pub mod test;
