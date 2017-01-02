@@ -1,6 +1,5 @@
 extern crate pad;
 use std::collections::{HashMap, BTreeMap};
-use std::ops::Range;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileSpec {
@@ -205,10 +204,6 @@ impl FieldSpecBuilder {
 
     pub fn new_empty_string() -> Self {
         Self::new_string().with_default("")
-    }
-
-    pub fn with_range(self, range: Range<usize>) -> Self {
-        self.with_length(range.end - range.start)
     }
 
     pub fn with_length(mut self, length: usize) -> Self {

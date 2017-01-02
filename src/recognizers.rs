@@ -110,14 +110,14 @@ mod test {
                         "field1",
                         FieldSpecBuilder::new()
                             .with_default("foo")
-                            .with_range(0..3)
+                            .with_length(3)
                             .with_padding("dsasd")
                             .with_padding_direction(PaddingDirection::Left)
                     )
                     .with_field(
                         "field2",
                         FieldSpecBuilder::new()
-                            .with_range(4..9)
+                            .with_length(5)
                             .with_padding("sdf".to_string())
                             .with_padding_direction(PaddingDirection::Right)
                     )
@@ -129,12 +129,12 @@ mod test {
                         "$id",
                         FieldSpecBuilder::new_string()
                             .with_default("bar")
-                            .with_range(0..3)
+                            .with_length(3)
                     )
                     .with_field(
                         "field2".to_string(),
                         FieldSpecBuilder::new_string()
-                            .with_range(4..9)
+                            .with_length(5)
                     )
             ).with_record(
             "record3",
@@ -143,12 +143,12 @@ mod test {
                     "field1",
                     FieldSpecBuilder::new_string()
                         .with_default("bar")
-                        .with_range(0..3)
+                        .with_length(3)
                 )
                 .with_field(
                     "field2",
                     FieldSpecBuilder::new_string()
-                        .with_range(4..9)
+                        .with_length(5)
                 )
         )
             .with_record(
@@ -158,12 +158,12 @@ mod test {
                         "$id",
                         FieldSpecBuilder::new_string()
                             .with_default("foo")
-                            .with_range(0..3)
+                            .with_length(3)
                     )
                     .with_field(
                         "field2".to_string(),
                         FieldSpecBuilder::new_string()
-                            .with_range(4..9)
+                            .with_length(5)
                     )
             )
             .build()
