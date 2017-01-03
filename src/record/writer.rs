@@ -2,6 +2,7 @@ use spec::{RecordSpec, FieldSpec};
 use padders::Padder;
 use std::collections::HashMap;
 use std::io::{Write, Error as IoError};
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 pub enum Error<T: Padder> {
@@ -20,13 +21,13 @@ impl<T: Padder> From<IoError> for Error<T> {
     }
 }
 
-pub struct Writer<T: Padder> {
+pub struct Writer<T: Padder, U: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
-    specs: HashMap<String, RecordSpec>
+    specs: U
 }
 
-impl<T: Padder> Writer<T> {
-    pub fn new(padder: T, specs: HashMap<String, RecordSpec>) -> Self {
+impl<T: Padder, U: Borrow<HashMap<String, RecordSpec>>> Writer<T, U> {
+    pub fn new(padder: T, specs: U) -> Self {
         Writer {
             padder: padder,
             specs: specs
@@ -34,7 +35,7 @@ impl<T: Padder> Writer<T> {
     }
 
     pub fn write_field<'a, V: 'a + Write>(&self, writer: &'a mut V, record_name: String, name: String, value: String) -> Result<(), Error<T>> {
-        let field_spec = self.specs
+        let field_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
             .field_specs.get(&name)
@@ -44,7 +45,7 @@ impl<T: Padder> Writer<T> {
     }
 
     pub fn write_record<'a, V: 'a + Write>(&self, writer: &'a mut V, record_name: String, data: HashMap<String, String>) -> Result<(), Error<T>> {
-        let record_spec = self.specs
+        let record_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
@@ -80,7 +81,7 @@ mod test {
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok(string[0..4].to_string()));
         padder.add_pad_call("def".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
         padder.add_pad_call("hello2".to_string(), 36, "xcvcxv".to_string(), PaddingDirection::Right, Ok(string[9..45].to_string()));
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = Writer::new(&padder, &spec.record_specs);
         writer.write_record(&mut buf, "record1".to_string(), [("field1".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
             .iter().cloned().collect()).unwrap();

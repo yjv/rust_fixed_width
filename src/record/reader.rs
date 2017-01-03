@@ -2,6 +2,7 @@ use spec::{RecordSpec, FieldSpec};
 use padders::UnPadder;
 use std::collections::HashMap;
 use std::io::{Read, Error as IoError, ErrorKind};
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 pub enum Error<T: UnPadder> {
@@ -19,13 +20,13 @@ impl<T: UnPadder> From<IoError> for Error<T> {
     }
 }
 
-pub struct Reader<T: UnPadder> {
+pub struct Reader<T: UnPadder, U: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
-    specs: HashMap<String, RecordSpec>
+    specs: U
 }
 
-impl<T: UnPadder> Reader<T> {
-    pub fn new(un_padder: T, specs: HashMap<String, RecordSpec>) -> Self {
+impl<T: UnPadder, U: Borrow<HashMap<String, RecordSpec>>> Reader<T, U> {
+    pub fn new(un_padder: T, specs: U) -> Self {
         Reader {
             un_padder: un_padder,
             specs: specs
@@ -33,7 +34,7 @@ impl<T: UnPadder> Reader<T> {
     }
 
     pub fn read_field<'a, V: 'a + Read>(&self, reader: &'a mut V, record_name: String, name: String) -> Result<String, Error<T>> {
-        let field_spec = self.specs
+        let field_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
             .field_specs.get(&name)
@@ -43,7 +44,7 @@ impl<T: UnPadder> Reader<T> {
     }
 
     pub fn read_record<'a, V: 'a + Read>(&self, reader: &'a mut V, record_name: String) -> Result<HashMap<String, String>, Error<T>> {
-        let record_spec = self.specs
+        let record_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
@@ -107,7 +108,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         match reader.read_record(&mut buf, "record5".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
@@ -121,7 +122,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Err(()));
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         reader.read_record(&mut buf, "record1".to_string()).unwrap_err();
     }
 
@@ -132,7 +133,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         reader.read_record(&mut buf, "record1".to_string()).unwrap_err();
     }
 
@@ -144,7 +145,7 @@ mod test {
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[0..4].to_string(), "dsasd".to_string(), PaddingDirection::Left, Ok("hello".to_string()));
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap());
         assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field2".to_string()).unwrap());
     }
@@ -155,7 +156,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         match reader.read_field(&mut buf, "record5".to_string(), "field1".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
@@ -168,7 +169,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         match reader.read_field(&mut buf, "record1".to_string(), "field5".to_string()) {
             Err(Error::FieldSpecNotFound(record_name, field_name)) => {
                 assert_eq!("record1".to_string(), record_name);
@@ -185,7 +186,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[0..4].to_string(), "dsasd".to_string(), PaddingDirection::Left, Err(()));
-        let reader = Reader::new(&un_padder, spec.record_specs);
+        let reader = Reader::new(&un_padder, &spec.record_specs);
         reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap_err();
     }
 
@@ -194,7 +195,7 @@ mod test {
         let spec = test_spec();
         let string = "123";
         let mut buf = Cursor::new(string.as_bytes());
-        let reader = Reader::new(MockPadder::new(), spec.record_specs);
+        let reader = Reader::new(MockPadder::new(), &spec.record_specs);
         reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap_err();
     }
 }
