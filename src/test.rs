@@ -1,6 +1,6 @@
-use super::spec::*;
-use super::padders::*;
-use super::recognizers::*;
+use spec::*;
+use padders::*;
+use record::recognizers::*;
 use std::collections::{HashMap, BTreeMap};
 
 #[derive(Debug)]
