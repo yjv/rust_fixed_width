@@ -176,12 +176,23 @@ mod test {
     }
 
     #[test]
-    fn write_record_with_write_error() {
+    fn write_record_with_padded_value_not_correct_length() {
         let spec = test_spec();
-        let string: &mut [u8] = &mut [0; 4];
-        let mut buf = Cursor::new(string);
+        let mut buf = Cursor::new(Vec::new());
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("hello2".to_string()));
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
+        writer.write_record(&mut buf, "record1".to_string(), [("field3".to_string(), "hello2".to_string())]
+        .iter().cloned().collect()).unwrap_err();
+    }
+
+    #[test]
+    fn write_record_with_write_error() {
+        let spec = test_spec();
+        let string: &mut [u8] = &mut [0; 3];
+        let mut buf = Cursor::new(string);
+        let mut padder = MockPadder::new();
+        padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("bye2".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         writer.write_record(&mut buf, "record1".to_string(), [("field1".to_string(), "hello".to_string())]
         .iter().cloned().collect()).unwrap_err();
