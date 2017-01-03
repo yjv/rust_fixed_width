@@ -1,8 +1,9 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::Padder;
+use padders::{Padder, IdentityPadder};
 use std::collections::HashMap;
 use std::io::{Write, Error as IoError};
 use std::borrow::Borrow;
+use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer};
 
 #[derive(Debug)]
 pub enum Error<T: Padder> {
@@ -10,6 +11,7 @@ pub enum Error<T: Padder> {
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
     PaddingFailed(T::Error),
+    PaddedValueNotLongEnough(usize, usize),
     IoError(IoError),
     NotEnoughWritten(usize, usize),
     FieldValueRequired(String, String)
@@ -21,30 +23,41 @@ impl<T: Padder> From<IoError> for Error<T> {
     }
 }
 
-pub struct Writer<T: Padder, U: Borrow<HashMap<String, RecordSpec>>> {
+pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
-    specs: U
+    recognizer: U,
+    specs: V
 }
 
-impl<T: Padder, U: Borrow<HashMap<String, RecordSpec>>> Writer<T, U> {
-    pub fn new(padder: T, specs: U) -> Self {
-        Writer {
-            padder: padder,
-            specs: specs
-        }
-    }
-
-    pub fn write_field<'a, V: 'a + Write>(&self, writer: &'a mut V, record_name: String, name: String, value: String) -> Result<(), Error<T>> {
+impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Writer<T, U, V> {
+    pub fn write_field<'a, W, X, Y, Z>(&self, writer: &'a mut W, record_name: X, name: Y, value: Z) -> Result<(), Error<T>>
+        where W: 'a + Write,
+              X: Into<String>,
+              Y: Into<String>,
+              Z: Into<String>
+    {
+        let record_name = record_name.into();
+        let name = name.into();
         let field_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
             .field_specs.get(&name)
             .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
         ;
-        Ok(self._write_field(writer, field_spec, value)?)
+        Ok(self._write_field(writer, field_spec, value.into())?)
     }
 
-    pub fn write_record<'a, V: 'a + Write>(&self, writer: &'a mut V, record_name: String, data: HashMap<String, String>) -> Result<(), Error<T>> {
+    pub fn write_record<'a, W, X, Y>(&self, writer: &'a mut W, record_name: Y, data: HashMap<String, String>) -> Result<(), Error<T>>
+        where W: 'a + Write,
+              X: Into<String>,
+              Y: Into<Option<X>>
+    {
+        let record_name = record_name
+            .into()
+            .map(|v| v.into())
+            .or_else(|| self.recognizer.recognize_for_data(&data, self.specs.borrow()))
+            .ok_or_else(|| Error::RecordSpecNameRequired)?
+        ;
         let record_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
@@ -57,9 +70,60 @@ impl<T: Padder, U: Borrow<HashMap<String, RecordSpec>>> Writer<T, U> {
         Ok(())
     }
 
-    fn _write_field<'a, V: 'a + Write>(&self, writer: &'a mut V, field_spec: &FieldSpec, value: String) -> Result<(), Error<T>> {
+    fn _write_field<'a, W: 'a + Write>(&self, writer: &'a mut W, field_spec: &FieldSpec, value: String) -> Result<(), Error<T>> {
         let value = self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::PaddingFailed(e))?;
+        if value.len() != field_spec.length {
+            return Err(Error::PaddedValueNotLongEnough(field_spec.length, value.len()));
+        }
+
         Ok(writer.write_all(value.as_bytes())?)
+    }
+}
+
+pub struct WriterBuilder<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
+    padder: Option<T>,
+    recognizer: Option<U>,
+    specs: Option<V>
+}
+
+impl<V: Borrow<HashMap<String, RecordSpec>>> WriterBuilder<IdentityPadder, NoneRecognizer, V> {
+    pub fn new() -> WriterBuilder<IdentityPadder, NoneRecognizer, V> {
+        WriterBuilder {
+            padder: Some(IdentityPadder),
+            recognizer: Some(NoneRecognizer),
+            specs: None
+        }
+    }
+}
+
+impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> WriterBuilder<T, U, V> {
+    pub fn with_padder<W: Padder>(self, padder: W) -> WriterBuilder<W, U, V> {
+        WriterBuilder {
+            padder: Some(padder),
+            recognizer: self.recognizer,
+            specs: self.specs
+        }
+    }
+
+    pub fn with_recognizer<W: DataRecordSpecRecognizer>(self, recognizer: W) -> WriterBuilder<T, W, V> {
+        WriterBuilder {
+            padder: self.padder,
+            recognizer: Some(recognizer),
+            specs: self.specs
+        }
+    }
+
+    pub fn with_specs(mut self, specs: V) -> Self {
+        self.specs = Some(specs);
+        self
+    }
+
+    pub fn build(self) -> Writer<T, U, V> {
+        Writer {
+            padder: self.padder.unwrap(),
+            recognizer: self.recognizer.unwrap(),
+            specs: self.specs.expect("specs is required to build a writer")
+        }
     }
 }
 
@@ -81,7 +145,7 @@ mod test {
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok(string[0..4].to_string()));
         padder.add_pad_call("def".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
         padder.add_pad_call("hello2".to_string(), 36, "xcvcxv".to_string(), PaddingDirection::Right, Ok(string[9..45].to_string()));
-        let writer = Writer::new(&padder, &spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).build();
         writer.write_record(&mut buf, "record1".to_string(), [("field1".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
             .iter().cloned().collect()).unwrap();
@@ -93,7 +157,7 @@ mod test {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         match writer.write_record(&mut buf, "record5".to_string(), HashMap::new()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
@@ -106,7 +170,7 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Err(()));
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         writer.write_record(&mut buf, "record1".to_string(), [("field3".to_string(), "hello2".to_string())]
         .iter().cloned().collect()).unwrap_err();
     }
@@ -118,7 +182,7 @@ mod test {
         let mut buf = Cursor::new(string);
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("hello2".to_string()));
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         writer.write_record(&mut buf, "record1".to_string(), [("field1".to_string(), "hello".to_string())]
         .iter().cloned().collect()).unwrap_err();
     }
@@ -131,7 +195,7 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok(string[0..4].to_string()));
         padder.add_pad_call("hello2".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         writer.write_field(&mut buf, "record1".to_string(), "field1".to_string(), "hello".to_string()).unwrap();
         assert_eq!(string[0..4].to_string(), String::from_utf8(buf.get_ref().clone()).unwrap());
         writer.write_field(&mut buf, "record1".to_string(), "field2".to_string(), "hello2".to_string()).unwrap();
@@ -143,7 +207,7 @@ mod test {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         match writer.write_field(&mut buf, "record5".to_string(), "field1".to_string(), "hello".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
@@ -155,7 +219,7 @@ mod test {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).build();
         match writer.write_field(&mut buf, "record1".to_string(), "field5".to_string(), "hello".to_string()) {
             Err(Error::FieldSpecNotFound(record_name, field_name)) => {
                 assert_eq!("record1".to_string(), record_name);
@@ -171,7 +235,17 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Err(()));
-        let writer = Writer::new(&padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
+        writer.write_field(&mut buf, "record1".to_string(), "field1".to_string(), "hello".to_string()).unwrap_err();
+    }
+
+    #[test]
+    fn write_field_with_padded_value_not_correct_length() {
+        let spec = test_spec();
+        let mut buf = Cursor::new(Vec::new());
+        let mut padder = MockPadder::new();
+        padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("123".to_string()));
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         writer.write_field(&mut buf, "record1".to_string(), "field1".to_string(), "hello".to_string()).unwrap_err();
     }
 
@@ -182,7 +256,7 @@ mod test {
         let mut buf = Cursor::new(string);
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("hello".to_string()));
-        let writer = Writer::new(padder, spec.record_specs);
+        let writer = WriterBuilder::new().with_padder(padder).with_specs(spec.record_specs).build();
         writer.write_field(&mut buf, "record1".to_string(), "field1".to_string(), "hello".to_string()).unwrap_err();
     }
 }
