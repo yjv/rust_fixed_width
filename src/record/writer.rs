@@ -61,6 +61,7 @@ impl<T: Padder> Writer<T> {
         Ok(writer.write_all(value.as_bytes())?)
     }
 }
+
 #[cfg(test)]
 mod test {
 

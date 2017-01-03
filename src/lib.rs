@@ -1,7 +1,6 @@
-pub mod common;
+pub mod line;
 pub mod spec;
-pub mod reader;
-pub mod writer;
+pub mod record;
 pub mod padders;
 pub mod recognizers;
 #[cfg(test)]
