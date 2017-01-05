@@ -30,21 +30,16 @@ pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<Stri
 }
 
 impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Writer<T, U, V> {
-    pub fn write_field<'a, W, X, Y, Z>(&self, writer: &'a mut W, record_name: X, name: Y, value: Z) -> Result<(), Error<T>>
-        where W: 'a + Write,
-              X: Into<String>,
-              Y: Into<String>,
-              Z: Into<String>
+    pub fn write_field<'a, W>(&self, writer: &'a mut W, record_name: String, name: String, value: String) -> Result<(), Error<T>>
+        where W: 'a + Write
     {
-        let record_name = record_name.into();
-        let name = name.into();
         let field_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
             .field_specs.get(&name)
             .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
         ;
-        Ok(self._write_field(writer, field_spec, value.into())?)
+        Ok(self._write_field(writer, field_spec, value)?)
     }
 
     pub fn write_record<'a, W, X>(&self, writer: &'a mut W, record_name: X, data: HashMap<String, String>) -> Result<(), Error<T>>
@@ -53,7 +48,6 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     {
         let record_name = record_name
             .into()
-            .map(|v| v.into())
             .or_else(|| self.recognizer.recognize_for_data(&data, self.specs.borrow()))
             .ok_or_else(|| Error::RecordSpecNameRequired)?
         ;
