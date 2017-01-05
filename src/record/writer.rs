@@ -164,6 +164,37 @@ mod test {
     }
 
     #[test]
+    fn write_record_with_no_record_name() {
+        let spec = test_spec();
+        let mut buf = Cursor::new(Vec::new());
+        let padder = MockPadder::new();
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
+        match writer.write_record(&mut buf, None, HashMap::<String, String>::new()) {
+            Err(Error::RecordSpecNameRequired) => (),
+            _ => panic!("should have returned a record spec name required error")
+        }
+    }
+
+    #[test]
+    fn write_record_with_no_record_name_but_guessable() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];".to_string();
+        let mut buf = Cursor::new(Vec::new());
+        let mut padder = MockPadder::new();
+        padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok(string[0..4].to_string()));
+        padder.add_pad_call("def".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
+        padder.add_pad_call("hello2".to_string(), 36, "xcvcxv".to_string(), PaddingDirection::Right, Ok(string[9..45].to_string()));
+        let data = [("field1".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect();
+        let mut recognizer = MockRecognizer::new();
+        recognizer.add_data_recognize_call(&data, &spec.record_specs, Some("record1".to_string()));
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
+        writer.write_record(&mut buf, None, data.clone()).unwrap();
+        assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
+    }
+
+    #[test]
     fn write_record_with_padding_error() {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());

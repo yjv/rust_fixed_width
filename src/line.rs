@@ -222,7 +222,7 @@ pub struct HandlerBuilder<T, U: Borrow<LineSpec>> {
     end_of_line_validation: bool
 }
 
-impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
+impl<'a> HandlerBuilder<Option<String>, LineSpec> {
     pub fn new() -> Self {
         HandlerBuilder {
             inner: None,
@@ -231,18 +231,28 @@ impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
             end_of_line_validation: true
         }
     }
+}
 
-    pub fn with_inner(mut self, inner: T) -> Self {
-        self.inner = Some(inner);
-        self
+impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
+    pub fn with_inner<V>(self, inner: V) -> HandlerBuilder<V, U> {
+        HandlerBuilder {
+            inner: Some(inner),
+            line_spec: self.line_spec,
+            position: self.position,
+            end_of_line_validation: self.end_of_line_validation
+        }
     }
 
-    pub fn with_line_spec(mut self, line_spec: U) -> Self {
-        self.line_spec = Some(line_spec);
-        self
+    pub fn with_line_spec<V: Borrow<LineSpec>>(self, line_spec: V) -> HandlerBuilder<T, V> {
+        HandlerBuilder {
+            inner: self.inner,
+            line_spec: Some(line_spec),
+            position: self.position,
+            end_of_line_validation: self.end_of_line_validation
+        }
     }
 
-    pub fn with_position<V: Into<Position>>(mut self, position: V) -> Self {
+    pub fn with_position<V: Into<Position>>(mut self, position: V) -> HandlerBuilder<T, U> {
         self.position = Some(position.into());
         self
     }
