@@ -47,10 +47,9 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(self._write_field(writer, field_spec, value.into())?)
     }
 
-    pub fn write_record<'a, W, X, Y>(&self, writer: &'a mut W, record_name: Y, data: HashMap<String, String>) -> Result<(), Error<T>>
+    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, record_name: X, data: HashMap<String, String>) -> Result<(), Error<T>>
         where W: 'a + Write,
-              X: Into<String>,
-              Y: Into<Option<X>>
+              X: Into<Option<String>>
     {
         let record_name = record_name
             .into()
@@ -158,7 +157,7 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        match writer.write_record(&mut buf, "record5".to_string(), HashMap::new()) {
+        match writer.write_record(&mut buf, Some("record5".to_string()), HashMap::<String, String>::new()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
