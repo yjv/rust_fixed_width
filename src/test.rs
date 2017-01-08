@@ -5,8 +5,8 @@ use std::collections::{HashMap, BTreeMap};
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
-    line_recognize_calls: Vec<(&'a String, &'a HashMap<String, RecordSpec>, Option<String>)>,
-    data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Option<String>)>
+    line_recognize_calls: Vec<(&'a String, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>,
+    data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>
 }
 
 impl<'a> MockRecognizer<'a> {
@@ -16,38 +16,38 @@ impl<'a> MockRecognizer<'a> {
             line_recognize_calls: Vec::new()
         }
     }
-    pub fn add_line_recognize_call(&mut self, line: &'a String, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
+    pub fn add_line_recognize_call(&mut self, line: &'a String, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
         self.line_recognize_calls.push((line, record_specs, return_value));
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: &'a HashMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Option<String>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, data: &'a HashMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
         self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
 }
-
-impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
-    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
-        for &(ref expected_line, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
-            if *expected_line as *const String == line as *const String
-                && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
-            {
-                return return_value.clone();
-            }
-        }
-
-        panic!("Method recognize_for_line was not expected to be called with {:?}", (line, record_specs))
-    }
-}
+//
+//impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
+//    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Result<String, record::recognizers::Error> {
+//        for &(ref expected_line, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
+//            if *expected_line as *const String == line as *const String
+//                && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
+//            {
+//                return return_value.clone();
+//            }
+//        }
+//
+//        panic!("Method recognize_for_line was not expected to be called with {:?}", (line, record_specs))
+//    }
+//}
 
 impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
-    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Option<String> {
+    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::record::recognizers::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data == data
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
-                    return return_value.clone();
+                    return (*return_value).clone();
                 }
         }
 
@@ -180,4 +180,20 @@ pub fn test_spec() -> FileSpec {
             field_specs: BTreeMap::new()
         })
         .build()
+}
+
+#[macro_export]
+macro_rules! assert_result {
+    (Ok($left:expr), $right:expr) => {
+        match $right {
+            Ok(v) => assert_eq!($left, v),
+            e => panic!("Failed result returned was not the expected one {:?}", e)
+        }
+    };
+    ($left:pat, $right:expr) => {
+        match $right {
+            $left => (),
+            e => panic!("Failed result returned was not the expected one {:?}", e)
+        }
+    }
 }

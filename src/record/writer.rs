@@ -3,23 +3,32 @@ use padders::{Padder, IdentityPadder};
 use std::collections::HashMap;
 use std::io::{Write, Error as IoError};
 use std::borrow::Borrow;
-use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer};
+use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer, Error as RecognizerError};
 
 #[derive(Debug)]
 pub enum Error<T: Padder> {
     RecordSpecNameRequired,
+    RecordSpecRecognizerError(::record::recognizers::Error),
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
     PaddingFailed(T::Error),
     PaddedValueNotLongEnough(usize, usize),
     IoError(IoError),
-    NotEnoughWritten(usize, usize),
     FieldValueRequired(String, String)
 }
 
 impl<T: Padder> From<IoError> for Error<T> {
     fn from(e: IoError) -> Self {
         Error::IoError(e)
+    }
+}
+
+impl<T: Padder> From<RecognizerError> for Error<T> {
+    fn from(e: RecognizerError) -> Self {
+        match e {
+            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
+            _ => Error::RecordSpecRecognizerError(e)
+        }
     }
 }
 
@@ -48,8 +57,10 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     {
         let record_name = record_name
             .into()
-            .or_else(|| self.recognizer.recognize_for_data(&data, self.specs.borrow()))
-            .ok_or_else(|| Error::RecordSpecNameRequired)?
+            .map_or_else(
+                || self.recognizer.recognize_for_data(&data, self.specs.borrow()),
+                |name| Ok(name)
+            )?
         ;
         let record_spec = self.specs.borrow()
             .get(&record_name)
@@ -182,7 +193,7 @@ mod test {
             ("field3".to_string(), "hello2".to_string())]
             .iter().cloned().collect();
         let mut recognizer = MockRecognizer::new();
-        recognizer.add_data_recognize_call(&data, &spec.record_specs, Some("record1".to_string()));
+        recognizer.add_data_recognize_call(&data, &spec.record_specs, Ok("record1".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
         writer.write_record(&mut buf, data.clone(), None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());

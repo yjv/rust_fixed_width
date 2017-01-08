@@ -78,6 +78,10 @@ impl Position {
     pub fn get_column(&self) -> usize {
         self.column
     }
+
+    pub fn is_at_end_of_line(&self) -> bool {
+        self.column >= self.line_length
+    }
 }
 
 impl From<(usize, usize)> for Position {
@@ -98,8 +102,7 @@ impl Into<(usize, usize)> for Position {
 pub struct Handler<T, U: Borrow<LineSpec>> {
     inner: T,
     line_spec: U,
-    position: Position,
-    end_of_line_validation: bool
+    position: Position
 }
 
 impl <T, U: Borrow<LineSpec>> Handler<T, U> {
@@ -112,6 +115,11 @@ impl <T, U: Borrow<LineSpec>> Handler<T, U> {
     pub fn get_position(&self) -> &Position {
         &self.position
     }
+
+    pub fn into_line_handler(self) -> LineHandler<T, U> {
+        let line = self.position.line;
+        LineHandler { inner: self, line: line }
+    }
 }
 
 impl<T: Read, U: Borrow<LineSpec>> Read for Handler<T, U> {
@@ -119,10 +127,6 @@ impl<T: Read, U: Borrow<LineSpec>> Read for Handler<T, U> {
         self.absorb_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
-
-        if self.end_of_line_validation && length > self.line_spec.borrow().length - self.position.column {
-            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_spec.borrow().length - self.position.column)));
-        }
 
         while total_amount < length {
             let remaining_amount = min(self.line_spec.borrow().length - self.position.column, buf.len() - total_amount);
@@ -165,10 +169,6 @@ impl<T: Write, U: Borrow<LineSpec>> Write for Handler<T, U> {
         self.write_separator()?;
         let mut total_amount = 0;
         let length = buf.len();
-
-        if self.end_of_line_validation && length > self.line_spec.borrow().length - self.position.column {
-            return Err(IoError::new(ErrorKind::Other, Error::BufferOverflowsEndOfLine(length, self.line_spec.borrow().length - self.position.column)));
-        }
 
         while total_amount < length {
             let remaining_amount = min(self.line_spec.borrow().length - self.position.column, buf.len() - total_amount);
@@ -218,8 +218,7 @@ impl <T: Seek, U: Borrow<LineSpec>> Seek for Handler<T, U> {
 pub struct HandlerBuilder<T, U: Borrow<LineSpec>> {
     inner: Option<T>,
     line_spec: Option<U>,
-    position: Option<Position>,
-    end_of_line_validation: bool
+    position: Option<Position>
 }
 
 impl<'a> HandlerBuilder<Option<String>, LineSpec> {
@@ -227,8 +226,7 @@ impl<'a> HandlerBuilder<Option<String>, LineSpec> {
         HandlerBuilder {
             inner: None,
             line_spec: None,
-            position: None,
-            end_of_line_validation: true
+            position: None
         }
     }
 }
@@ -238,8 +236,7 @@ impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
         HandlerBuilder {
             inner: Some(inner),
             line_spec: self.line_spec,
-            position: self.position,
-            end_of_line_validation: self.end_of_line_validation
+            position: self.position
         }
     }
 
@@ -247,18 +244,12 @@ impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
         HandlerBuilder {
             inner: self.inner,
             line_spec: Some(line_spec),
-            position: self.position,
-            end_of_line_validation: self.end_of_line_validation
+            position: self.position
         }
     }
 
     pub fn with_position<V: Into<Position>>(mut self, position: V) -> HandlerBuilder<T, U> {
         self.position = Some(position.into());
-        self
-    }
-
-    pub fn without_end_of_line_validation(mut self) -> Self {
-        self.end_of_line_validation = false;
         self
     }
 
@@ -273,9 +264,54 @@ impl<'a, T, U: Borrow<LineSpec>> HandlerBuilder<T, U> {
                 line: 0,
                 column: 0,
                 line_length: line_length
-            }),
-            end_of_line_validation: self.end_of_line_validation
+            })
         }
+    }
+}
+
+pub struct LineHandler<T, U: Borrow<LineSpec>> {
+    inner: Handler<T, U>,
+    line: usize
+}
+
+impl <T, U: Borrow<LineSpec>> LineHandler<T, U> {
+    pub fn get_ref(&self) -> &Handler<T, U> { &self.inner }
+
+    pub fn get_mut(&mut self) -> &mut Handler<T, U> { &mut self.inner }
+
+    pub fn into_inner(self) -> Handler<T, U> { self.inner }
+
+    pub fn realign(&mut self) -> &mut Self {
+        self.line = self.inner.position.line;
+        self
+    }
+}
+
+impl<T: Read, U: Borrow<LineSpec>> Read for LineHandler<T, U> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        if buf.len() > 0 && (self.inner.position.column >= self.inner.line_spec.borrow().length || self.inner.position.line != self.line) {
+            return Ok(0)
+        }
+
+        let length = min(self.inner.line_spec.borrow().length - self.inner.position.column, buf.len());
+
+        self.inner.read(&mut buf[..length])
+    }
+}
+
+impl<T: Write, U: Borrow<LineSpec>> Write for LineHandler<T, U> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        if buf.len() > 0 && (self.inner.position.column >= self.inner.line_spec.borrow().length || self.inner.position.line != self.line) {
+            return Ok(0)
+        }
+
+        let length = min(self.inner.line_spec.borrow().length - self.inner.position.column, buf.len());
+
+        self.inner.write(&buf[..length])
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -294,7 +330,6 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
-            .without_end_of_line_validation()
             .build()
         ;
         let mut buf = String::new();
@@ -338,19 +373,18 @@ mod test {
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h\n0987654321h\n1234567890".as_bytes()))
             .build()
+            .into_line_handler()
         ;
 
-        handler.seek(SeekFrom::Start(0)).unwrap();
         let buf = &mut [0; 11];
-        match handler.read(buf) {
+        match handler.read_exact(buf) {
             Err(_)  => (),
-            _ => panic!("overflow end of line not returned")
+            v => panic!("overflow end of line not returned {:?}", v)
         }
 
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new("1234567890h20987654321h\n1234567890".as_bytes()))
-            .without_end_of_line_validation()
             .build()
         ;
 
@@ -371,7 +405,6 @@ mod test {
         let mut handler = HandlerBuilder::new()
             .with_line_spec(&spec)
             .with_inner(Cursor::new(Vec::new()))
-            .without_end_of_line_validation()
             .build()
         ;
         handler.write_all("123456789009876543211234567890".as_bytes()).unwrap();
@@ -405,10 +438,19 @@ mod test {
             .with_line_spec(&spec)
             .with_inner(Cursor::new(Vec::new()))
             .build()
+            .into_line_handler()
         ;
 
-        handler.seek(SeekFrom::Start(0)).unwrap();
         match handler.write_all("12345678900".as_bytes()) {
+            Err(_)  => (),
+            _ => panic!("overflow end of line not returned")
+        }
+
+        assert_eq!("1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().get_ref().clone()).unwrap());
+        handler.realign().write_all("0987654321".as_bytes()).unwrap();
+        assert_eq!("1234567890h\n0987654321h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().get_ref().clone()).unwrap());
+
+        match handler.write_all("0".as_bytes()) {
             Err(_)  => (),
             _ => panic!("overflow end of line not returned")
         }
