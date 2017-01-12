@@ -281,7 +281,7 @@ impl <T, U: Borrow<LineSpec>> LineHandler<T, U> {
 
     pub fn into_inner(self) -> Handler<T, U> { self.inner }
 
-    pub fn realign(&mut self) -> &mut Self {
+    pub fn refresh_line(&mut self) -> &mut Self {
         self.line = self.inner.position.line;
         self
     }
@@ -447,7 +447,7 @@ mod test {
         }
 
         assert_eq!("1234567890h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().get_ref().clone()).unwrap());
-        handler.realign().write_all("0987654321".as_bytes()).unwrap();
+        handler.refresh_line().write_all("0987654321".as_bytes()).unwrap();
         assert_eq!("1234567890h\n0987654321h\n".to_string(), String::from_utf8(handler.get_ref().get_ref().get_ref().clone()).unwrap());
 
         match handler.write_all("0".as_bytes()) {

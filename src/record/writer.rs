@@ -8,7 +8,7 @@ use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer, Error as Reco
 #[derive(Debug)]
 pub enum Error<T: Padder> {
     RecordSpecNameRequired,
-    RecordSpecRecognizerError(::record::recognizers::Error),
+    RecordSpecRecognizerError(RecognizerError),
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
     PaddingFailed(T::Error),
