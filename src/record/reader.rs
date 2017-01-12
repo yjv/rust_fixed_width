@@ -45,7 +45,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .field_specs.get(&name)
             .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
         ;
-        Ok(self._unpad_field(self._read_string(reader, field_spec.length)?, field_spec)?)
+        Ok(self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?)
     }
 
     pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>, Error<T>>
@@ -64,8 +64,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        let length = line.len();
-        line.push_str(&self._read_string(reader, record_spec.line_spec.length - length)?[..]);
+        let line = self._read_string(reader, record_spec.line_spec.length, line)?;
         let mut data: HashMap<String, String> = HashMap::new();
         let mut current_index = 0;
 
@@ -89,9 +88,11 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         )
     }
 
-    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, ) -> Result<String, IoError> {
-        let mut data = vec![0; length];
-        reader.read_exact(&mut data[..])?;
+    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> Result<String, IoError> {
+        let original_length = string.len();
+        let mut data = string.into_bytes();
+        data.resize(length, 0);
+        reader.read_exact(&mut data[original_length..])?;
         String::from_utf8(data).map_err(|_| IoError::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))
     }
 }
