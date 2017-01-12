@@ -323,9 +323,12 @@ mod test {
         let mut string = String::new();
         let mut buffer = LineBuffer::new(reader, &mut string);
         buffer.fill_to(5).unwrap();
+        buffer.fill_to(5).unwrap();
         assert_eq!(&mut "dsfds".to_string(), buffer.get_line());
+        buffer.fill_to(6).unwrap();
+        assert_eq!(&mut "dsfdsf".to_string(), buffer.get_line());
         let (buf, line) = buffer.into_inner();
-        assert_eq!(&mut "dsfds".to_string(), line);
-        assert_eq!(&mut "fsdfd".as_bytes(), buf);
+        assert_eq!(&mut "dsfdsf".to_string(), line);
+        assert_eq!(&mut "sdfd".as_bytes(), buf);
     }
 }
