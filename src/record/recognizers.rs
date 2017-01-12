@@ -81,12 +81,12 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
         Ok(())
     }
 
-    pub fn get_line(&mut self) -> &mut String {
-        self.line
+    pub fn into_inner(self) -> (&'a mut T, &'a mut String) {
+        (self.reader, self.line)
     }
 
-    pub fn get_reader(&mut self) -> &mut T {
-        self.reader
+    pub fn get_line(&mut self) -> &mut String {
+        self.line
     }
 }
 
@@ -315,5 +315,17 @@ mod test {
             LineBuffer::new(&mut empty(), &mut String::new()),
             &HashMap::new()
         ));
+    }
+
+    #[test]
+    fn line_buffer() {
+        let reader = &mut "dsfdsfsdfd".as_bytes();
+        let mut string = String::new();
+        let mut buffer = LineBuffer::new(reader, &mut string);
+        buffer.fill_to(5).unwrap();
+        assert_eq!(&mut "dsfds".to_string(), buffer.get_line());
+        let (buf, line) = buffer.into_inner();
+        assert_eq!(&mut "dsfds".to_string(), line);
+        assert_eq!(&mut "fsdfd".as_bytes(), buf);
     }
 }
