@@ -93,7 +93,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         let mut data = string.into_bytes();
         data.resize(length, 0);
         reader.read_exact(&mut data[original_length..])?;
-        String::from_utf8(data).map_err(|_| IoError::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8"))
+        String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 }
 
