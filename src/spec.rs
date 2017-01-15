@@ -44,57 +44,6 @@ impl Builder<Spec> for SpecBuilder {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LineSpec {
-    pub length: usize,
-    pub separator: String,
-}
-
-impl LineSpec {
-    pub fn len(&self) -> usize {
-        self.length + self.separator.len()
-    }
-}
-
-impl Builder<LineSpec> for LineSpec {
-    fn build(self) -> LineSpec {
-        self
-    }
-}
-
-#[derive(Clone)]
-pub struct LineSpecBuilder {
-    length: Option<usize>,
-    separator: Option<String>
-}
-
-impl LineSpecBuilder {
-    pub fn new() -> Self {
-        LineSpecBuilder {
-            length: None,
-            separator: None
-        }
-    }
-    pub fn with_length(mut self, length: usize) -> Self {
-        self.length = Some(length);
-        self
-    }
-
-    pub fn with_separator<T: Into<String>>(mut self, separator: T) -> Self {
-        self.separator = Some(separator.into());
-        self
-    }
-}
-
-impl Builder<LineSpec> for LineSpecBuilder {
-    fn build(self) -> LineSpec {
-        LineSpec {
-            length: self.length.expect("length is required to create the line spec"),
-            separator: self.separator.unwrap_or_default()
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSpec {
     pub line_ending: String,
     pub field_specs: BTreeMap<String, FieldSpec>
