@@ -1,12 +1,12 @@
-pub mod reader;
-pub mod writer;
-pub mod recognizers;
-
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
 use padders::Error as PadderError;
 use std::io::Error as IoError;
 use self::recognizers::Error as RecognizerError;
+
+pub mod reader;
+pub mod writer;
+pub mod recognizers;
 
 #[derive(Debug)]
 pub enum Error {
