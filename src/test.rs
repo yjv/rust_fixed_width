@@ -115,7 +115,8 @@ pub fn test_spec() -> FileSpec {
     FileSpecBuilder::new()
         .with_record(
             "record1",
-            RecordSpecBuilder::new(line_spec.clone())
+            RecordSpecBuilder::new()
+                .with_line(line_spec.clone())
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
@@ -140,7 +141,8 @@ pub fn test_spec() -> FileSpec {
         )
         .with_record(
             "record2".to_string(),
-            RecordSpecBuilder::new(line_spec.clone())
+            RecordSpecBuilder::new()
+                .with_line(line_spec.clone())
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()

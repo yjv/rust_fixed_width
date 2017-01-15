@@ -1,6 +1,10 @@
 extern crate pad;
 use std::collections::{HashMap, BTreeMap};
 
+pub trait SpecBuilder<T> {
+    fn build(self) -> T;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileSpec {
     pub record_specs: HashMap<String, RecordSpec>
@@ -118,14 +122,14 @@ impl SpecBuilder<RecordSpec> for RecordSpec {
 
 #[derive(Clone)]
 pub struct RecordSpecBuilder {
-    line_spec: LineSpec,
+    line_spec: Option<LineSpec>,
     field_specs: BTreeMap<String, FieldSpec>,
 }
 
 impl RecordSpecBuilder {
-    pub fn new<T: SpecBuilder<LineSpec>>(line_spec: T) -> Self {
+    pub fn new() -> Self {
         RecordSpecBuilder {
-            line_spec: line_spec.build(),
+            line_spec: None,
             field_specs: BTreeMap::new()
         }
     }
@@ -134,12 +138,17 @@ impl RecordSpecBuilder {
         self.field_specs.insert(name.into(), field.build());
         self
     }
+
+    pub fn with_line<T: SpecBuilder<LineSpec>>(mut self, line_spec: T) -> Self {
+        self.line_spec = Some(line_spec.build());
+        self
+    }
 }
 
 impl SpecBuilder<RecordSpec> for RecordSpecBuilder {
     fn build(self) -> RecordSpec {
         RecordSpec {
-            line_spec: self.line_spec,
+            line_spec: self.line_spec.expect("line spec is required to build"),
             field_specs: self.field_specs
         }
     }
@@ -164,10 +173,6 @@ impl SpecBuilder<FieldSpec> for FieldSpec {
     fn build(self) -> Self {
         self
     }
-}
-
-pub trait SpecBuilder<T> {
-    fn build(self) -> T;
 }
 
 #[derive(Clone)]

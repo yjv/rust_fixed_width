@@ -202,7 +202,8 @@ mod test {
         let specs = FileSpecBuilder::new()
             .with_record(
                 "record1",
-                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
+                RecordSpecBuilder::new()
+                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "field1",
                         FieldSpecBuilder::new()
@@ -221,7 +222,8 @@ mod test {
             )
             .with_record(
                 "record2",
-                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
+                RecordSpecBuilder::new()
+                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()
@@ -235,7 +237,8 @@ mod test {
                     )
             ).with_record(
             "record3",
-            RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
+            RecordSpecBuilder::new()
+                .with_line(LineSpecBuilder::new().with_length(10))
                 .with_field(
                     "field1",
                     FieldSpecBuilder::new_string()
@@ -250,7 +253,8 @@ mod test {
         )
             .with_record(
                 "record4",
-                RecordSpecBuilder::new(LineSpecBuilder::new().with_length(10))
+                RecordSpecBuilder::new()
+                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()
