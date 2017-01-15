@@ -129,14 +129,14 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    let field_index = record_spec.get_field_index(&self.id_field);
-                    buffer.fill_to(field_index + field_spec.length)?;
+                    let field_range = record_spec.field_range(&self.id_field).expect("This should never be None");
+                    buffer.fill_to(field_range.start + field_spec.length)?;
 
-                    if buffer.get_line().len() < field_index + field_spec.length {
+                    if buffer.get_line().len() < field_range.start + field_spec.length {
                         continue;
                     }
 
-                    if &buffer.get_line()[field_index..field_index + field_spec.length] == default {
+                    if &buffer.get_line()[field_range] == default {
                         return Ok(name.clone());
                     }
                 }
@@ -199,11 +199,10 @@ mod test {
 
     #[test]
     fn id_spec_recognizer() {
-        let specs = FileSpecBuilder::new()
+        let specs = SpecBuilder::new()
             .with_record(
                 "record1",
                 RecordSpecBuilder::new()
-                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "field1",
                         FieldSpecBuilder::new()
@@ -223,7 +222,6 @@ mod test {
             .with_record(
                 "record2",
                 RecordSpecBuilder::new()
-                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()
@@ -238,7 +236,6 @@ mod test {
             ).with_record(
             "record3",
             RecordSpecBuilder::new()
-                .with_line(LineSpecBuilder::new().with_length(10))
                 .with_field(
                     "field1",
                     FieldSpecBuilder::new_string()
@@ -254,7 +251,6 @@ mod test {
             .with_record(
                 "record4",
                 RecordSpecBuilder::new()
-                    .with_line(LineSpecBuilder::new().with_length(10))
                     .with_field(
                         "$id",
                         FieldSpecBuilder::new_string()

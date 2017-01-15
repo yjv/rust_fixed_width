@@ -13,7 +13,8 @@ pub enum Error {
     RecordSpecNameRequired,
     UnPaddingFailed(PadderError),
     IoError(IoError),
-    NotEnoughRead(usize, usize)
+    NotEnoughRead(usize, usize),
+    StringDoesNotMatchLineEnding(String, String)
 }
 
 impl From<IoError> for Error {
@@ -45,13 +46,21 @@ pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<St
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
     pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String, Error> {
-        let field_spec = self.specs.borrow()
+        let record_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
+        ;
+        let field_spec = record_spec
             .field_specs.get(&name)
             .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
         ;
-        Ok(self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?)
+        let field = self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?;
+
+        if record_spec.field_range(&name).expect("Should never be none").end == record_spec.len() {
+            self.absorb_separator(reader, record_spec)?;
+        }
+
+        Ok(field)
     }
 
     pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>, Error>
@@ -70,7 +79,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        let line = self._read_string(reader, record_spec.line_spec.length, line)?;
+        let line = self._read_string(reader, record_spec.len(), line)?;
         let mut data: HashMap<String, String> = HashMap::new();
         let mut current_index = 0;
 
@@ -83,6 +92,8 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             }
             current_index += field_spec.length;
         }
+
+        self.absorb_separator(reader, record_spec)?;
 
         Ok(data)
     }
@@ -100,6 +111,19 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         data.resize(length, 0);
         reader.read_exact(&mut data[original_length..])?;
         String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
+    }
+
+    fn absorb_separator<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<(), Error> {
+        let mut ending = String::new();
+        reader.by_ref().take(record_spec.line_ending.len() as u64).read_to_string(&mut ending)?;
+        if ending.len() != 0 && ending != record_spec.line_ending {
+            return Err(Error::StringDoesNotMatchLineEnding(
+                record_spec.line_ending.clone(),
+                ending
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -163,7 +187,32 @@ mod test {
     #[test]
     fn read_record() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
+        un_padder.add_unpad_call(string[9..45].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
+        un_padder.add_unpad_call(string[50..55].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello3".to_string()));
+        un_padder.add_unpad_call(string[55..91].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello4".to_string()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(spec.record_specs)
+            .build()
+        ;
+        assert_eq!([("field2".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, "record1".to_string()).unwrap())
+        ;
+        assert_eq!([("field2".to_string(), "hello3".to_string()),
+            ("field3".to_string(), "hello4".to_string())]
+            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, "record1".to_string()).unwrap())
+        ;
+    }
+
+    #[test]
+    fn read_record_with_bad_line_ending() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];bla";
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
@@ -173,15 +222,13 @@ mod test {
             .with_specs(spec.record_specs)
             .build()
         ;
-        assert_eq!([("field2".to_string(), "hello".to_string()),
-            ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, "record1".to_string()).unwrap());
+        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_record(&mut buf, "record1".to_string()));
     }
 
     #[test]
     fn read_record_with_bad_record_name() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
         let reader = ReaderBuilder::new()
@@ -198,7 +245,7 @@ mod test {
     #[test]
     fn read_record_with_no_record_name() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
         let reader = ReaderBuilder::new()
@@ -215,7 +262,7 @@ mod test {
     #[test]
     fn read_record_with_no_record_name_but_guessable() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
@@ -236,7 +283,7 @@ mod test {
     #[test]
     fn read_record_with_padding_error() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Err(PaddingError::new("")));
@@ -278,6 +325,21 @@ mod test {
         ;
         assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap());
         assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field2".to_string()).unwrap());
+    }
+
+    #[test]
+    fn read_field_with_bad_line_ending() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[0..36].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_field(&mut buf, "record1".to_string(), "field3".to_string()));
     }
 
     #[test]

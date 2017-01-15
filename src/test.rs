@@ -110,13 +110,12 @@ impl UnPadder for MockPadder {
     }
 }
 
-pub fn test_spec() -> FileSpec {
-    let line_spec = LineSpecBuilder::new().with_length(45).with_separator("\n");
-    FileSpecBuilder::new()
+pub fn test_spec() -> Spec {
+    SpecBuilder::new()
         .with_record(
             "record1",
             RecordSpecBuilder::new()
-                .with_line(line_spec.clone())
+                .with_line_ending("\n")
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
@@ -142,7 +141,7 @@ pub fn test_spec() -> FileSpec {
         .with_record(
             "record2".to_string(),
             RecordSpecBuilder::new()
-                .with_line(line_spec.clone())
+                .with_line_ending("\n")
                 .with_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
@@ -177,7 +176,7 @@ pub fn test_spec() -> FileSpec {
                 )
         )
         .with_record("record3".to_string(), RecordSpec {
-            line_spec: line_spec.build(),
+            line_ending: "\n".to_string(),
             field_specs: BTreeMap::new()
         })
         .build()

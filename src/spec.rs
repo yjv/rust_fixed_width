@@ -1,42 +1,43 @@
 extern crate pad;
 use std::collections::{HashMap, BTreeMap};
+use std::ops::Range;
 
-pub trait SpecBuilder<T> {
+pub trait Builder<T> {
     fn build(self) -> T;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FileSpec {
+pub struct Spec {
     pub record_specs: HashMap<String, RecordSpec>
 }
 
-impl SpecBuilder<FileSpec> for FileSpec {
+impl Builder<Spec> for Spec {
     fn build(self) -> Self {
         self
     }
 }
 
 #[derive(Clone)]
-pub struct FileSpecBuilder {
+pub struct SpecBuilder {
     record_specs: HashMap<String, RecordSpec>
 }
 
-impl FileSpecBuilder {
+impl SpecBuilder {
     pub fn new() -> Self {
-        FileSpecBuilder {
+        SpecBuilder {
             record_specs: HashMap::new()
         }
     }
 
-    pub fn with_record<T: Into<String>, U: SpecBuilder<RecordSpec>>(mut self, name: T, record: U) -> Self {
+    pub fn with_record<T: Into<String>, U: Builder<RecordSpec>>(mut self, name: T, record: U) -> Self {
         self.record_specs.insert(name.into(), record.build());
         self
     }
 }
 
-impl SpecBuilder<FileSpec> for FileSpecBuilder {
-    fn build(self) -> FileSpec {
-        FileSpec {
+impl Builder<Spec> for SpecBuilder {
+    fn build(self) -> Spec {
+        Spec {
             record_specs: self.record_specs
         }
     }
@@ -54,7 +55,7 @@ impl LineSpec {
     }
 }
 
-impl SpecBuilder<LineSpec> for LineSpec {
+impl Builder<LineSpec> for LineSpec {
     fn build(self) -> LineSpec {
         self
     }
@@ -84,7 +85,7 @@ impl LineSpecBuilder {
     }
 }
 
-impl SpecBuilder<LineSpec> for LineSpecBuilder {
+impl Builder<LineSpec> for LineSpecBuilder {
     fn build(self) -> LineSpec {
         LineSpec {
             length: self.length.expect("length is required to create the line spec"),
@@ -95,26 +96,29 @@ impl SpecBuilder<LineSpec> for LineSpecBuilder {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSpec {
-    pub line_spec: LineSpec,
+    pub line_ending: String,
     pub field_specs: BTreeMap<String, FieldSpec>
 }
 
 impl RecordSpec {
-    pub fn get_field_index(&self, name: &String) -> usize {
-        let mut index = 0;
-        for (field_name, field_spec) in &self.field_specs {
-            if name == field_name {
-                break;
+    pub fn field_range(&self, name: &String) -> Option<Range<usize>> {
+        let mut found_field_spec = None;
+        let index = self.field_specs.iter().take_while(|&(field_name, field_spec)| {
+            if field_name == name {
+                found_field_spec = Some(field_spec);
             }
+            found_field_spec.is_none()
+        }).fold(0, |length, (_, field_spec)| length + field_spec.length);
 
-            index += field_spec.length;
-        }
+        found_field_spec.map(|field_spec| index..index + field_spec.length)
+    }
 
-        index
+    pub fn len(&self) -> usize {
+        self.field_specs.iter().fold(0, |length, (_, field_spec)| length + field_spec.length)
     }
 }
 
-impl SpecBuilder<RecordSpec> for RecordSpec {
+impl Builder<RecordSpec> for RecordSpec {
     fn build(self) -> Self {
         self
     }
@@ -122,33 +126,33 @@ impl SpecBuilder<RecordSpec> for RecordSpec {
 
 #[derive(Clone)]
 pub struct RecordSpecBuilder {
-    line_spec: Option<LineSpec>,
+    line_ending: String,
     field_specs: BTreeMap<String, FieldSpec>,
 }
 
 impl RecordSpecBuilder {
     pub fn new() -> Self {
         RecordSpecBuilder {
-            line_spec: None,
+            line_ending: "".to_string(),
             field_specs: BTreeMap::new()
         }
     }
 
-    pub fn with_field<T: Into<String>, U: SpecBuilder<FieldSpec>>(mut self, name: T, field: U) -> Self {
+    pub fn with_field<T: Into<String>, U: Builder<FieldSpec>>(mut self, name: T, field: U) -> Self {
         self.field_specs.insert(name.into(), field.build());
         self
     }
 
-    pub fn with_line<T: SpecBuilder<LineSpec>>(mut self, line_spec: T) -> Self {
-        self.line_spec = Some(line_spec.build());
+    pub fn with_line_ending<T: Into<String>>(mut self, line_ending: T) -> Self {
+        self.line_ending = line_ending.into();
         self
     }
 }
 
-impl SpecBuilder<RecordSpec> for RecordSpecBuilder {
+impl Builder<RecordSpec> for RecordSpecBuilder {
     fn build(self) -> RecordSpec {
         RecordSpec {
-            line_spec: self.line_spec.expect("line spec is required to build"),
+            line_ending: self.line_ending,
             field_specs: self.field_specs
         }
     }
@@ -169,7 +173,7 @@ pub struct FieldSpec {
     pub ignore: bool
 }
 
-impl SpecBuilder<FieldSpec> for FieldSpec {
+impl Builder<FieldSpec> for FieldSpec {
     fn build(self) -> Self {
         self
     }
@@ -237,7 +241,7 @@ impl FieldSpecBuilder {
     }
 }
 
-impl SpecBuilder<FieldSpec> for FieldSpecBuilder {
+impl Builder<FieldSpec> for FieldSpecBuilder {
     fn build(self) -> FieldSpec {
         FieldSpec {
             length: self.length.expect("length must be set in order to build"),
@@ -258,10 +262,6 @@ mod test {
     #[test]
     fn build() {
         let spec = test_spec();
-        let line_spec = LineSpec {
-            length: 45,
-            separator: "\n".to_string()
-        };
         let mut record_specs = HashMap::new();
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
@@ -286,7 +286,7 @@ mod test {
             ignore: false
         });
         record_specs.insert("record1".to_string(), RecordSpec {
-            line_spec: line_spec.clone(),
+            line_ending: "\n".to_string(),
             field_specs: field_specs
         });
         let mut field_specs = BTreeMap::new();
@@ -319,14 +319,14 @@ mod test {
             ignore: false
         });
         record_specs.insert("record2".to_string(), RecordSpec {
-            line_spec: line_spec.clone(),
+            line_ending: "\n".to_string(),
             field_specs: field_specs
         });
         record_specs.insert("record3".to_string(), RecordSpec {
-            line_spec: line_spec.clone(),
+            line_ending: "\n".to_string(),
             field_specs: BTreeMap::new()
         });
-        assert_eq!(FileSpec {
+        assert_eq!(Spec {
             record_specs: record_specs
         }, spec);
         assert_eq!(FieldSpecBuilder::new()
@@ -341,5 +341,23 @@ mod test {
             .with_length(0)
             .build()
         , FieldSpecBuilder::new_string().with_length(0).build());
+    }
+
+    #[test]
+    fn field_range() {
+        let spec = test_spec();
+        let record_spec = spec.record_specs.get("record1").unwrap();
+        assert_eq!(Some(0..4), record_spec.field_range(&"field1".to_string()));
+        assert_eq!(Some(4..9), record_spec.field_range(&"field2".to_string()));
+        assert_eq!(Some(9..45), record_spec.field_range(&"field3".to_string()));
+        assert_eq!(None, record_spec.field_range(&"field4".to_string()));
+    }
+
+    #[test]
+    fn len() {
+        let spec = test_spec();
+        assert_eq!(45, spec.record_specs.get("record1").unwrap().len());
+        assert_eq!(42, spec.record_specs.get("record2").unwrap().len());
+        assert_eq!(0, spec.record_specs.get("record3").unwrap().len());
     }
 }
