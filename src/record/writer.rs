@@ -1,42 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::{Padder, IdentityPadder, Error as PadderError};
+use padders::{Padder, IdentityPadder};
 use std::collections::HashMap;
 use std::io::{Write, Error as IoError};
 use std::borrow::Borrow;
-use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer, Error as RecognizerError};
-
-#[derive(Debug)]
-pub enum Error {
-    RecordSpecNameRequired,
-    RecordSpecRecognizerError(RecognizerError),
-    RecordSpecNotFound(String),
-    FieldSpecNotFound(String, String),
-    PaddingFailed(PadderError),
-    PaddedValueWrongLength(usize, usize),
-    IoError(IoError),
-    FieldValueRequired(String, String)
-}
-
-impl From<IoError> for Error {
-    fn from(e: IoError) -> Self {
-        Error::IoError(e)
-    }
-}
-
-impl From<RecognizerError> for Error {
-    fn from(e: RecognizerError) -> Self {
-        match e {
-            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
-            _ => Error::RecordSpecRecognizerError(e)
-        }
-    }
-}
-
-impl From<PadderError> for Error {
-    fn from(e: PadderError) -> Self {
-        Error::PaddingFailed(e)
-    }
-}
+use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer};
+use super::{Error, Result};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -45,7 +13,7 @@ pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<Stri
 }
 
 impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Writer<T, U, V> {
-    pub fn write_field<'a, W>(&self, writer: &'a mut W, value: String, record_name: String, name: String) -> Result<(), Error>
+    pub fn write_field<'a, W>(&self, writer: &'a mut W, value: String, record_name: String, name: String) -> Result<()>
         where W: 'a + Write
     {
         let record_spec = self.specs.borrow()
@@ -65,7 +33,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, data: HashMap<String, String>, record_name: X) -> Result<(), Error>
+    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, data: HashMap<String, String>, record_name: X) -> Result<()>
         where W: 'a + Write,
               X: Into<Option<String>>
     {
@@ -90,7 +58,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    fn _write_field<'a, W: 'a + Write>(&self, writer: &'a mut W, field_spec: &FieldSpec, value: String) -> Result<(), Error> {
+    fn _write_field<'a, W: 'a + Write>(&self, writer: &'a mut W, field_spec: &FieldSpec, value: String) -> Result<()> {
         let value = self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction)?;
         if value.len() != field_spec.length {
             return Err(Error::PaddedValueWrongLength(field_spec.length, value.len()));
@@ -99,7 +67,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(writer.write_all(value.as_bytes())?)
     }
 
-    fn _write_separator<'a, W: 'a + Write>(&self, writer: &'a mut W, record_spec: &RecordSpec) -> Result<(), IoError> {
+    fn _write_separator<'a, W: 'a + Write>(&self, writer: &'a mut W, record_spec: &RecordSpec) -> ::std::result::Result<(), IoError> {
         writer.write(&record_spec.line_ending.as_bytes())?;
         Ok(())
     }
@@ -156,6 +124,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
 mod test {
 
     use super::*;
+    use super::super::*;
     use test::*;
     use std::collections::HashMap;
     use std::io::Cursor;

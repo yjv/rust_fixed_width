@@ -1,42 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::{UnPadder, IdentityPadder, Error as PadderError};
+use padders::{UnPadder, IdentityPadder};
 use std::collections::HashMap;
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
-use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer, Error as RecognizerError};
-
-#[derive(Debug)]
-pub enum Error {
-    RecordSpecNotFound(String),
-    RecordSpecRecognizerError(RecognizerError),
-    FieldSpecNotFound(String, String),
-    RecordSpecNameRequired,
-    UnPaddingFailed(PadderError),
-    IoError(IoError),
-    NotEnoughRead(usize, usize),
-    StringDoesNotMatchLineEnding(String, String)
-}
-
-impl From<IoError> for Error {
-    fn from(e: IoError) -> Self {
-        Error::IoError(e)
-    }
-}
-
-impl From<RecognizerError> for Error {
-    fn from(e: RecognizerError) -> Self {
-        match e {
-            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
-            _ => Error::RecordSpecRecognizerError(e)
-        }
-    }
-}
-
-impl From<PadderError> for Error {
-    fn from(e: PadderError) -> Self {
-        Error::UnPaddingFailed(e)
-    }
-}
+use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
+use super::{Error, Result};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -45,7 +13,7 @@ pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<St
 }
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
-    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String, Error> {
+    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String> {
         let record_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
@@ -63,7 +31,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(field)
     }
 
-    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>, Error>
+    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>>
         where X: Into<Option<String>>
     {
         let mut line = String::new();
@@ -98,14 +66,14 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(data)
     }
 
-    fn _unpad_field<'a>(&self, field: String, field_spec: &'a FieldSpec) -> Result<String, Error> {
+    fn _unpad_field<'a>(&self, field: String, field_spec: &'a FieldSpec) -> Result<String> {
         Ok(self.un_padder.unpad(
             field,
-            &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?
+            &field_spec.padding, field_spec.padding_direction)?
         )
     }
 
-    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> Result<String, IoError> {
+    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> ::std::result::Result<String, IoError> {
         let original_length = string.len();
         let mut data = string.into_bytes();
         data.resize(length, 0);
@@ -113,7 +81,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
-    fn absorb_separator<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<(), Error> {
+    fn absorb_separator<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<()> {
         let mut ending = String::new();
         reader.by_ref().take(record_spec.line_ending.len() as u64).read_to_string(&mut ending)?;
         if ending.len() != 0 && ending != record_spec.line_ending {
@@ -178,6 +146,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 mod test {
 
     use super::*;
+    use super::super::*;
     use test::*;
     use std::collections::HashMap;
     use std::io::Cursor;
