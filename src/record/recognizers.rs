@@ -6,14 +6,16 @@ use std::fmt::{Display, Error as FmtError, Formatter};
 #[derive(Debug)]
 pub enum Error {
     CouldNotRecognize,
-    Other(Box<::std::error::Error + Send + Sync>)
+    Other {
+        repr: Box<::std::error::Error + Send + Sync>
+    }
 }
 
 impl Clone for Error {
     fn clone(&self) -> Self {
         match *self {
             Error::CouldNotRecognize => Error::CouldNotRecognize,
-            Error::Other(_) => Error::Other("".into())
+            Error::Other { .. } => Error::new("")
         }
     }
 }
@@ -22,7 +24,7 @@ impl Error {
     pub fn new<E>(error: E) -> Self
         where E: Into<Box<::std::error::Error + Send + Sync>>
     {
-        Error::Other(error.into())
+        Error::Other { repr: error.into() }
     }
 }
 
@@ -30,14 +32,14 @@ impl ::std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
             Error::CouldNotRecognize => "Could not recognize as any specific record spec",
-            Error::Other(ref e) => e.description()
+            Error::Other { repr: ref e } => e.description()
         }
     }
 
     fn cause(&self) -> Option<&::std::error::Error> {
         match *self {
             Error::CouldNotRecognize => None,
-            Error::Other(ref error) => error.cause()
+            Error::Other { repr: ref e } => e.cause()
         }
     }
 }
@@ -46,7 +48,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
             Error::CouldNotRecognize => write!(f, "CouldNotRecognize: could not recognize any record spec as apllying"),
-            Error::Other(ref error) => error.fmt(f),
+            Error::Other { repr: ref e } => e.fmt(f),
         }
     }
 }
