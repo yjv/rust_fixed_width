@@ -1,33 +1,39 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::{UnPadder, IdentityPadder};
+use padders::{UnPadder, IdentityPadder, Error as PadderError};
 use std::collections::HashMap;
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer, Error as RecognizerError};
 
 #[derive(Debug)]
-pub enum Error<T: UnPadder> {
+pub enum Error {
     RecordSpecNotFound(String),
     RecordSpecRecognizerError(RecognizerError),
     FieldSpecNotFound(String, String),
     RecordSpecNameRequired,
-    UnPaddingFailed(T::Error),
+    UnPaddingFailed(PadderError),
     IoError(IoError),
     NotEnoughRead(usize, usize)
 }
 
-impl<T: UnPadder> From<IoError> for Error<T> {
+impl From<IoError> for Error {
     fn from(e: IoError) -> Self {
         Error::IoError(e)
     }
 }
 
-impl<T: UnPadder> From<RecognizerError> for Error<T> {
+impl From<RecognizerError> for Error {
     fn from(e: RecognizerError) -> Self {
         match e {
             RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
             _ => Error::RecordSpecRecognizerError(e)
         }
+    }
+}
+
+impl From<PadderError> for Error {
+    fn from(e: PadderError) -> Self {
+        Error::UnPaddingFailed(e)
     }
 }
 
@@ -38,7 +44,7 @@ pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<St
 }
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
-    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String, Error<T>> {
+    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String, Error> {
         let field_spec = self.specs.borrow()
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
@@ -48,7 +54,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?)
     }
 
-    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>, Error<T>>
+    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>, Error>
         where X: Into<Option<String>>
     {
         let mut line = String::new();
@@ -81,7 +87,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(data)
     }
 
-    fn _unpad_field<'a>(&self, field: String, field_spec: &'a FieldSpec) -> Result<String, Error<T>> {
+    fn _unpad_field<'a>(&self, field: String, field_spec: &'a FieldSpec) -> Result<String, Error> {
         Ok(self.un_padder.unpad(
             field,
             &field_spec.padding, field_spec.padding_direction).map_err(|e| Error::UnPaddingFailed(e))?
@@ -152,6 +158,7 @@ mod test {
     use std::collections::HashMap;
     use std::io::Cursor;
     use spec::PaddingDirection;
+    use padders::Error as PaddingError;
 
     #[test]
     fn read_record() {
@@ -189,12 +196,50 @@ mod test {
     }
 
     #[test]
+    fn read_record_with_no_record_name() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let un_padder = MockPadder::new();
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        match reader.read_record(&mut buf, None) {
+            Err(Error::RecordSpecNameRequired) => (),
+            _ => panic!("should have returned a record spec name required error")
+        }
+    }
+
+    #[test]
+    fn read_record_with_no_record_name_but_guessable() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
+        un_padder.add_unpad_call(string[9..45].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
+        let mut recognizer = MockRecognizer::new();
+        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .with_recognizer(recognizer)
+            .build()
+        ;
+        assert_eq!([("field2".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, None).unwrap());
+    }
+
+    #[test]
     fn read_record_with_padding_error() {
         let spec = test_spec();
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Err(()));
+        un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Err(PaddingError::new("")));
         let reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
@@ -278,7 +323,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[0..4].to_string(), "dsasd".to_string(), PaddingDirection::Left, Err(()));
+        un_padder.add_unpad_call(string[0..4].to_string(), "dsasd".to_string(), PaddingDirection::Left, Err(PaddingError::new("")));
         let reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)

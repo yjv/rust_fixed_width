@@ -1,11 +1,12 @@
 use spec::*;
-use padders::*;
-use record::recognizers::*;
+use padders::{Padder, UnPadder, Error as PaddingError};
+use record::recognizers::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
 use std::collections::{HashMap, BTreeMap};
+use std::io::Read;
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
-    line_recognize_calls: Vec<(&'a String, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>,
+    line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>,
     data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>
 }
 
@@ -16,8 +17,9 @@ impl<'a> MockRecognizer<'a> {
             line_recognize_calls: Vec::new()
         }
     }
-    pub fn add_line_recognize_call(&mut self, line: &'a String, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
-        self.line_recognize_calls.push((line, record_specs, return_value));
+
+    pub fn add_line_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
+        self.line_recognize_calls.push((record_specs, return_value));
         self
     }
 
@@ -26,20 +28,19 @@ impl<'a> MockRecognizer<'a> {
         self
     }
 }
-//
-//impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
-//    fn recognize_for_line(&self, line: &String, record_specs: &HashMap<String, RecordSpec>) -> Result<String, record::recognizers::Error> {
-//        for &(ref expected_line, ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
-//            if *expected_line as *const String == line as *const String
-//                && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
-//            {
-//                return return_value.clone();
-//            }
-//        }
-//
-//        panic!("Method recognize_for_line was not expected to be called with {:?}", (line, record_specs))
-//    }
-//}
+
+impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
+    fn recognize_for_line<'b, T: Read + 'b>(&self, _: LineBuffer<'b, T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::record::recognizers::Error> {
+        for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
+            if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
+            {
+                return return_value.clone();
+            }
+        }
+
+        panic!("Method recognize_for_line was not expected to be called with {:?}", record_specs)
+    }
+}
 
 impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
     fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::record::recognizers::Error> {
@@ -57,8 +58,8 @@ impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
 
 #[derive(Debug)]
 pub struct MockPadder {
-    pad_calls: Vec<(String, usize, String, PaddingDirection, Result<String, ()>)>,
-    unpad_calls: Vec<(String, String, PaddingDirection, Result<String, ()>)>
+    pad_calls: Vec<(String, usize, String, PaddingDirection, Result<String, PaddingError>)>,
+    unpad_calls: Vec<(String, String, PaddingDirection, Result<String, PaddingError>)>
 }
 
 impl MockPadder {
@@ -69,20 +70,19 @@ impl MockPadder {
         }
     }
 
-    pub fn add_pad_call(&mut self, data: String, length: usize, padding: String, direction: PaddingDirection, return_value: Result<String, ()>) -> &mut Self {
+    pub fn add_pad_call(&mut self, data: String, length: usize, padding: String, direction: PaddingDirection, return_value: Result<String, PaddingError>) -> &mut Self {
         self.pad_calls.push((data, length, padding, direction, return_value));
         self
     }
 
-    pub fn add_unpad_call(&mut self, data: String, padding: String, direction: PaddingDirection, return_value: Result<String, ()>) -> &mut Self {
+    pub fn add_unpad_call(&mut self, data: String, padding: String, direction: PaddingDirection, return_value: Result<String, PaddingError>) -> &mut Self {
         self.unpad_calls.push((data, padding, direction, return_value));
         self
     }
 }
 
 impl Padder for MockPadder {
-    type Error = ();
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, PaddingError> {
         for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
             if *expected_data == data
                 && expected_length == length
@@ -97,8 +97,7 @@ impl Padder for MockPadder {
 }
 
 impl UnPadder for MockPadder {
-    type Error = ();
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, Self::Error> {
+    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, PaddingError> {
         for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
             if *expected_data == data
                 && expected_padding == padding
@@ -193,7 +192,13 @@ macro_rules! assert_result {
     ($left:pat, $right:expr) => {
         match $right {
             $left => (),
-            e => panic!("Failed result returned was not the expected one {:?}", e)
+            v => panic!("Failed result returned was not the expected one {:?}", v)
+        }
+    };
+    ($left:pat if $leftif:expr, $right:expr) => {
+        match $right {
+            $left if $leftif => (),
+            v => panic!("Failed result returned was not the expected one {:?}", v)
         }
     }
 }
