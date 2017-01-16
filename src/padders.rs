@@ -1,7 +1,6 @@
-extern crate pad;
-use self::pad::{PadStr, Alignment};
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
+use std::iter::{repeat, once};
 
 #[derive(Debug)]
 pub struct Error {
@@ -72,13 +71,15 @@ pub struct DefaultPadder;
 
 #[derive(Debug)]
 pub enum PaddingError {
-    PaddingLongerThanOne(usize)
+    DataSplitNotOnCharBoundary(usize),
+    PaddingSplitNotOnCharBoundary(usize)
 }
 
 impl ::std::error::Error for PaddingError {
     fn description(&self) -> &str {
         match *self {
-            PaddingError::PaddingLongerThanOne(_) => "The padding string must be only one char long to use this padder"
+            PaddingError::DataSplitNotOnCharBoundary(_) => "The index needed for splitting the data is not on a char boundary",
+            PaddingError::PaddingSplitNotOnCharBoundary(_) => "The index needed for splitting the padding is not on a char boundary"
         }
     }
 }
@@ -86,10 +87,15 @@ impl ::std::error::Error for PaddingError {
 impl Display for PaddingError {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
-            PaddingError::PaddingLongerThanOne(len) => write!(
+            PaddingError::DataSplitNotOnCharBoundary(index) => write!(
                 f,
-                "the padding string was {} chars long it can only be at most 1 char long",
-                len
+                "The index {} needed for splitting the data is not on a char boundary",
+                index
+            ),
+            PaddingError::PaddingSplitNotOnCharBoundary(index) => write!(
+                f,
+                "The index {} needed for splitting the padding is not on a char boundary",
+                index
             )
         }
     }
@@ -101,35 +107,40 @@ impl From<PaddingError> for Error {
     }
 }
 
-impl DefaultPadder {
-    fn get_char(padding: &String) -> ::std::result::Result<char, PaddingError> {
-        if padding.len() > 1 {
-            Err(PaddingError::PaddingLongerThanOne(padding.len()))
-        } else {
-            Ok(padding.chars().next().or(Some(' ')).expect("should have a some no matter what"))
-        }
-    }
-}
-
 impl Padder for DefaultPadder {
     fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String> {
-        Ok(data.pad(
-            length,
-            Self::get_char(padding)?,
-            match direction {
-                PaddingDirection::Left => Alignment::Right,
-                PaddingDirection::Right => Alignment::Left,
-            },
-            false
-        ))
+        if data.len() >= length {
+            return if data.is_char_boundary(length) {
+                Ok(data[..length].to_string())
+            } else {
+                Err(Error::new(PaddingError::DataSplitNotOnCharBoundary(length)))
+            }
+        }
+
+        let diff = length - data.len();
+
+        let remainder = diff % padding.len();
+
+        if !padding.is_char_boundary(remainder) {
+            return Err(Error::new(PaddingError::PaddingSplitNotOnCharBoundary(length)));
+        }
+
+        let padding_iter = repeat(&padding[..]).take(diff / padding.len()).chain(once(&padding[..remainder]));
+        let data_iter = once(&data[..]);
+
+        Ok(if direction == PaddingDirection::Left {
+            padding_iter.chain(data_iter).collect()
+        } else {
+            data_iter.chain(padding_iter).collect()
+        })
     }
 }
 
 impl UnPadder for DefaultPadder {
     fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String> {
         Ok(match direction {
-            PaddingDirection::Left => data.trim_left_matches(Self::get_char(padding)?).to_string(),
-            PaddingDirection::Right => data.trim_right_matches(Self::get_char(padding)?).to_string(),
+            PaddingDirection::Left => data.trim_left_matches(&padding[..]).to_string(),
+            PaddingDirection::Right => data.trim_right_matches(&padding[..]).to_string(),
         })
     }
 }
@@ -158,21 +169,13 @@ mod test {
     fn default_padder() {
         let padder = DefaultPadder;
         let data = "qwer".to_string();
-        assert_result!(Ok("qwer333333".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
+        assert_result!(Ok("qwer333333".to_string()), padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Right));
         let data = "qwer".to_string();
-        assert_result!(Ok("333333qwer".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Left));
-        assert_result!(
-            Err(PaddingError::PaddingLongerThanOne(2)),
-            padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left).map_err(|e| e.downcast::<PaddingError>().unwrap())
-        );
+        assert_result!(Ok("333333qwer".to_string()), padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left));
         let data = "qwer333333".to_string();
-        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Right));
+        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Right));
         let data = "333333qwer".to_string();
-        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Left));
-        assert_result!(
-            Err(PaddingError::PaddingLongerThanOne(2)),
-            padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left).map_err(|e| e.downcast::<PaddingError>().unwrap())
-        );
+        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left));
     }
 
     #[test]
@@ -195,11 +198,11 @@ mod test {
 
     #[test]
     fn error() {
-        let error = Error::new(PaddingError::PaddingLongerThanOne(23));
-        assert_option!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
-        assert_option!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
+        let error = Error::new(PaddingError::PaddingSplitNotOnCharBoundary(23));
+        assert_option!(Some(&PaddingError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<PaddingError>());
+        assert_option!(Some(&PaddingError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<PaddingError>());
         match error.downcast::<PaddingError>() {
-            Ok(PaddingError::PaddingLongerThanOne(23)) => (),
+            Ok(PaddingError::PaddingSplitNotOnCharBoundary(23)) => (),
             e => panic!("bad result returned {:?}", e)
         }
     }

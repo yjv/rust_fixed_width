@@ -1,4 +1,3 @@
-extern crate pad;
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
 use std::iter::repeat;

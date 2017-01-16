@@ -3,10 +3,13 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use padders::Error as PadderError;
 use std::io::Error as IoError;
 use self::recognizers::Error as RecognizerError;
+use std::collections::HashMap;
 
 pub mod reader;
 pub mod writer;
 pub mod recognizers;
+pub use self::reader::{Reader, ReaderBuilder};
+pub use self::writer::{Writer, WriterBuilder};
 
 #[derive(Debug)]
 pub enum Error {
@@ -84,3 +87,9 @@ impl From<PadderError> for Error {
 }
 
 type Result<T> = ::std::result::Result<T, Error>;
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Record {
+    pub data: HashMap<String, String>,
+    pub name: String
+}

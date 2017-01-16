@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result};
+use super::{Error, Result, Record};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -24,14 +24,10 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         ;
         let field = self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?;
 
-        if record_spec.field_range(&name).expect("Should never be none").end == record_spec.len() {
-            self._absorb_line_ending(reader, record_spec)?;
-        }
-
         Ok(field)
     }
 
-    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<HashMap<String, String>>
+    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<Record>
         where X: Into<Option<String>>
     {
         let mut line = String::new();
@@ -61,9 +57,9 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             current_index += field_spec.length;
         }
 
-        self._absorb_line_ending(reader, record_spec)?;
+        self.absorb_line_ending(reader, &record_spec.line_ending)?;
 
-        Ok(data)
+        Ok(Record { data: data, name: record_name })
     }
 
     fn _unpad_field<'a>(&self, field: String, field_spec: &'a FieldSpec) -> Result<String> {
@@ -81,12 +77,12 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
-    fn _absorb_line_ending<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<()> {
+    pub fn absorb_line_ending<'a, W: 'a + Read>(&self, reader: &'a mut W, line_ending: &String) -> Result<()> {
         let mut ending = String::new();
-        reader.by_ref().take(record_spec.line_ending.len() as u64).read_to_string(&mut ending)?;
-        if ending.len() != 0 && ending != record_spec.line_ending {
+        reader.by_ref().take(line_ending.len() as u64).read_to_string(&mut ending)?;
+        if ending.len() != 0 && ending != *line_ending {
             return Err(Error::StringDoesNotMatchLineEnding(
-                record_spec.line_ending.clone(),
+                line_ending.clone(),
                 ending
             ));
         }
@@ -146,9 +142,8 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 mod test {
 
     use super::*;
-    use super::super::*;
+    use super::super::{Error, Record};
     use test::*;
-    use std::collections::HashMap;
     use std::io::Cursor;
     use spec::PaddingDirection;
     use padders::Error as PaddingError;
@@ -168,13 +163,13 @@ mod test {
             .with_specs(spec.record_specs)
             .build()
         ;
-        assert_eq!([("field2".to_string(), "hello".to_string()),
+        assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
         ;
-        assert_eq!([("field2".to_string(), "hello3".to_string()),
+        assert_eq!(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
         ;
     }
 
@@ -244,9 +239,9 @@ mod test {
             .with_recognizer(recognizer)
             .build()
         ;
-        assert_eq!([("field2".to_string(), "hello".to_string()),
+        assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), reader.read_record(&mut buf, None).unwrap());
+            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, None).unwrap());
     }
 
     #[test]
@@ -294,21 +289,6 @@ mod test {
         ;
         assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap());
         assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field2".to_string()).unwrap());
-    }
-
-    #[test]
-    fn read_field_with_bad_line_ending() {
-        let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-        let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[0..36].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
-        let reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_field(&mut buf, "record1".to_string(), "field3".to_string()));
     }
 
     #[test]
