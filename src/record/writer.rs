@@ -27,7 +27,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         self._write_field(writer, field_spec, value)?;
 
         if record_spec.field_range(&name).expect("Should never be none").end == record_spec.len() {
-            self._write_separator(writer, record_spec)?;
+            self._write_line_ending(writer, record_spec)?;
         }
 
         Ok(())
@@ -53,7 +53,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
             self._write_field(writer, field_spec, data.get(name).or_else(|| field_spec.default.as_ref().clone()).ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone()))?.clone())?;
         }
 
-        self._write_separator(writer, record_spec)?;
+        self._write_line_ending(writer, record_spec)?;
 
         Ok(())
     }
@@ -67,7 +67,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(writer.write_all(value.as_bytes())?)
     }
 
-    fn _write_separator<'a, W: 'a + Write>(&self, writer: &'a mut W, record_spec: &RecordSpec) -> ::std::result::Result<(), IoError> {
+    fn _write_line_ending<'a, W: 'a + Write>(&self, writer: &'a mut W, record_spec: &RecordSpec) -> ::std::result::Result<(), IoError> {
         writer.write(&record_spec.line_ending.as_bytes())?;
         Ok(())
     }

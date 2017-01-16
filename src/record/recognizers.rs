@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
+use std::error::Error as ErrorTrait;
 
 #[derive(Debug)]
 pub enum Error {
@@ -42,7 +43,7 @@ impl Error {
     }
 }
 
-impl ::std::error::Error for Error {
+impl ErrorTrait for Error {
     fn description(&self) -> &str {
         match *self {
             Error::CouldNotRecognize => "Could not recognize as any specific record spec",
@@ -61,7 +62,7 @@ impl ::std::error::Error for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
-            Error::CouldNotRecognize => write!(f, "CouldNotRecognize: could not recognize any record spec as apllying"),
+            Error::CouldNotRecognize => write!(f, "{}", self.description()),
             Error::Other { repr: ref e } => e.fmt(f),
         }
     }

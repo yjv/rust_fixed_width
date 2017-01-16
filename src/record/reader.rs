@@ -25,7 +25,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         let field = self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?;
 
         if record_spec.field_range(&name).expect("Should never be none").end == record_spec.len() {
-            self.absorb_separator(reader, record_spec)?;
+            self._absorb_line_ending(reader, record_spec)?;
         }
 
         Ok(field)
@@ -61,7 +61,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             current_index += field_spec.length;
         }
 
-        self.absorb_separator(reader, record_spec)?;
+        self._absorb_line_ending(reader, record_spec)?;
 
         Ok(data)
     }
@@ -81,7 +81,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
-    fn absorb_separator<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<()> {
+    fn _absorb_line_ending<'a, W: 'a + Read>(&self, reader: &'a mut W, record_spec: &RecordSpec) -> Result<()> {
         let mut ending = String::new();
         reader.by_ref().take(record_spec.line_ending.len() as u64).read_to_string(&mut ending)?;
         if ending.len() != 0 && ending != record_spec.line_ending {
