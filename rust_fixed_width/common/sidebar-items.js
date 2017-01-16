@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["InvalidRangeError",""]],"fn":[["normalize_range",""]],"struct":[["FileIterator",""]],"trait":[["File",""],["FromField",""],["Line",""],["Range",""],["ToField",""]]});
