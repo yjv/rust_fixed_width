@@ -1,6 +1,6 @@
 [package]
 name = "rust_fixed_width"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["yosefderay <yosefderay770@gmail.com>"]
 description = "library that allows for easier manipulation of fixed width files allowing for the ability to name fields and such using specs"
 keywords = ["fixed_width", "random_access"]
