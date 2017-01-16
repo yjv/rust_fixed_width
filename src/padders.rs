@@ -88,7 +88,7 @@ impl Display for PaddingError {
         match *self {
             PaddingError::PaddingLongerThanOne(len) => write!(
                 f,
-                "PaddingLongerThanOne: the padding string was {} chars long it can only be at most 1 char long",
+                "the padding string was {} chars long it can only be at most 1 char long",
                 len
             )
         }
