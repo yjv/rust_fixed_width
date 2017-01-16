@@ -354,8 +354,11 @@ mod test {
     #[test]
     fn error() {
         let error = Error::new(PaddingError::PaddingLongerThanOne(23));
-        assert_eq!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
-        assert_eq!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
-        assert_result!(Ok(PaddingError::PaddingLongerThanOne(23)), error.downcast::<PaddingError>());
+        assert_option!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
+        assert_option!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
+        match error.downcast::<PaddingError>() {
+            Ok(PaddingError::PaddingLongerThanOne(23)) => (),
+            e => panic!("bad result returned {:?}", e)
+        }
     }
 }

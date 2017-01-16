@@ -203,3 +203,13 @@ macro_rules! assert_result {
         }
     }
 }
+
+#[macro_export]
+macro_rules! assert_option {
+    ($left:pat, $right:expr) => {
+        match $right {
+            $left => (),
+            e => panic!("Failed option returned was not the expected one {:?}", e)
+        }
+    }
+}
