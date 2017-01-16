@@ -4,11 +4,13 @@ use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
 
 #[derive(Debug)]
-pub struct Error(Box<::std::error::Error + Send + Sync>);
+pub struct Error {
+    repr: Box<::std::error::Error + Send + Sync>
+}
 
 impl Clone for Error {
     fn clone(&self) -> Self {
-        Error("".into())
+        Error::new("")
     }
 }
 
@@ -16,23 +18,31 @@ impl Error {
     pub fn new<E>(error: E) -> Self
         where E: Into<Box<::std::error::Error + Send + Sync>>
     {
-        Error(error.into())
+        Error { repr: error.into() }
+    }
+
+    pub fn downcast<E: ::std::error::Error + Send + Sync + 'static>(self) -> ::std::result::Result<E, Self> {
+        Ok(*(self.repr.downcast::<E>().map_err(|e| Error { repr: e })?))
+    }
+
+    pub fn downcast_ref<E: ::std::error::Error + Send + Sync + 'static>(&self) -> Option<&E> {
+        self.repr.downcast_ref::<E>()
     }
 }
 
 impl ::std::error::Error for Error {
     fn description(&self) -> &str {
-        self.0.description()
+        self.repr.description()
     }
 
     fn cause(&self) -> Option<&::std::error::Error> {
-        self.0.cause()
+        self.repr.cause()
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
-        Display::fmt(&*self.0, f)
+        Display::fmt(&*self.repr, f)
     }
 }
 
@@ -151,18 +161,18 @@ mod test {
         assert_result!(Ok("qwer333333".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
         let data = "qwer".to_string();
         assert_result!(Ok("333333qwer".to_string()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Left));
-        assert_result!(Err(Error(ref e)) if match (*e).downcast_ref::<PaddingError>() {
-            Some(&PaddingError::PaddingLongerThanOne(2)) => true,
-            _ => false
-        }, padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left));
+        assert_result!(
+            Err(PaddingError::PaddingLongerThanOne(2)),
+            padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left).map_err(|e| e.downcast::<PaddingError>().unwrap())
+        );
         let data = "qwer333333".to_string();
         assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Right));
         let data = "333333qwer".to_string();
         assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Left));
-        assert_result!(Err(Error(ref e)) if match (*e).downcast_ref::<PaddingError>() {
-            Some(&PaddingError::PaddingLongerThanOne(2)) => true,
-            _ => false
-        }, padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left));
+        assert_result!(
+            Err(PaddingError::PaddingLongerThanOne(2)),
+            padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left).map_err(|e| e.downcast::<PaddingError>().unwrap())
+        );
     }
 
     #[test]
@@ -181,5 +191,12 @@ mod test {
         let data = "qwer".to_string();
         assert_result!(Ok(data.clone()), Padder::pad(&&padder, data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
         assert_result!(Ok(data.clone()), UnPadder::unpad(&&padder, data.clone(), &"3".to_string(), PaddingDirection::Right));
+    }
+
+    #[test]
+    fn error() {
+        let error = Error::new(PaddingError::PaddingLongerThanOne(23));
+        assert_eq!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
+        assert_result!(Ok(PaddingError::PaddingLongerThanOne(23)), error.downcast::<PaddingError>());
     }
 }

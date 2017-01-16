@@ -26,6 +26,20 @@ impl Error {
     {
         Error::Other { repr: error.into() }
     }
+
+    pub fn downcast<E: ::std::error::Error + Send + Sync + 'static>(self) -> ::std::result::Result<E, Self> {
+        match self {
+            Error::CouldNotRecognize => Err(Error::CouldNotRecognize),
+            Error::Other { repr } => Ok(*(repr.downcast::<E>().map_err(|e| Error::Other { repr: e })?))
+        }
+    }
+
+    pub fn downcast_ref<E: ::std::error::Error + Send + Sync + 'static>(&self) -> Option<&E> {
+        match *self {
+            Error::CouldNotRecognize => None,
+            Error::Other { ref repr } => repr.downcast_ref::<E>()
+        }
+    }
 }
 
 impl ::std::error::Error for Error {
@@ -188,6 +202,7 @@ mod test {
     use spec::*;
     use std::collections::HashMap;
     use std::io::empty;
+    use padders::PaddingError;
 
     #[test]
     fn none_recognizer() {
@@ -332,5 +347,12 @@ mod test {
         let (buf, line) = buffer.into_inner();
         assert_eq!(&mut "dsfdsf".to_string(), line);
         assert_eq!(&mut "sdfd".as_bytes(), buf);
+    }
+
+    #[test]
+    fn error() {
+        let error = Error::new(PaddingError::PaddingLongerThanOne(23));
+        assert_eq!(Some(&PaddingError::PaddingLongerThanOne(23)), error.downcast_ref::<PaddingError>());
+        assert_result!(Ok(PaddingError::PaddingLongerThanOne(23)), error.downcast::<PaddingError>());
     }
 }
