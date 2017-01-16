@@ -147,9 +147,9 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     let field_range = record_spec.field_range(&self.id_field).expect("This should never be None");
-                    buffer.fill_to(field_range.start + field_spec.length)?;
+                    buffer.fill_to(field_range.end)?;
 
-                    if buffer.get_line().len() < field_range.start + field_spec.length {
+                    if buffer.get_line().len() < field_range.end {
                         continue;
                     }
 
@@ -318,6 +318,7 @@ mod test {
 
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut String::new()), &specs));
         assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut String::new()), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "ba".as_bytes(), &mut String::new()), &specs));
         assert_result!(Ok("record2".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut String::new()), &specs));
         assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut String::new()), &specs));
         assert_result!(Ok("record4".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut String::new()), &specs));
