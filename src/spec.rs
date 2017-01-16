@@ -1,6 +1,7 @@
 extern crate pad;
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
+use std::iter::repeat;
 
 pub trait Builder<T> {
     fn build(self) -> T;
@@ -119,7 +120,7 @@ pub struct FieldSpec {
     pub padding_direction: PaddingDirection,
     pub padding: String,
     pub default: Option<String>,
-    pub ignore: bool
+    pub filler: bool
 }
 
 impl Builder<FieldSpec> for FieldSpec {
@@ -134,7 +135,7 @@ pub struct FieldSpecBuilder {
     padding_direction: Option<PaddingDirection>,
     padding: Option<String>,
     default: Option<String>,
-    ignore: bool
+    filler: bool
 }
 
 impl FieldSpecBuilder {
@@ -144,7 +145,7 @@ impl FieldSpecBuilder {
             padding_direction: None,
             padding: None,
             default: None,
-            ignore: false
+            filler: false
         }
     }
 
@@ -162,6 +163,13 @@ impl FieldSpecBuilder {
 
     pub fn new_empty_string() -> Self {
         Self::new_string().with_default("")
+    }
+
+    pub fn new_filler(length: usize) -> Self {
+        Self::new_string()
+            .with_default(repeat(" ").take(length).collect::<String>())
+            .with_length(length)
+            .make_filler()
     }
 
     pub fn with_length(mut self, length: usize) -> Self {
@@ -184,8 +192,8 @@ impl FieldSpecBuilder {
         self
     }
 
-    pub fn ignore(mut self) -> Self {
-        self.ignore = true;
+    pub fn make_filler(mut self) -> Self {
+        self.filler = true;
         self
     }
 }
@@ -197,7 +205,7 @@ impl Builder<FieldSpec> for FieldSpecBuilder {
             padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
             padding: self.padding.expect("padding must be set in order to build"),
             default: self.default,
-            ignore: self.ignore
+            filler: self.filler
         }
     }
 }
@@ -218,21 +226,21 @@ mod test {
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            ignore: true
+            filler: true
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 5,
             padding: " ".to_string(),
             padding_direction: PaddingDirection::Right,
             default: Some("def".to_string()),
-            ignore: false
+            filler: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 36,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
             default: None,
-            ignore: false
+            filler: false
         });
         record_specs.insert("record1".to_string(), RecordSpec {
             line_ending: "\n".to_string(),
@@ -244,28 +252,28 @@ mod test {
             padding: "dsasd".to_string(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            ignore: false
+            filler: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 4,
             padding: "sdf".to_string(),
             padding_direction: PaddingDirection::Right,
             default: Some("defa".to_string()),
-            ignore: false
+            filler: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 27,
             padding: "xcvcxv".to_string(),
             padding_direction: PaddingDirection::Right,
             default: None,
-            ignore: false
+            filler: false
         });
         field_specs.insert("field4".to_string(), FieldSpec {
             length: 8,
             padding: "sdfsd".to_string(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            ignore: false
+            filler: false
         });
         record_specs.insert("record2".to_string(), RecordSpec {
             line_ending: "\n".to_string(),

@@ -52,7 +52,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         let mut current_index = 0;
 
         for (name, field_spec) in &record_spec.field_specs {
-            if !field_spec.ignore {
+            if !field_spec.filler {
                 data.insert(name.clone(), self._unpad_field(
                     line[current_index..current_index + field_spec.length].to_string(),
                     &field_spec

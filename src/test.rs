@@ -122,7 +122,7 @@ pub fn test_spec() -> Spec {
                         .with_length(4)
                         .with_padding("dsasd")
                         .with_padding_direction(PaddingDirection::Left)
-                        .ignore()
+                        .make_filler()
                 )
                 .with_field(
                     "field2",
@@ -171,7 +171,7 @@ pub fn test_spec() -> Spec {
                         padding: "sdfsd".to_string(),
                         padding_direction: PaddingDirection::Left,
                         default: None,
-                        ignore: false
+                        filler: false
                     }
                 )
         )
