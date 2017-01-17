@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use padders::Error as PadderError;
 use std::io::Error as IoError;
 use self::recognizers::Error as RecognizerError;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub mod reader;
 pub mod writer;
@@ -90,6 +90,6 @@ type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Record {
-    pub data: HashMap<String, String>,
+    pub data: BTreeMap<String, String>,
     pub name: String
 }

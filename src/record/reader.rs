@@ -1,6 +1,6 @@
 use spec::{RecordSpec, FieldSpec};
 use padders::{UnPadder, IdentityPadder};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
@@ -44,7 +44,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
         let line = self._read_string(reader, record_spec.len(), line)?;
-        let mut data: HashMap<String, String> = HashMap::new();
+        let mut data = BTreeMap::new();
         let mut current_index = 0;
 
         for (name, field_spec) in &record_spec.field_specs {

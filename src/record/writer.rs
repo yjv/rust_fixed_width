@@ -142,7 +142,7 @@ impl From<BTreeMap<String, String>> for DataAndRecordName {
 impl From<Record> for DataAndRecordName {
     fn from(record: Record) -> Self {
         DataAndRecordName {
-            data: record.data,
+            data: record.data.into_iter().collect(),
             name: Some(record.name)
         }
     }
@@ -156,6 +156,7 @@ impl From<(BTreeMap<String, String>, String)> for DataAndRecordName {
         }
     }
 }
+
 impl From<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
     fn from(record: (BTreeMap<String, String>, Option<String>)) -> Self {
         DataAndRecordName {
@@ -173,6 +174,7 @@ impl From<(HashMap<String, String>, String)> for DataAndRecordName {
         }
     }
 }
+
 impl From<(HashMap<String, String>, Option<String>)> for DataAndRecordName {
     fn from(record: (HashMap<String, String>, Option<String>)) -> Self {
         DataAndRecordName {
@@ -221,7 +223,7 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        match writer.write_record(&mut buf, Record { data: HashMap::<String, String>::new(), name: "record5".to_string() }) {
+        match writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() }) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
