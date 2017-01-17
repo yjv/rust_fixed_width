@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
@@ -118,11 +118,11 @@ impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecog
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+    fn recognize_for_data(&self, data: &BTreeMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
 }
 
 impl<'a, T> DataRecordSpecRecognizer for &'a T where T: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data(&self, data: &BTreeMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_data(data, record_specs)
     }
 }
@@ -165,7 +165,7 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data(&self, data: &BTreeMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -191,7 +191,7 @@ impl LineRecordSpecRecognizer for NoneRecognizer {
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data(&self, _: &HashMap<String, String>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data(&self, _: &BTreeMap<String, String>, _: &HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -201,14 +201,14 @@ impl DataRecordSpecRecognizer for NoneRecognizer {
 mod test {
     use super::*;
     use spec::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, BTreeMap};
     use std::io::empty;
     use padders::PaddingError;
 
     #[test]
     fn none_recognizer() {
         let recognizer = NoneRecognizer;
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&HashMap::new(), &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&BTreeMap::new(), &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut String::new()),
             &HashMap::new()
@@ -286,7 +286,7 @@ mod test {
         ;
         let recognizer = IdFieldRecognizer::new();
         let recognizer_with_field = IdFieldRecognizer::new_with_field("field1");
-        let mut data = HashMap::new();
+        let mut data = BTreeMap::new();
 
         data.insert("$id".to_string(), "bar".to_string());
         assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data, &specs));
@@ -328,7 +328,7 @@ mod test {
     #[test]
     fn recognizer_reference() {
         let recognizer = NoneRecognizer;
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &HashMap::new(), &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new(), &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut String::new()),

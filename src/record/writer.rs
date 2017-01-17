@@ -117,14 +117,14 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
 }
 
 pub struct DataAndRecordName {
-    pub data: HashMap<String, String>,
+    pub data: BTreeMap<String, String>,
     pub name: Option<String>
 }
 
 impl From<HashMap<String, String>> for DataAndRecordName {
     fn from(data: HashMap<String, String>) -> Self {
         DataAndRecordName {
-            data: data,
+            data: data.into_iter().collect(),
             name: None
         }
     }
@@ -133,7 +133,7 @@ impl From<HashMap<String, String>> for DataAndRecordName {
 impl From<BTreeMap<String, String>> for DataAndRecordName {
     fn from(data: BTreeMap<String, String>) -> Self {
         DataAndRecordName {
-            data: data.into_iter().collect(),
+            data: data,
             name: None
         }
     }
@@ -142,7 +142,7 @@ impl From<BTreeMap<String, String>> for DataAndRecordName {
 impl From<Record> for DataAndRecordName {
     fn from(record: Record) -> Self {
         DataAndRecordName {
-            data: record.data.into_iter().collect(),
+            data: record.data,
             name: Some(record.name)
         }
     }
@@ -151,7 +151,7 @@ impl From<Record> for DataAndRecordName {
 impl From<(BTreeMap<String, String>, String)> for DataAndRecordName {
     fn from(record: (BTreeMap<String, String>, String)) -> Self {
         DataAndRecordName {
-            data: record.0.into_iter().collect(),
+            data: record.0,
             name: Some(record.1)
         }
     }
@@ -160,7 +160,7 @@ impl From<(BTreeMap<String, String>, String)> for DataAndRecordName {
 impl From<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
     fn from(record: (BTreeMap<String, String>, Option<String>)) -> Self {
         DataAndRecordName {
-            data: record.0.into_iter().collect(),
+            data: record.0,
             name: record.1
         }
     }
@@ -169,7 +169,7 @@ impl From<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
 impl From<(HashMap<String, String>, String)> for DataAndRecordName {
     fn from(record: (HashMap<String, String>, String)) -> Self {
         DataAndRecordName {
-            data: record.0,
+            data: record.0.into_iter().collect(),
             name: Some(record.1)
         }
     }
@@ -178,14 +178,14 @@ impl From<(HashMap<String, String>, String)> for DataAndRecordName {
 impl From<(HashMap<String, String>, Option<String>)> for DataAndRecordName {
     fn from(record: (HashMap<String, String>, Option<String>)) -> Self {
         DataAndRecordName {
-            data: record.0,
+            data: record.0.into_iter().collect(),
             name: record.1
         }
     }
 }
 
-impl Into<(HashMap<String, String>, Option<String>)> for DataAndRecordName {
-    fn into(self) -> (HashMap<String, String>, Option<String>) {
+impl Into<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
+    fn into(self) -> (BTreeMap<String, String>, Option<String>) {
         (self.data, self.name)
     }
 }

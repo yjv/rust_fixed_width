@@ -7,7 +7,7 @@ use std::io::Read;
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
     line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>,
-    data_recognize_calls: Vec<(&'a HashMap<String, String>, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>
+    data_recognize_calls: Vec<(&'a BTreeMap<String, String>, &'a HashMap<String, RecordSpec>, Result<String, ::record::recognizers::Error>)>
 }
 
 impl<'a> MockRecognizer<'a> {
@@ -23,7 +23,7 @@ impl<'a> MockRecognizer<'a> {
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: &'a HashMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, data: &'a BTreeMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::record::recognizers::Error>) -> &mut Self {
         self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
@@ -43,7 +43,7 @@ impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
 }
 
 impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
-    fn recognize_for_data(&self, data: &HashMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::record::recognizers::Error> {
+    fn recognize_for_data(&self, data: &BTreeMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::record::recognizers::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data == data
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
