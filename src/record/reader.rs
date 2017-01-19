@@ -1,10 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
 use padders::{UnPadder, IdentityPadder};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{HashMap};
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, Record};
+use super::{Error, Result, Record, RecordData};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -27,8 +27,10 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(field)
     }
 
-    pub fn read_record<'a, W: 'a + Read, X>(&self, reader: &'a mut W, record_name: X) -> Result<Record>
-        where X: Into<Option<String>>
+    pub fn read_record<'a, W, X, Y>(&self, reader: &'a mut W, record_name: X) -> Result<Record<Y>>
+        where W: 'a + Read,
+              X: Into<Option<String>>,
+              Y: RecordData
     {
         let mut line = String::new();
         let record_name = record_name
@@ -44,7 +46,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
         let line = self._read_string(reader, record_spec.len(), line)?;
-        let mut data = BTreeMap::new();
+        let mut data = Y::new();
         let mut current_index = 0;
 
         for (name, field_spec) in &record_spec.field_specs {
@@ -147,6 +149,7 @@ mod test {
     use std::io::Cursor;
     use spec::PaddingDirection;
     use padders::Error as PaddingError;
+    use std::collections::{HashMap, BTreeMap};
 
     #[test]
     fn read_record() {
@@ -165,11 +168,11 @@ mod test {
         ;
         assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
         ;
         assert_eq!(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
-            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
         ;
     }
 
@@ -186,7 +189,7 @@ mod test {
             .with_specs(spec.record_specs)
             .build()
         ;
-        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_record(&mut buf, "record1".to_string()));
+        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()));
     }
 
     #[test]
@@ -200,7 +203,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_record(&mut buf, "record5".to_string()) {
+        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5".to_string()) {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
@@ -217,7 +220,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_record(&mut buf, None) {
+        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, None) {
             Err(Error::RecordSpecNameRequired) => (),
             _ => panic!("should have returned a record spec name required error")
         }
@@ -241,7 +244,7 @@ mod test {
         ;
         assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect(), name: "record1".to_string() }, reader.read_record(&mut buf, None).unwrap());
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, None).unwrap());
     }
 
     #[test]
@@ -256,7 +259,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_record(&mut buf, "record1".to_string()).unwrap_err();
+        reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()).unwrap_err();
     }
 
     #[test]
@@ -271,7 +274,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_record(&mut buf, "record1".to_string()).unwrap_err();
+        reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()).unwrap_err();
     }
 
     #[test]

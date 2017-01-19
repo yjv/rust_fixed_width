@@ -139,10 +139,19 @@ impl From<BTreeMap<String, String>> for DataAndRecordName {
     }
 }
 
-impl From<Record> for DataAndRecordName {
-    fn from(record: Record) -> Self {
+impl From<Record<BTreeMap<String, String>>> for DataAndRecordName {
+    fn from(record: Record<BTreeMap<String, String>>) -> Self {
         DataAndRecordName {
             data: record.data,
+            name: Some(record.name)
+        }
+    }
+}
+
+impl From<Record<HashMap<String, String>>> for DataAndRecordName {
+    fn from(record: Record<HashMap<String, String>>) -> Self {
+        DataAndRecordName {
+            data: record.data.into_iter().collect(),
             name: Some(record.name)
         }
     }
