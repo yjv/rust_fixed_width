@@ -1,10 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
 use padders::{Padder, IdentityPadder};
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Write, Error as IoError};
+use std::io::Write;
 use std::borrow::Borrow;
 use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, Record};
+use super::{Error, Result, PositionalResult, Record};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -29,7 +29,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, record: X) -> Result<()>
+    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, record: X) -> PositionalResult<()>
         where W: 'a + Write,
               X: Into<DataAndRecordName>
     {
@@ -46,11 +46,22 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         ;
 
         for (name, field_spec) in &record_spec.field_specs {
-            self._write_field(writer, field_spec, data.get(name).or_else(|| field_spec.default.as_ref().clone()).ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone()))?.clone())?;
+            self._write_field(
+                writer,
+                field_spec,
+                data.get(name)
+                    .or_else(|| field_spec.default.as_ref().clone())
+                    .ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone())).map_err(|e| (e, record_name.clone(), name.clone()))?.clone()
+            ).map_err(|e| (e, record_name.clone(), name.clone()))?;
         }
 
-        self.write_line_ending(writer, &record_spec.line_ending)?;
+        self.write_line_ending(writer, &record_spec.line_ending).map_err(|e| (e, record_name.clone()))?;
 
+        Ok(())
+    }
+
+    pub fn write_line_ending<'a, W: 'a + Write>(&self, writer: &'a mut W, line_ending: &String) -> Result<()> {
+        writer.write(&line_ending.as_bytes())?;
         Ok(())
     }
 
@@ -61,11 +72,6 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         }
 
         Ok(writer.write_all(value.as_bytes())?)
-    }
-
-    pub fn write_line_ending<'a, W: 'a + Write>(&self, writer: &'a mut W, line_ending: &String) -> ::std::result::Result<(), IoError> {
-        writer.write(&line_ending.as_bytes())?;
-        Ok(())
     }
 }
 
@@ -203,7 +209,7 @@ impl Into<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
 mod test {
 
     use super::*;
-    use super::super::{Error, Record};
+    use super::super::{Error, PositionalError, Position, Record};
     use test::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::Cursor;
@@ -232,10 +238,10 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        match writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() }) {
-            Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
-            _ => panic!("should have returned a record spec not found error")
-        }
+        assert_result!(
+            Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
+            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() })
+        );
     }
 
     #[test]
@@ -244,10 +250,10 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        match writer.write_record(&mut buf, (HashMap::new(), None)) {
-            Err(Error::RecordSpecNameRequired) => (),
-            _ => panic!("should have returned a record spec name required error")
-        }
+        assert_result!(
+            Err(PositionalError { error: Error::RecordSpecNameRequired, .. }),
+            writer.write_record(&mut buf, (HashMap::new(), None))
+        );
     }
 
     #[test]
@@ -276,8 +282,14 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Err(PaddingError::new("")));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_record(&mut buf, ([("field3".to_string(), "hello2".to_string())]
-        .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string())).unwrap_err();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::PadderFailure(_),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field1",
+            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string()))
+        );
     }
 
     #[test]
@@ -287,8 +299,14 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("hello2".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_record(&mut buf, ([("field3".to_string(), "hello2".to_string())]
-        .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string())).unwrap_err();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::PaddedValueWrongLength(_, _),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field1",
+            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string()))
+        );
     }
 
     #[test]
@@ -299,8 +317,14 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("bye2".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
-        .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string())).unwrap_err();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::IoError(_),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field1",
+            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string()))
+        );
     }
 
     #[test]

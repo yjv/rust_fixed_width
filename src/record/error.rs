@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use padders::Error as PadderError;
 use std::io::Error as IoError;
 use super::recognizers::Error as RecognizerError;
+use super::Position;
 
 #[derive(Debug)]
 pub enum Error {
@@ -76,5 +77,79 @@ impl From<RecognizerError> for Error {
 impl From<PadderError> for Error {
     fn from(e: PadderError) -> Self {
         Error::PadderFailure(e)
+    }
+}
+
+impl From<PositionalError> for Error {
+    fn from(error: PositionalError) -> Self {
+        error.error
+    }
+}
+
+#[derive(Debug)]
+pub struct PositionalError {
+    pub error: Error,
+    pub position: Option<Position>
+}
+
+impl PositionalError {
+    pub fn new(error: Error, position: Position) -> Self {
+        PositionalError {
+            error: error,
+            position: Some(position)
+        }
+    }
+}
+
+impl From<RecognizerError> for PositionalError {
+    fn from(error: RecognizerError) -> Self {
+        PositionalError::from(Error::from(error))
+    }
+}
+
+impl From<Error> for PositionalError {
+    fn from(error: Error) -> Self {
+        PositionalError {
+            error: error,
+            position: None
+        }
+    }
+}
+
+impl From<(Error, String)> for PositionalError {
+    fn from(data: (Error, String)) -> Self {
+        PositionalError {
+            error: data.0,
+            position: Some(Position::new_from_record(data.1))
+        }
+    }
+}
+
+impl From<(Error, String, String)> for PositionalError {
+    fn from(data: (Error, String, String)) -> Self {
+        PositionalError {
+            error: data.0,
+            position: Some(Position::new(data.1, data.2))
+        }
+    }
+}
+
+impl ErrorTrait for PositionalError {
+    fn description(&self) -> &str {
+        self.error.description()
+    }
+
+    fn cause(&self) -> Option<&ErrorTrait> {
+        self.error.cause()
+    }
+}
+
+impl Display for PositionalError {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
+        match self.position {
+            None => self.error.fmt(f),
+            Some(Position { ref record, field: None }) => write!(f, "{} at record {}", self.error, record),
+            Some(Position { ref record, field: Some(ref field) }) => write!(f, "{} at field {} of record {}", self.error, field, record)
+        }
     }
 }

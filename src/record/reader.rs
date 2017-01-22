@@ -4,7 +4,7 @@ use std::collections::{HashMap};
 use std::io::{Read, Error as IoError, ErrorKind};
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, Record, RecordData};
+use super::{Error, Result, PositionalResult, Record, RecordData};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -27,7 +27,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(field)
     }
 
-    pub fn read_record<'a, W, X, Y>(&self, reader: &'a mut W, record_name: X) -> Result<Record<Y>>
+    pub fn read_record<'a, W, X, Y>(&self, reader: &'a mut W, record_name: X) -> PositionalResult<Record<Y>>
         where W: 'a + Read,
               X: Into<Option<String>>,
               Y: RecordData
@@ -45,7 +45,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        let line = self._read_string(reader, record_spec.len(), line)?;
+        let line = self._read_string(reader, record_spec.len(), line).map_err(|e| (e, record_name.clone()))?;
         let mut data = Y::new();
         let mut current_index = 0;
 
@@ -54,12 +54,12 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
                 data.insert(name.clone(), self._unpad_field(
                     line[current_index..current_index + field_spec.length].to_string(),
                     &field_spec
-                )?);
+                ).map_err(|e| (e, record_name.clone(), name.clone()))?);
             }
             current_index += field_spec.length;
         }
 
-        self.absorb_line_ending(reader, &record_spec.line_ending)?;
+        self.absorb_line_ending(reader, &record_spec.line_ending).map_err(|e| (e, record_name.clone()))?;
 
         Ok(Record { data: data, name: record_name })
     }
@@ -69,14 +69,6 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             field,
             &field_spec.padding, field_spec.padding_direction)?
         )
-    }
-
-    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> ::std::result::Result<String, IoError> {
-        let original_length = string.len();
-        let mut data = string.into_bytes();
-        data.resize(length, 0);
-        reader.read_exact(&mut data[original_length..])?;
-        String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
     pub fn absorb_line_ending<'a, W: 'a + Read>(&self, reader: &'a mut W, line_ending: &String) -> Result<()> {
@@ -90,6 +82,14 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         }
 
         Ok(())
+    }
+
+    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> Result<String> {
+        let original_length = string.len();
+        let mut data = string.into_bytes();
+        data.resize(length, 0);
+        reader.read_exact(&mut data[original_length..])?;
+        Ok(String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))?)
     }
 }
 
@@ -144,7 +144,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 mod test {
 
     use super::*;
-    use super::super::{Error, Record};
+    use super::super::{Error, PositionalError, Position, Record};
     use test::*;
     use std::io::Cursor;
     use spec::PaddingDirection;
@@ -189,7 +189,13 @@ mod test {
             .with_specs(spec.record_specs)
             .build()
         ;
-        assert_result!(Err(Error::StringDoesNotMatchLineEnding(_, _)), reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()));
+        assert_result!(
+            Err(PositionalError {
+                error: Error::StringDoesNotMatchLineEnding(_, _),
+                position: Some(Position { ref record, field: None })
+            }) if record == "record1",
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+        );
     }
 
     #[test]
@@ -204,7 +210,7 @@ mod test {
             .build()
         ;
         match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5".to_string()) {
-            Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
+            Err(PositionalError { error: Error::RecordSpecNotFound(record_name), .. }) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
     }
@@ -221,7 +227,7 @@ mod test {
             .build()
         ;
         match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, None) {
-            Err(Error::RecordSpecNameRequired) => (),
+            Err(PositionalError { error: Error::RecordSpecNameRequired, .. }) => (),
             _ => panic!("should have returned a record spec name required error")
         }
     }
@@ -259,7 +265,13 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()).unwrap_err();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::PadderFailure(_),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field2",
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+        );
     }
 
     #[test]
@@ -274,7 +286,13 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string()).unwrap_err();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::IoError(_),
+                position: Some(Position { ref record, field: None })
+            }) if record == "record1",
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+        );
     }
 
     #[test]
