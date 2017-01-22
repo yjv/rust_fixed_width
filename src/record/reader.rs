@@ -13,14 +13,14 @@ pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<St
 }
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
-    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: String, name: String) -> Result<String> {
+    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: &'a str, name: &'a str) -> Result<String> {
         let record_spec = self.specs.borrow()
-            .get(&record_name)
-            .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
+            .get(record_name)
+            .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_string()))?
         ;
         let field_spec = record_spec
-            .field_specs.get(&name)
-            .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
+            .field_specs.get(name)
+            .ok_or_else(|| Error::FieldSpecNotFound(record_name.to_string(), name.to_string()))?
         ;
         let field = self._unpad_field(self._read_string(reader, field_spec.length, String::new())?, field_spec)?;
 
@@ -29,7 +29,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 
     pub fn read_record<'a, W, X, Y>(&self, reader: &'a mut W, record_name: X) -> PositionalResult<Record<Y>>
         where W: 'a + Read,
-              X: Into<Option<String>>,
+              X: Into<Option<&'a str>>,
               Y: RecordData
     {
         let mut line = String::new();
@@ -37,7 +37,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .into()
             .map_or_else(
                 || self.recognizer.recognize_for_line(LineBuffer::new(reader, &mut line), self.specs.borrow()),
-                |name| Ok(name)
+                |name| Ok(name.to_string())
             )?
         ;
 
@@ -168,11 +168,11 @@ mod test {
         ;
         assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1").unwrap())
         ;
         assert_eq!(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
-            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1".to_string()).unwrap())
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1").unwrap())
         ;
     }
 
@@ -194,7 +194,7 @@ mod test {
                 error: Error::StringDoesNotMatchLineEnding(_, _),
                 position: Some(Position { ref record, field: None })
             }) if record == "record1",
-            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1")
         );
     }
 
@@ -209,7 +209,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5".to_string()) {
+        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5") {
             Err(PositionalError { error: Error::RecordSpecNotFound(record_name), .. }) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
@@ -270,7 +270,7 @@ mod test {
                 error: Error::PadderFailure(_),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field2",
-            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1")
         );
     }
 
@@ -291,7 +291,7 @@ mod test {
                 error: Error::IoError(_),
                 position: Some(Position { ref record, field: None })
             }) if record == "record1",
-            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1".to_string())
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1")
         );
     }
 
@@ -308,8 +308,8 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap());
-        assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1".to_string(), "field2".to_string()).unwrap());
+        assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1", "field1").unwrap());
+        assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1", "field2").unwrap());
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_field(&mut buf, "record5".to_string(), "field1".to_string()) {
+        match reader.read_field(&mut buf, "record5", "field1") {
             Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
             _ => panic!("should have returned a record spec not found error")
         }
@@ -340,7 +340,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_field(&mut buf, "record1".to_string(), "field5".to_string()) {
+        match reader.read_field(&mut buf, "record1", "field5") {
             Err(Error::FieldSpecNotFound(record_name, field_name)) => {
                 assert_eq!("record1".to_string(), record_name);
                 assert_eq!("field5".to_string(), field_name);
@@ -361,7 +361,7 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap_err();
+        reader.read_field(&mut buf, "record1", "field1").unwrap_err();
     }
 
     #[test]
@@ -374,6 +374,6 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_field(&mut buf, "record1".to_string(), "field1".to_string()).unwrap_err();
+        reader.read_field(&mut buf, "record1", "field1").unwrap_err();
     }
 }
