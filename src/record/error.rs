@@ -53,7 +53,13 @@ impl Display for Error {
             Error::PadderFailure(ref e) => write!(f, "The un-padder encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
             Error::StringDoesNotMatchLineEnding(ref expected, ref actual) => write!(f, "The encountered line ending \"{}\" doesn't match the expected one \"{}\"", actual, expected),
-            Error::PaddedValueWrongLength(ref expected, ref actual) => write!(f, "The value {} returned after padding is {} long and is required to be {} long for the given field", actual, actual.len(), expected),
+            Error::PaddedValueWrongLength(ref expected_length, ref actual_value) => write!(
+                f,
+                "The value {} returned after padding is {} long and is required to be {} long for the given field",
+                actual_value,
+                actual_value.len(),
+                expected_length
+            ),
             Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default")
         }
     }
