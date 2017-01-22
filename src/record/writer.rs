@@ -29,11 +29,16 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_record<'a, W, X>(&self, writer: &'a mut W, record: X) -> PositionalResult<()>
+    pub fn write_record<'a, W, X, Y>(&self, writer: &'a mut W, record: X, record_name: Y) -> PositionalResult<()>
         where W: 'a + Write,
-              X: Into<DataAndRecordName>
+              X: Into<DataAndRecordName>,
+              Y: Into<Option<&'a str>>
     {
-        let (data, record_name) = record.into().into();
+        let data_and_record_name = record.into();
+        let (data, record_name) = (
+            data_and_record_name.data,
+            data_and_record_name.name.or(record_name.into().map(|v| v.to_string()))
+        );
         let record_name = record_name
             .map_or_else(
                 || self.recognizer.recognize_for_data(&data, self.specs.borrow()),
@@ -164,48 +169,6 @@ impl From<Record<HashMap<String, String>>> for DataAndRecordName {
     }
 }
 
-impl From<(BTreeMap<String, String>, String)> for DataAndRecordName {
-    fn from(record: (BTreeMap<String, String>, String)) -> Self {
-        DataAndRecordName {
-            data: record.0,
-            name: Some(record.1)
-        }
-    }
-}
-
-impl From<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
-    fn from(record: (BTreeMap<String, String>, Option<String>)) -> Self {
-        DataAndRecordName {
-            data: record.0,
-            name: record.1
-        }
-    }
-}
-
-impl From<(HashMap<String, String>, String)> for DataAndRecordName {
-    fn from(record: (HashMap<String, String>, String)) -> Self {
-        DataAndRecordName {
-            data: record.0.into_iter().collect(),
-            name: Some(record.1)
-        }
-    }
-}
-
-impl From<(HashMap<String, String>, Option<String>)> for DataAndRecordName {
-    fn from(record: (HashMap<String, String>, Option<String>)) -> Self {
-        DataAndRecordName {
-            data: record.0.into_iter().collect(),
-            name: record.1
-        }
-    }
-}
-
-impl Into<(BTreeMap<String, String>, Option<String>)> for DataAndRecordName {
-    fn into(self) -> (BTreeMap<String, String>, Option<String>) {
-        (self.data, self.name)
-    }
-}
-
 #[cfg(test)]
 mod test {
 
@@ -227,9 +190,9 @@ mod test {
         padder.add_pad_call("def".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
         padder.add_pad_call("hello2".to_string(), 36, "xcvcxv".to_string(), PaddingDirection::Right, Ok(string[9..45].to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).build();
-        writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string()),
+        writer.write_record(&mut buf, [("field1".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string())).unwrap();
+            .iter().cloned().collect::<HashMap<_, _>>(), "record1").unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 
@@ -241,7 +204,7 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
-            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() })
+            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() }, None)
         );
     }
 
@@ -253,7 +216,7 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNameRequired, .. }),
-            writer.write_record(&mut buf, (HashMap::new(), None))
+            writer.write_record(&mut buf, HashMap::new(), None)
         );
     }
 
@@ -272,7 +235,7 @@ mod test {
         let mut recognizer = MockRecognizer::new();
         recognizer.add_data_recognize_call(&data, &spec.record_specs, Ok("record1".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
-        writer.write_record(&mut buf, (data.clone(), None)).unwrap();
+        writer.write_record(&mut buf, data.clone(), None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 
@@ -288,8 +251,8 @@ mod test {
                 error: Error::PadderFailure(_),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
-                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string()))
+            writer.write_record(&mut buf, [("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1")
         );
     }
 
@@ -304,8 +267,8 @@ mod test {
                 error: Error::FieldValueRequired,
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, ([("field3".to_string(), "hello".to_string())]
-                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string()))
+            writer.write_record(&mut buf, [("field3".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1")
         );
     }
 
@@ -321,8 +284,8 @@ mod test {
                 error: Error::PaddedValueWrongLength(4, ref value),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if value == "hello2" && record == "record1" && field == "field1",
-            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
-                .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string()))
+            writer.write_record(&mut buf, [("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<HashMap<_, _>>(), "record1")
         );
     }
 
@@ -339,8 +302,8 @@ mod test {
                 error: Error::IoError(_),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
-                .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string()))
+            writer.write_record(&mut buf, [("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<HashMap<_, _>>(), "record1")
         );
     }
 
