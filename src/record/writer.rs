@@ -37,7 +37,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         let data_and_record_name = record.into();
         let (data, record_name) = (
             data_and_record_name.data,
-            data_and_record_name.name.or(record_name.into().map(|v| v.to_string()))
+            record_name.into().map(|v| v.to_string()).or(data_and_record_name.name)
         );
         let record_name = record_name
             .map_or_else(
@@ -205,6 +205,10 @@ mod test {
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
             writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() }, None)
+        );
+        assert_result!(
+            Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
+            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record1".to_string() }, "record5")
         );
     }
 
