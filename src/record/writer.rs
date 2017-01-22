@@ -69,7 +69,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     fn _write_field<'a, W: 'a + Write>(&self, writer: &'a mut W, field_spec: &FieldSpec, value: String) -> Result<()> {
         let value = self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction)?;
         if value.len() != field_spec.length {
-            return Err(Error::PaddedValueWrongLength(field_spec.length, value.len()));
+            return Err(Error::PaddedValueWrongLength(field_spec.length, value));
         }
 
         Ok(writer.write_all(value.as_bytes())?)
@@ -297,7 +297,7 @@ mod test {
     fn write_record_with_padding_error() {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
-        let mut padder = MockPadder::new();
+        let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError {
@@ -318,9 +318,9 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError {
-                error: Error::PaddedValueWrongLength(_, _),
+                error: Error::PaddedValueWrongLength(4, ref value),
                 position: Some(Position { ref record, field: Some(ref field) })
-            }) if record == "record1" && field == "field1",
+            }) if value == "hello2" && record == "record1" && field == "field1",
             writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
                 .iter().cloned().collect::<HashMap<_, _>>(), "record1".to_string()))
         );
