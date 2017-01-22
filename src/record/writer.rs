@@ -51,7 +51,8 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
                 field_spec,
                 data.get(name)
                     .or_else(|| field_spec.default.as_ref().clone())
-                    .ok_or_else(|| Error::FieldValueRequired(record_name.clone(), name.clone())).map_err(|e| (e, record_name.clone(), name.clone()))?.clone()
+                    .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?
+                    .clone()
             ).map_err(|e| (e, record_name.clone(), name.clone()))?;
         }
 
@@ -276,7 +277,7 @@ mod test {
     }
 
     #[test]
-    fn write_record_with_padding_error() {
+    fn write_record_with_field_require_error() {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
         let mut padder = MockPadder::new();
@@ -288,6 +289,22 @@ mod test {
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
             writer.write_record(&mut buf, ([("field1".to_string(), "hello".to_string())]
+                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string()))
+        );
+    }
+
+    #[test]
+    fn write_record_with_padding_error() {
+        let spec = test_spec();
+        let mut buf = Cursor::new(Vec::new());
+        let mut padder = MockPadder::new();
+        let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
+        assert_result!(
+            Err(PositionalError {
+                error: Error::FieldValueRequired,
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field1",
+            writer.write_record(&mut buf, ([("field3".to_string(), "hello".to_string())]
                 .iter().cloned().collect::<BTreeMap<_, _>>(), "record1".to_string()))
         );
     }

@@ -15,7 +15,7 @@ pub enum Error {
     IoError(IoError),
     StringDoesNotMatchLineEnding(String, String),
     PaddedValueWrongLength(usize, usize),
-    FieldValueRequired(String, String)
+    FieldValueRequired
 }
 
 impl ErrorTrait for Error {
@@ -29,7 +29,7 @@ impl ErrorTrait for Error {
             Error::IoError(_) => "An IO error occurred while trying to read",
             Error::StringDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
             Error::PaddedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
-            Error::FieldValueRequired(_, _) => "The value for the given field is required since it has no default"
+            Error::FieldValueRequired => "The value for the given field is required since it has no default"
         }
     }
 
@@ -54,7 +54,7 @@ impl Display for Error {
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
             Error::StringDoesNotMatchLineEnding(ref expected, ref actual) => write!(f, "The encountered line ending \"{}\" doesn't match the expected one \"{}\"", actual, expected),
             Error::PaddedValueWrongLength(ref expected, ref actual) => write!(f, "The value returned after padding is {} long and is required to be {} long for the given field", actual, expected),
-            Error::FieldValueRequired(ref record_name, ref name) => write!(f, "The value for the field \"{}\" in record spec \"{}\" is required since it has no default", name, record_name)
+            Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default")
         }
     }
 }
