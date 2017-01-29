@@ -91,6 +91,14 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         reader.read_exact(&mut data[original_length..])?;
         Ok(String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))?)
     }
+
+    pub fn iter<'a, W: 'a + Read, X: RecordData>(&'a self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
+        Iter {
+            source: reader,
+            reader: self,
+            marker: ::std::marker::PhantomData
+        }
+    }
 }
 
 pub struct ReaderBuilder<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
@@ -140,6 +148,19 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
     }
 }
 
+pub struct Iter<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordData> {
+    source: &'a mut W,
+    reader: &'a Reader<T, U, V>,
+    marker: ::std::marker::PhantomData<X>
+}
+
+impl<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordData> Iterator for Iter<'a, T, U, V, W, X> {
+    type Item = PositionalResult<Record<X>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.reader.read_record(self.source, None))
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -150,6 +171,7 @@ mod test {
     use spec::PaddingDirection;
     use padders::Error as PaddingError;
     use std::collections::{HashMap, BTreeMap};
+    use std::io::{Seek, SeekFrom};
 
     #[test]
     fn read_record() {
@@ -375,5 +397,42 @@ mod test {
             .build()
         ;
         reader.read_field(&mut buf, "record1", "field1").unwrap_err();
+    }
+
+    #[test]
+    fn iterator() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello".to_string()));
+        un_padder.add_unpad_call(string[9..45].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello2".to_string()));
+        un_padder.add_unpad_call(string[50..55].to_string(), " ".to_string(), PaddingDirection::Right, Ok("hello3".to_string()));
+        un_padder.add_unpad_call(string[55..91].to_string(), "xcvcxv".to_string(), PaddingDirection::Right, Ok("hello4".to_string()));
+        let mut recognizer = MockRecognizer::new();
+        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_recognizer(recognizer)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        let mut vec = Vec::new();
+        vec.push(Record { data: [("field2".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() });
+        vec.push(Record { data: [("field2".to_string(), "hello3".to_string()),
+            ("field3".to_string(), "hello4".to_string())]
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() });
+        assert_eq!(vec, reader.iter(&mut buf).take(2).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, String>>>>());
+        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+        let mut vec = Vec::new();
+        vec.push(Record { data: [("field2".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() });
+        vec.push(Record { data: [("field2".to_string(), "hello3".to_string()),
+            ("field3".to_string(), "hello4".to_string())]
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() });
+        assert_eq!(vec, reader.iter(&mut buf).take(2).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, String>>>>());
     }
 }
