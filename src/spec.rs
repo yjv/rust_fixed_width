@@ -50,7 +50,7 @@ pub struct RecordSpec {
 }
 
 impl RecordSpec {
-    pub fn field_range(&self, name: &String) -> Option<Range<usize>> {
+    pub fn field_range<'a>(&self, name: &'a str) -> Option<Range<usize>> {
         let mut found_field_spec = None;
         let index = self.field_specs.iter().take_while(|&(field_name, field_spec)| {
             if field_name == name {
@@ -303,7 +303,7 @@ mod test {
     fn field_range() {
         let spec = test_spec();
         let record_spec = spec.record_specs.get("record1").unwrap();
-        assert_eq!(Some(0..4), record_spec.field_range(&"field1".to_string()));
+        assert_eq!(Some(0..4), record_spec.field_range("field1"));
         assert_eq!(Some(4..9), record_spec.field_range(&"field2".to_string()));
         assert_eq!(Some(9..45), record_spec.field_range(&"field3".to_string()));
         assert_eq!(None, record_spec.field_range(&"field4".to_string()));

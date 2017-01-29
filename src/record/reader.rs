@@ -217,14 +217,16 @@ mod test {
             .with_specs(spec.record_specs)
             .build()
         ;
-        assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
+        assert_result!(Ok(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1").unwrap())
-        ;
-        assert_eq!(Record { data: [("field2".to_string(), "hello3".to_string()),
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }),
+            reader.read_record(&mut buf, "record1")
+        );
+        assert_result!(Ok(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
-            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, "record1").unwrap())
-        ;
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() }),
+            reader.read_record(&mut buf, "record1")
+        );
     }
 
     #[test]
@@ -260,10 +262,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5") {
-            Err(PositionalError { error: Error::RecordSpecNotFound(record_name), .. }) => assert_eq!("record5".to_string(), record_name),
-            _ => panic!("should have returned a record spec not found error")
-        }
+        assert_result!(
+            Err(PositionalError { error: Error::RecordSpecNotFound(ref record_name), .. }) if record_name == "record5",
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record5")
+        );
     }
 
     #[test]
@@ -277,10 +279,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_record::<_, _, HashMap<String, String>>(&mut buf, None) {
-            Err(PositionalError { error: Error::RecordSpecNameRequired, .. }) => (),
-            _ => panic!("should have returned a record spec name required error")
-        }
+        assert_result!(
+            Err(PositionalError { error: Error::RecordSpecNameRequired, .. }),
+            reader.read_record::<_, _, HashMap<String, String>>(&mut buf, None)
+        );
     }
 
     #[test]
@@ -299,9 +301,11 @@ mod test {
             .with_recognizer(recognizer)
             .build()
         ;
-        assert_eq!(Record { data: [("field2".to_string(), "hello".to_string()),
+        assert_result!(Ok(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
-            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }, reader.read_record(&mut buf, None).unwrap());
+            .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() }),
+            reader.read_record(&mut buf, None)
+        );
     }
 
     #[test]
@@ -359,8 +363,8 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        assert_eq!("hello".to_string(), reader.read_field(&mut buf, "record1", "field1").unwrap());
-        assert_eq!("hello2".to_string(), reader.read_field(&mut buf, "record1", "field2").unwrap());
+        assert_result!(Ok("hello".to_string()), reader.read_field(&mut buf, "record1", "field1"));
+        assert_result!(Ok("hello2".to_string()), reader.read_field(&mut buf, "record1", "field2"));
     }
 
     #[test]

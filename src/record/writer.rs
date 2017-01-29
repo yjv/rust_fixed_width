@@ -13,18 +13,18 @@ pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<Stri
 }
 
 impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Writer<T, U, V> {
-    pub fn write_field<'a, W>(&self, writer: &'a mut W, value: String, record_name: String, name: String) -> Result<()>
+    pub fn write_field<'a, W>(&self, writer: &'a mut W, value: &'a str, record_name: &'a str, name: &'a str) -> Result<()>
         where W: 'a + Write
     {
         let record_spec = self.specs.borrow()
-            .get(&record_name)
-            .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
+            .get(record_name)
+            .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_string()))?
         ;
         let field_spec = record_spec
-            .field_specs.get(&name)
-            .ok_or_else(|| Error::FieldSpecNotFound(record_name.clone(), name.clone()))?
+            .field_specs.get(name)
+            .ok_or_else(|| Error::FieldSpecNotFound(record_name.to_string(), name.to_string()))?
         ;
-        self._write_field(writer, field_spec, value)?;
+        self._write_field(writer, field_spec, value.to_string())?;
 
         Ok(())
     }
@@ -320,9 +320,15 @@ mod test {
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok(string[0..4].to_string()));
         padder.add_pad_call("hello2".to_string(), 5, " ".to_string(), PaddingDirection::Right, Ok(string[4..9].to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_field(&mut buf, "hello".to_string(), "record1".to_string(), "field1".to_string()).unwrap();
+        assert_result!(
+            Ok(()),
+            writer.write_field(&mut buf, "hello", "record1", "field1")
+        );
         assert_eq!(string[0..4].to_string(), String::from_utf8(buf.get_ref().clone()).unwrap());
-        writer.write_field(&mut buf, "hello2".to_string(), "record1".to_string(), "field2".to_string()).unwrap();
+        assert_result!(
+            Ok(()),
+            writer.write_field(&mut buf, "hello2", "record1", "field2")
+        );
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 
@@ -332,10 +338,10 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        match writer.write_field(&mut buf, "hello".to_string(), "record5".to_string(), "field1".to_string()) {
-            Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
-            _ => panic!("should have returned a record spec not found error")
-        }
+        assert_result!(
+            Err(Error::RecordSpecNotFound(ref record_name)) if record_name == "record5",
+            writer.write_field(&mut buf, "hello", "record5", "field1")
+        );
     }
 
     #[test]
@@ -344,13 +350,10 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let padder = MockPadder::new();
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).build();
-        match writer.write_field(&mut buf, "hello".to_string(), "record1".to_string(), "field5".to_string()) {
-            Err(Error::FieldSpecNotFound(record_name, field_name)) => {
-                assert_eq!("record1".to_string(), record_name);
-                assert_eq!("field5".to_string(), field_name);
-            },
-            _ => panic!("should have returned a field spec not found error")
-        }
+        assert_result!(
+            Err(Error::FieldSpecNotFound(ref record_name, ref field_name)) if record_name == "record1" && field_name == "field5",
+            writer.write_field(&mut buf, "hello", "record1", "field5")
+        );
     }
 
     #[test]
@@ -360,7 +363,10 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Err(PaddingError::new("")));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_field(&mut buf, "hello".to_string(), "record1".to_string(), "field1".to_string()).unwrap_err();
+        assert_result!(
+            Err(Error::PadderFailure(_)),
+            writer.write_field(&mut buf, "hello", "record1", "field1")
+        );
     }
 
     #[test]
@@ -370,17 +376,23 @@ mod test {
         let mut padder = MockPadder::new();
         padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("123".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
-        writer.write_field(&mut buf, "hello".to_string(), "record1".to_string(), "field1".to_string()).unwrap_err();
+        assert_result!(
+            Err(Error::PaddedValueWrongLength(4, ref value)) if value == "123",
+            writer.write_field(&mut buf, "hello", "record1", "field1")
+        );
     }
 
     #[test]
     fn write_field_with_write_error() {
         let spec = test_spec();
-        let string: &mut [u8] = &mut [0; 4];
+        let string: &mut [u8] = &mut [0; 3];
         let mut buf = Cursor::new(string);
         let mut padder = MockPadder::new();
-        padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("hello".to_string()));
+        padder.add_pad_call("hello".to_string(), 4, "dsasd".to_string(), PaddingDirection::Left, Ok("1234".to_string()));
         let writer = WriterBuilder::new().with_padder(padder).with_specs(spec.record_specs).build();
-        writer.write_field(&mut buf, "hello".to_string(), "record1".to_string(), "field1".to_string()).unwrap_err();
+        assert_result!(
+            Err(Error::IoError(_)),
+            writer.write_field(&mut buf, "hello", "record1", "field1")
+        );
     }
 }
