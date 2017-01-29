@@ -14,6 +14,7 @@ pub enum Error {
     PadderFailure(PadderError),
     IoError(IoError),
     StringDoesNotMatchLineEnding(String, String),
+    CouldNotReadEnough(String),
     PaddedValueWrongLength(usize, String),
     FieldValueRequired
 }
@@ -27,6 +28,7 @@ impl ErrorTrait for Error {
             Error::FieldSpecNotFound(_, _) => "field spec could not be found",
             Error::PadderFailure(_) => "The un-padder encountered an error",
             Error::IoError(_) => "An IO error occurred while trying to read",
+            Error::CouldNotReadEnough(_) => "Could not read enough data",
             Error::StringDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
             Error::PaddedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
             Error::FieldValueRequired => "The value for the given field is required since it has no default"
@@ -52,6 +54,7 @@ impl Display for Error {
             Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
             Error::PadderFailure(ref e) => write!(f, "The un-padder encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
+            Error::CouldNotReadEnough(ref data) => write!(f, "Could not read enough data. only got: {}", data),
             Error::StringDoesNotMatchLineEnding(ref expected, ref actual) => write!(f, "The encountered line ending \"{}\" doesn't match the expected one \"{}\"", actual, expected),
             Error::PaddedValueWrongLength(ref expected_length, ref actual_value) => write!(
                 f,

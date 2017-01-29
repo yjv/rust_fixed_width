@@ -1,10 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
 use padders::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
-use std::io::{Read, Error as IoError, ErrorKind};
+use std::io::Read;
 use std::borrow::Borrow;
 use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record, RecordData};
+use super::{Error, Result, PositionalResult, Record, RecordData, PositionalError};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -84,16 +84,26 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Ok(())
     }
 
-    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, string: String) -> Result<String> {
-        let original_length = string.len();
-        let mut data = string.into_bytes();
-        data.resize(length, 0);
-        reader.read_exact(&mut data[original_length..])?;
-        Ok(String::from_utf8(data).map_err(|e| IoError::new(ErrorKind::InvalidData, e))?)
+    fn _read_string<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, mut string: String) -> Result<String> {
+        let _ = reader.by_ref().take((length - string.len()) as u64).read_to_string(&mut string)?;
+
+        if string.len() < length {
+            Err(Error::CouldNotReadEnough(string))
+        } else {
+            Ok(string)
+        }
     }
 
     pub fn iter<'a, W: 'a + Read, X: RecordData>(&'a self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
         Iter {
+            source: reader,
+            reader: self,
+            marker: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn into_iter<W: Read, X: RecordData>(self, reader: W) -> IntoIter<T, U, V, W, X> {
+        IntoIter {
             source: reader,
             reader: self,
             marker: ::std::marker::PhantomData
@@ -157,7 +167,26 @@ pub struct Iter<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borro
 impl<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordData> Iterator for Iter<'a, T, U, V, W, X> {
     type Item = PositionalResult<Record<X>>;
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.reader.read_record(self.source, None))
+        match self.reader.read_record(self.source, None) {
+            Err(PositionalError { error: Error::CouldNotReadEnough(ref string), .. }) if string.len() == 0 => None,
+            r => Some(r)
+        }
+    }
+}
+
+pub struct IntoIter<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: RecordData> {
+    source: W,
+    reader: Reader<T, U, V>,
+    marker: ::std::marker::PhantomData<X>,
+}
+
+impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: RecordData> Iterator for IntoIter<T, U, V, W, X> {
+    type Item = PositionalResult<Record<X>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.reader.read_record(&mut self.source, None) {
+            Err(PositionalError { error: Error::CouldNotReadEnough(ref string), .. }) if string.len() == 0 => None,
+            r => Some(r)
+        }
     }
 }
 
@@ -310,7 +339,7 @@ mod test {
         ;
         assert_result!(
             Err(PositionalError {
-                error: Error::IoError(_),
+                error: Error::CouldNotReadEnough(_),
                 position: Some(Position { ref record, field: None })
             }) if record == "record1",
             reader.read_record::<_, _, HashMap<String, String>>(&mut buf, "record1")
@@ -345,10 +374,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_field(&mut buf, "record5", "field1") {
-            Err(Error::RecordSpecNotFound(record_name)) => assert_eq!("record5".to_string(), record_name),
-            _ => panic!("should have returned a record spec not found error")
-        }
+        assert_result!(
+            Err(Error::RecordSpecNotFound(ref record_name)) if record_name == "record5",
+            reader.read_field(&mut buf, "record5", "field1")
+        );
     }
 
     #[test]
@@ -362,13 +391,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        match reader.read_field(&mut buf, "record1", "field5") {
-            Err(Error::FieldSpecNotFound(record_name, field_name)) => {
-                assert_eq!("record1".to_string(), record_name);
-                assert_eq!("field5".to_string(), field_name);
-            },
-            _ => panic!("should have returned a field spec not found error")
-        }
+        assert_result!(
+            Err(Error::FieldSpecNotFound(ref record_name, ref field_name)) if record_name == "record1" && field_name == "field5",
+            reader.read_field(&mut buf, "record1", "field5")
+        );
     }
 
     #[test]
@@ -383,7 +409,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_field(&mut buf, "record1", "field1").unwrap_err();
+        assert_result!(
+            Err(Error::PadderFailure(_)),
+            reader.read_field(&mut buf, "record1", "field1")
+        );
     }
 
     #[test]
@@ -396,7 +425,10 @@ mod test {
             .with_specs(&spec.record_specs)
             .build()
         ;
-        reader.read_field(&mut buf, "record1", "field1").unwrap_err();
+        assert_result!(
+            Err(Error::CouldNotReadEnough(_)),
+            reader.read_field(&mut buf, "record1", "field1")
+        );
     }
 
     #[test]
@@ -424,8 +456,9 @@ mod test {
         vec.push(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
             .iter().cloned().collect::<HashMap<String, String>>(), name: "record1".to_string() });
-        assert_eq!(vec, reader.iter(&mut buf).take(2).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, String>>>>());
+        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, String>>>>());
         let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+
         let mut vec = Vec::new();
         vec.push(Record { data: [("field2".to_string(), "hello".to_string()),
             ("field3".to_string(), "hello2".to_string())]
@@ -433,6 +466,16 @@ mod test {
         vec.push(Record { data: [("field2".to_string(), "hello3".to_string()),
             ("field3".to_string(), "hello4".to_string())]
             .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() });
-        assert_eq!(vec, reader.iter(&mut buf).take(2).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, String>>>>());
+        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, String>>>>());let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut vec = Vec::new();
+        vec.push(Record { data: [("field2".to_string(), "hello".to_string()),
+            ("field3".to_string(), "hello2".to_string())]
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() });
+        vec.push(Record { data: [("field2".to_string(), "hello3".to_string()),
+            ("field3".to_string(), "hello4".to_string())]
+            .iter().cloned().collect::<BTreeMap<String, String>>(), name: "record1".to_string() });
+        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, String>>>>());
     }
 }
