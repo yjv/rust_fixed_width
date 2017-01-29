@@ -11,4 +11,3 @@ pub use self::record::{Record, RecordData};
 
 type Result<T> = ::std::result::Result<T, Error>;
 type PositionalResult<T> = ::std::result::Result<T, PositionalError>;
-
