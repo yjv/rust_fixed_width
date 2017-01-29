@@ -66,7 +66,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_line_ending<'a, W: 'a + Write>(&self, writer: &'a mut W, line_ending: &String) -> Result<()> {
+    pub fn write_line_ending<'a, W: 'a + Write>(&self, writer: &'a mut W, line_ending: &'a str) -> Result<()> {
         writer.write(&line_ending.as_bytes())?;
         Ok(())
     }

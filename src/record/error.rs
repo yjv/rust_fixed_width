@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use padders::Error as PadderError;
 use std::io::Error as IoError;
 use super::recognizers::Error as RecognizerError;
-use super::Position;
 
 #[derive(Debug)]
 pub enum Error {
@@ -159,6 +158,28 @@ impl Display for PositionalError {
             None => self.error.fmt(f),
             Some(Position { ref record, field: None }) => write!(f, "{} at record {}", self.error, record),
             Some(Position { ref record, field: Some(ref field) }) => write!(f, "{} at field {} of record {}", self.error, field, record)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Position {
+    pub record: String,
+    pub field: Option<String>
+}
+
+impl Position {
+    pub fn new(record: String, field: String) -> Self {
+        Position {
+            record: record,
+            field: Some(field)
+        }
+    }
+
+    pub fn new_from_record(record: String) -> Self {
+        Position {
+            record: record,
+            field: None
         }
     }
 }

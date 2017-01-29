@@ -89,13 +89,13 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
         }
     }
 
-    pub fn fill_to(&mut self, size: usize) -> ::std::result::Result<(), IoError> {
+    pub fn fill_to(&mut self, size: usize) -> ::std::result::Result<usize, IoError> {
         let length = self.line.len();
         if length < size {
-            (*self).reader.by_ref().take((size - self.line.len()) as u64).read_to_string(self.line)?;
+            (*self).reader.by_ref().take((size - self.line.len()) as u64).read_to_string(self.line)
+        } else {
+            Ok(0)
         }
-
-        Ok(())
     }
 
     pub fn into_inner(self) -> (&'a mut T, &'a mut String) {
