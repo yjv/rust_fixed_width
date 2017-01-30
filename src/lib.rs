@@ -31,6 +31,18 @@
 #[cfg(test)]
 #[macro_use]
 pub mod test;
-pub mod spec;
+pub mod error;
+pub mod padder;
+pub mod reader;
+pub mod recognizer;
 pub mod record;
-pub mod padders;
+pub mod spec;
+pub mod writer;
+
+pub use self::error::{Error, PositionalError, Position};
+pub use self::reader::{Reader, ReaderBuilder};
+pub use self::writer::{Writer, WriterBuilder};
+pub use self::record::{Record, RecordData};
+
+type Result<T> = ::std::result::Result<T, Error>;
+type PositionalResult<T> = ::std::result::Result<T, PositionalError>;

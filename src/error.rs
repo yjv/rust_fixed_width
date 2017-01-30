@@ -1,8 +1,8 @@
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use padders::Error as PadderError;
+use padder::Error as PadderError;
 use std::io::Error as IoError;
-use super::recognizers::Error as RecognizerError;
+use recognizer::Error as RecognizerError;
 
 #[derive(Debug)]
 pub enum Error {

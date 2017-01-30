@@ -203,7 +203,7 @@ mod test {
     use spec::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::empty;
-    use padders::PaddingError;
+    use padder::PaddingError;
 
     #[test]
     fn none_recognizer() {

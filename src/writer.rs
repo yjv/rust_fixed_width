@@ -1,9 +1,9 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::{Padder, IdentityPadder};
+use padder::{Padder, IdentityPadder};
 use std::collections::{HashMap, BTreeMap};
 use std::io::Write;
 use std::borrow::Borrow;
-use super::recognizers::{DataRecordSpecRecognizer, NoneRecognizer};
+use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
@@ -178,7 +178,7 @@ mod test {
     use std::collections::{HashMap, BTreeMap};
     use std::io::Cursor;
     use spec::PaddingDirection;
-    use padders::Error as PaddingError;
+    use padder::Error as PaddingError;
 
     #[test]
     fn write_record() {

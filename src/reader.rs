@@ -1,9 +1,9 @@
 use spec::{RecordSpec, FieldSpec};
-use padders::{UnPadder, IdentityPadder};
+use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::Read;
 use std::borrow::Borrow;
-use super::recognizers::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
+use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, RecordData, PositionalError};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
@@ -198,7 +198,7 @@ mod test {
     use test::*;
     use std::io::Cursor;
     use spec::PaddingDirection;
-    use padders::Error as PaddingError;
+    use padder::Error as PaddingError;
     use std::collections::{HashMap, BTreeMap};
     use std::io::{Seek, SeekFrom};
 
