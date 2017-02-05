@@ -1,6 +1,5 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use std::iter::{repeat, once};
 
 #[derive(Debug)]
 pub struct Error {
@@ -48,21 +47,21 @@ impl Display for Error {
 type Result<T> = ::std::result::Result<T, Error>;
 
 pub trait Padder {
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String>;
+    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>>;
 }
 
 impl<'a, T> Padder for &'a T where T: 'a + Padder {
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String> {
+    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
         (**self).pad(data, length, padding, direction)
     }
 }
 
 pub trait UnPadder {
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String>;
+    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>>;
 }
 
 impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String> {
+    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
         (**self).unpad(data, padding, direction)
     }
 }
@@ -108,57 +107,57 @@ impl From<PaddingError> for Error {
 }
 
 impl Padder for DefaultPadder {
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String> {
+    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
         if data.len() >= length {
-            return if data.is_char_boundary(length) {
-                Ok(data[..length].to_string())
-            } else {
-                Err(Error::new(PaddingError::DataSplitNotOnCharBoundary(length)))
-            }
+            return Ok(data[..length].to_owned());
         }
 
-        let diff = length - data.len();
-
-        let remainder = diff % padding.len();
-
-        if !padding.is_char_boundary(remainder) {
-            return Err(Error::new(PaddingError::PaddingSplitNotOnCharBoundary(length)));
-        }
-
-        let padding_iter = repeat(&padding[..]).take(diff / padding.len()).chain(once(&padding[..remainder]));
-        let data_iter = once(&data[..]);
+        let padding_iter = padding.iter().cycle().take(length - data.len());
 
         Ok(if direction == PaddingDirection::Left {
-            padding_iter.chain(data_iter).collect()
+            padding_iter.chain(data.iter()).cloned().collect()
         } else {
-            data_iter.chain(padding_iter).collect()
+            data.iter().chain(padding_iter).cloned().collect()
         })
     }
 }
 
 impl UnPadder for DefaultPadder {
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String> {
+    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
+        let mut index = 0;
+        let mut iter = data.chunks(padding.len());
+
+        while let Some(chunk) = match direction {
+            PaddingDirection::Left => iter.next(),
+            PaddingDirection::Right => iter.next_back(),
+        } {
+            if chunk != padding {
+                break;
+            }
+
+            index += chunk.len();
+        }
+
         Ok(match direction {
-            PaddingDirection::Left => data.trim_left_matches(&padding[..]).to_string(),
-            PaddingDirection::Right => data.trim_right_matches(&padding[..]).to_string(),
-        })
+            PaddingDirection::Left => &data[index..],
+            PaddingDirection::Right => &data[..data.len() - index],
+        }.to_owned())
     }
 }
 
 pub struct IdentityPadder;
 
 impl Padder for IdentityPadder {
-    fn pad(&self, data: String, _: usize, _: &String, _: PaddingDirection) -> Result<String> {
-        Ok(data)
+    fn pad(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection) -> Result<Vec<u8>> {
+        Ok(data.to_owned())
     }
 }
 
 impl UnPadder for IdentityPadder {
-    fn unpad(&self, data: String, _: &String, _: PaddingDirection) -> Result<String> {
-        Ok(data)
+    fn unpad(&self, data: &[u8], _: &[u8], _: PaddingDirection) -> Result<Vec<u8>> {
+        Ok(data.to_owned())
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -168,32 +167,36 @@ mod test {
     #[test]
     fn default_padder() {
         let padder = DefaultPadder;
-        let data = "qwer".to_string();
-        assert_result!(Ok("qwer333333".to_string()), padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Right));
-        let data = "qwer".to_string();
-        assert_result!(Ok("333333qwer".to_string()), padder.pad(data.clone(), 10, &"33".to_string(), PaddingDirection::Left));
-        let data = "qwer333333".to_string();
-        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Right));
-        let data = "333333qwer".to_string();
-        assert_result!(Ok("qwer".to_string()), padder.unpad(data.clone(), &"33".to_string(), PaddingDirection::Left));
+        let data = "qwer".as_bytes();
+        assert_result!(Ok("qwer333333".as_bytes().to_owned()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Right));
+        let data = "qwer".as_bytes();
+        assert_result!(Ok("333333qwer".as_bytes().to_owned()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Left));
+        let data = "qwer333333".as_bytes();
+        assert_result!(Ok("qwer".as_bytes().to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right));
+        let data = "333333qwer".as_bytes();
+        assert_result!(Ok("qwer".as_bytes().to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left));
+        let data = "qwer333333".as_bytes();
+        assert_result!(Ok(data.to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left));
+        let data = "333333qwer".as_bytes();
+        assert_result!(Ok(data.to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right));
     }
 
     #[test]
     fn identity_padder() {
         let padder = IdentityPadder;
-        let data = "qwer".to_string();
-        assert_result!(Ok(data.clone()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
-        assert_result!(Ok(data.clone()), padder.pad(data.clone(), 10, &"3".to_string(), PaddingDirection::Left));
-        assert_result!(Ok(data.clone()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Right));
-        assert_result!(Ok(data.clone()), padder.unpad(data.clone(), &"3".to_string(), PaddingDirection::Left));
+        let data = "qwer".as_bytes();
+        assert_result!(Ok(data.to_owned()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right));
+        assert_result!(Ok(data.to_owned()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Left));
+        assert_result!(Ok(data.to_owned()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Right));
+        assert_result!(Ok(data.to_owned()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Left));
     }
 
     #[test]
     fn padder_reference() {
         let padder = IdentityPadder;
-        let data = "qwer".to_string();
-        assert_result!(Ok(data.clone()), Padder::pad(&&padder, data.clone(), 10, &"3".to_string(), PaddingDirection::Right));
-        assert_result!(Ok(data.clone()), UnPadder::unpad(&&padder, data.clone(), &"3".to_string(), PaddingDirection::Right));
+        let data = "qwer".as_bytes();
+        assert_result!(Ok(data.to_owned()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right));
+        assert_result!(Ok(data.to_owned()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right));
     }
 
     #[test]

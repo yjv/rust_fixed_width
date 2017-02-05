@@ -12,9 +12,9 @@ pub enum Error {
     FieldSpecNotFound(String, String),
     PadderFailure(PadderError),
     IoError(IoError),
-    StringDoesNotMatchLineEnding(String, String),
-    CouldNotReadEnough(String),
-    PaddedValueWrongLength(usize, String),
+    DataDoesNotMatchLineEnding(Vec<u8>, Vec<u8>),
+    CouldNotReadEnough(Vec<u8>),
+    PaddedValueWrongLength(usize, Vec<u8>),
     FieldValueRequired
 }
 
@@ -28,7 +28,7 @@ impl ErrorTrait for Error {
             Error::PadderFailure(_) => "The un-padder encountered an error",
             Error::IoError(_) => "An IO error occurred while trying to read",
             Error::CouldNotReadEnough(_) => "Could not read enough data",
-            Error::StringDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
+            Error::DataDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
             Error::PaddedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
             Error::FieldValueRequired => "The value for the given field is required since it has no default"
         }
@@ -44,6 +44,17 @@ impl ErrorTrait for Error {
     }
 }
 
+macro_rules! write_with_data {
+    ($f:expr, $m:expr, $($d:expr)*) => {
+        write!($f, $m)?;
+        $(match ::std::str::from_utf8($d) {
+            Ok(v) => write!($f, "{}", v),
+            Err(_) => write!("{:?}", $d)
+        };)*
+        Ok(())
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
@@ -53,16 +64,36 @@ impl Display for Error {
             Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
             Error::PadderFailure(ref e) => write!(f, "The un-padder encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
-            Error::CouldNotReadEnough(ref data) => write!(f, "Could not read enough data. only got: {}", data),
-            Error::StringDoesNotMatchLineEnding(ref expected, ref actual) => write!(f, "The encountered line ending \"{}\" doesn't match the expected one \"{}\"", actual, expected),
+            Error::CouldNotReadEnough(ref data) => write!(
+                f,
+                "Could not read enough data. only got: {}",
+                DataDisplayer(data)
+            ),
+            Error::DataDoesNotMatchLineEnding(ref expected, ref actual) => write!(
+                f,
+                "The encountered line ending \"{}\" doesn't match the expected one \"{}\"",
+                DataDisplayer(actual),
+                DataDisplayer(expected)
+            ),
             Error::PaddedValueWrongLength(ref expected_length, ref actual_value) => write!(
                 f,
                 "The value {} returned after padding is {} long and is required to be {} long for the given field",
-                actual_value,
+                DataDisplayer(actual_value),
                 actual_value.len(),
                 expected_length
             ),
             Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default")
+        }
+    }
+}
+
+struct DataDisplayer<'a>(&'a Vec<u8>);
+
+impl<'a> Display for DataDisplayer<'a> {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
+        match ::std::str::from_utf8(self.0) {
+            Ok(v) => write!(f, "{}", v),
+            Err(_) => write!(f, "{:?}", self.0)
         }
     }
 }

@@ -7,7 +7,7 @@ use std::io::Read;
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
     line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>,
-    data_recognize_calls: Vec<(&'a BTreeMap<String, String>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
+    data_recognize_calls: Vec<(&'a BTreeMap<String, Vec<u8>>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
 }
 
 impl<'a> MockRecognizer<'a> {
@@ -23,7 +23,7 @@ impl<'a> MockRecognizer<'a> {
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: &'a BTreeMap<String, String>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, data: &'a BTreeMap<String, Vec<u8>>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
         self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
@@ -43,7 +43,7 @@ impl<'a> LineRecordSpecRecognizer for MockRecognizer<'a> {
 }
 
 impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
-    fn recognize_for_data(&self, data: &BTreeMap<String, String>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
+    fn recognize_for_data(&self, data: &BTreeMap<String, Vec<u8>>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data == data
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
@@ -58,8 +58,8 @@ impl<'a> DataRecordSpecRecognizer for MockRecognizer<'a> {
 
 #[derive(Debug)]
 pub struct MockPadder {
-    pad_calls: Vec<(String, usize, String, PaddingDirection, Result<String, PaddingError>)>,
-    unpad_calls: Vec<(String, String, PaddingDirection, Result<String, PaddingError>)>
+    pad_calls: Vec<(Vec<u8>, usize, Vec<u8>, PaddingDirection, Result<Vec<u8>, PaddingError>)>,
+    unpad_calls: Vec<(Vec<u8>, Vec<u8>, PaddingDirection, Result<Vec<u8>, PaddingError>)>
 }
 
 impl MockPadder {
@@ -70,23 +70,23 @@ impl MockPadder {
         }
     }
 
-    pub fn add_pad_call(&mut self, data: String, length: usize, padding: String, direction: PaddingDirection, return_value: Result<String, PaddingError>) -> &mut Self {
+    pub fn add_pad_call(&mut self, data: Vec<u8>, length: usize, padding: Vec<u8>, direction: PaddingDirection, return_value: Result<Vec<u8>, PaddingError>) -> &mut Self {
         self.pad_calls.push((data, length, padding, direction, return_value));
         self
     }
 
-    pub fn add_unpad_call(&mut self, data: String, padding: String, direction: PaddingDirection, return_value: Result<String, PaddingError>) -> &mut Self {
+    pub fn add_unpad_call(&mut self, data: Vec<u8>, padding: Vec<u8>, direction: PaddingDirection, return_value: Result<Vec<u8>, PaddingError>) -> &mut Self {
         self.unpad_calls.push((data, padding, direction, return_value));
         self
     }
 }
 
 impl Padder for MockPadder {
-    fn pad(&self, data: String, length: usize, padding: &String, direction: PaddingDirection) -> Result<String, PaddingError> {
+    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>, PaddingError> {
         for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
             if *expected_data == data
                 && expected_length == length
-                && expected_padding == padding
+                && &expected_padding[..] == padding
                 && expected_direction == direction {
                 return return_value.clone();
             }
@@ -97,10 +97,10 @@ impl Padder for MockPadder {
 }
 
 impl UnPadder for MockPadder {
-    fn unpad(&self, data: String, padding: &String, direction: PaddingDirection) -> Result<String, PaddingError> {
+    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>, PaddingError> {
         for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
             if *expected_data == data
-                && expected_padding == padding
+                && &expected_padding[..] == padding
                 && expected_direction == direction {
                 return return_value.clone();
             }
@@ -168,7 +168,7 @@ pub fn test_spec() -> Spec {
                     "field4".to_string(),
                     FieldSpec {
                         length: 8,
-                        padding: "sdfsd".to_string(),
+                        padding: "sdfsd".as_bytes().to_owned(),
                         padding_direction: PaddingDirection::Left,
                         default: None,
                         filler: false
@@ -176,7 +176,7 @@ pub fn test_spec() -> Spec {
                 )
         )
         .with_record("record3".to_string(), RecordSpec {
-            line_ending: "\n".to_string(),
+            line_ending: "\n".as_bytes().to_owned(),
             field_specs: BTreeMap::new()
         })
         .build()

@@ -45,7 +45,7 @@ impl Builder<Spec> for SpecBuilder {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSpec {
-    pub line_ending: String,
+    pub line_ending: Vec<u8>,
     pub field_specs: BTreeMap<String, FieldSpec>
 }
 
@@ -75,14 +75,14 @@ impl Builder<RecordSpec> for RecordSpec {
 
 #[derive(Clone)]
 pub struct RecordSpecBuilder {
-    line_ending: String,
+    line_ending: Vec<u8>,
     field_specs: BTreeMap<String, FieldSpec>,
 }
 
 impl RecordSpecBuilder {
     pub fn new() -> Self {
         RecordSpecBuilder {
-            line_ending: "".to_string(),
+            line_ending: Vec::new(),
             field_specs: BTreeMap::new()
         }
     }
@@ -92,7 +92,7 @@ impl RecordSpecBuilder {
         self
     }
 
-    pub fn with_line_ending<T: Into<String>>(mut self, line_ending: T) -> Self {
+    pub fn with_line_ending<T: Into<Vec<u8>>>(mut self, line_ending: T) -> Self {
         self.line_ending = line_ending.into();
         self
     }
@@ -117,8 +117,8 @@ pub enum PaddingDirection {
 pub struct FieldSpec {
     pub length: usize,
     pub padding_direction: PaddingDirection,
-    pub padding: String,
-    pub default: Option<String>,
+    pub padding: Vec<u8>,
+    pub default: Option<Vec<u8>>,
     pub filler: bool
 }
 
@@ -132,8 +132,8 @@ impl Builder<FieldSpec> for FieldSpec {
 pub struct FieldSpecBuilder {
     length: Option<usize>,
     padding_direction: Option<PaddingDirection>,
-    padding: Option<String>,
-    default: Option<String>,
+    padding: Option<Vec<u8>>,
+    default: Option<Vec<u8>>,
     filler: bool
 }
 
@@ -181,12 +181,12 @@ impl FieldSpecBuilder {
         self
     }
 
-    pub fn with_padding<T: Into<String>>(mut self, padding: T) -> Self {
+    pub fn with_padding<T: Into<Vec<u8>>>(mut self, padding: T) -> Self {
         self.padding = Some(padding.into());
         self
     }
 
-    pub fn with_default<T: Into<String>>(mut self, default: T) -> Self {
+    pub fn with_default<T: Into<Vec<u8>>>(mut self, default: T) -> Self {
         self.default = Some(default.into());
         self
     }
@@ -222,64 +222,64 @@ mod test {
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
             length: 4,
-            padding: "dsasd".to_string(),
+            padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
             filler: true
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 5,
-            padding: " ".to_string(),
+            padding: " ".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: Some("def".to_string()),
+            default: Some("def".as_bytes().to_owned()),
             filler: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 36,
-            padding: "xcvcxv".to_string(),
+            padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: None,
             filler: false
         });
         record_specs.insert("record1".to_string(), RecordSpec {
-            line_ending: "\n".to_string(),
+            line_ending: "\n".as_bytes().to_owned(),
             field_specs: field_specs
         });
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
             length: 3,
-            padding: "dsasd".to_string(),
+            padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
             filler: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 4,
-            padding: "sdf".to_string(),
+            padding: "sdf".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: Some("defa".to_string()),
+            default: Some("defa".as_bytes().to_owned()),
             filler: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 27,
-            padding: "xcvcxv".to_string(),
+            padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: None,
             filler: false
         });
         field_specs.insert("field4".to_string(), FieldSpec {
             length: 8,
-            padding: "sdfsd".to_string(),
+            padding: "sdfsd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
             filler: false
         });
         record_specs.insert("record2".to_string(), RecordSpec {
-            line_ending: "\n".to_string(),
+            line_ending: "\n".as_bytes().to_owned(),
             field_specs: field_specs
         });
         record_specs.insert("record3".to_string(), RecordSpec {
-            line_ending: "\n".to_string(),
+            line_ending: "\n".as_bytes().to_owned(),
             field_specs: BTreeMap::new()
         });
         assert_eq!(Spec {
@@ -292,7 +292,7 @@ mod test {
             .build()
         , FieldSpecBuilder::new_number().with_length(0).build());
         assert_eq!(FieldSpecBuilder::new()
-            .with_padding(" ".to_string())
+            .with_padding(" ".as_bytes().to_owned())
             .with_padding_direction(PaddingDirection::Right)
             .with_length(0)
             .build()
