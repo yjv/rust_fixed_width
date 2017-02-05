@@ -190,6 +190,46 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
     }
 }
 
+pub struct RewindableReader<T: Read> {
+    reader: T,
+    pos: usize,
+    buf: Vec<u8>
+}
+
+impl<T: Read> RewindableReader<T> {
+    pub fn new(reader: T) -> Self {
+        RewindableReader {
+            reader: reader,
+            pos: 0,
+            buf: Vec::new()
+        }
+    }
+
+    pub fn rewind(&mut self) {
+        self.pos = 0;
+    }
+}
+
+impl<T: Read> Read for RewindableReader<T> {
+    fn read(&mut self, buf: &mut [u8]) -> ::std::io::Result<usize> {
+        let mut already_read = 0;
+
+        if self.pos <= self.buf.len() {
+            already_read = (&self.buf[self.pos..]).read(buf)?;
+            self.pos += already_read;
+
+            if already_read == buf.len() {
+                return Ok(already_read);
+            }
+        }
+
+        let amount = self.reader.read(&mut buf[already_read..])?;
+        self.buf.extend_from_slice(&buf[already_read..already_read + amount]);
+        self.pos += amount;
+        Ok(already_read + amount)
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -200,7 +240,7 @@ mod test {
     use spec::PaddingDirection;
     use padder::Error as PaddingError;
     use std::collections::{HashMap, BTreeMap};
-    use std::io::{Seek, SeekFrom};
+    use std::io::{Seek, SeekFrom, Read};
 
     #[test]
     fn read_record() {
@@ -481,5 +521,43 @@ mod test {
             ("field3".to_string(), "hello4".as_bytes().to_owned())]
             .iter().cloned().collect::<BTreeMap<String, Vec<u8>>>(), name: "record1".to_string() });
         assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Vec<u8>>>>>());
+    }
+
+    #[test]
+    fn rewindable_reader() {
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut bytes = string.as_bytes();
+        let mut buf = RewindableReader::new(&mut bytes);
+        let mut data = [0; 45];
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
+        buf.rewind();
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
+        buf.rewind();
+        let mut data = String::new();
+        assert_result!(
+            Ok(90),
+            buf.read_to_string(&mut data)
+        );
+        assert_eq!(string, data);
+        buf.rewind();
+        let mut data = String::new();
+        assert_result!(
+            Ok(90),
+            buf.read_to_string(&mut data)
+        );
+        assert_eq!(string, data);
     }
 }
