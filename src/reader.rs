@@ -191,7 +191,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 }
 
 pub struct RewindableReader<T: Read> {
-    reader: T,
+    inner: T,
     pos: usize,
     buf: Vec<u8>
 }
@@ -199,7 +199,7 @@ pub struct RewindableReader<T: Read> {
 impl<T: Read> RewindableReader<T> {
     pub fn new(reader: T) -> Self {
         RewindableReader {
-            reader: reader,
+            inner: reader,
             pos: 0,
             buf: Vec::new()
         }
@@ -208,6 +208,12 @@ impl<T: Read> RewindableReader<T> {
     pub fn rewind(&mut self) {
         self.pos = 0;
     }
+
+    pub fn into_inner(self) -> T { self.inner }
+
+    pub fn get_ref(&self) -> &T { &self.inner }
+
+    pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
 }
 
 impl<T: Read> Read for RewindableReader<T> {
@@ -223,7 +229,7 @@ impl<T: Read> Read for RewindableReader<T> {
             }
         }
 
-        let amount = self.reader.read(&mut buf[already_read..])?;
+        let amount = self.inner.read(&mut buf[already_read..])?;
         self.buf.extend_from_slice(&buf[already_read..already_read + amount]);
         self.pos += amount;
         Ok(already_read + amount)
