@@ -71,12 +71,13 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     }
 
     fn _write_field<'a, W: 'a + Write>(&self, writer: &'a mut W, field_spec: &FieldSpec, value: &'a [u8]) -> Result<()> {
-        let value = self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction)?;
-        if value.len() != field_spec.length {
-            return Err(Error::PaddedValueWrongLength(field_spec.length, value));
+        let mut destination = Vec::new();
+        self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction, &mut destination)?;
+        if destination.len() != field_spec.length {
+            return Err(Error::PaddedValueWrongLength(field_spec.length, destination));
         }
 
-        Ok(writer.write_all(&value[..])?)
+        Ok(writer.write_all(&destination[..])?)
     }
 }
 

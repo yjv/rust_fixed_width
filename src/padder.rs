@@ -47,22 +47,22 @@ impl Display for Error {
 type Result<T> = ::std::result::Result<T, Error>;
 
 pub trait Padder {
-    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>>;
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
 }
 
 impl<'a, T> Padder for &'a T where T: 'a + Padder {
-    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
-        (**self).pad(data, length, padding, direction)
+    fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
+        (**self).pad(data, length, padding, direction, destination)
     }
 }
 
 pub trait UnPadder {
-    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>>;
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
 }
 
 impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
-    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
-        (**self).unpad(data, padding, direction)
+    fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
+        (**self).unpad(data, padding, direction, destination)
     }
 }
 
@@ -107,23 +107,25 @@ impl From<PaddingError> for Error {
 }
 
 impl Padder for DefaultPadder {
-    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         if data.len() >= length {
-            return Ok(data[..length].to_owned());
+            destination.extend_from_slice(&data[..length]);
+            return Ok(());
         }
 
         let padding_iter = padding.iter().cycle().take(length - data.len());
 
-        Ok(if direction == PaddingDirection::Left {
-            padding_iter.chain(data.iter()).cloned().collect()
+        if direction == PaddingDirection::Left {
+            destination.extend(padding_iter.chain(data.iter()));
         } else {
-            data.iter().chain(padding_iter).cloned().collect()
-        })
+            destination.extend(data.iter().chain(padding_iter));
+        }
+        Ok(())
     }
 }
 
 impl UnPadder for DefaultPadder {
-    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>> {
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         let mut index = 0;
         let mut iter = data.chunks(padding.len());
 
@@ -138,24 +140,27 @@ impl UnPadder for DefaultPadder {
             index += chunk.len();
         }
 
-        Ok(match direction {
+        destination.extend_from_slice(match direction {
             PaddingDirection::Left => &data[index..],
             PaddingDirection::Right => &data[..data.len() - index],
-        }.to_owned())
+        });
+        Ok(())
     }
 }
 
 pub struct IdentityPadder;
 
 impl Padder for IdentityPadder {
-    fn pad(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection) -> Result<Vec<u8>> {
-        Ok(data.to_owned())
+    fn pad<'a>(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+        destination.extend_from_slice(data);
+        Ok(())
     }
 }
 
 impl UnPadder for IdentityPadder {
-    fn unpad(&self, data: &[u8], _: &[u8], _: PaddingDirection) -> Result<Vec<u8>> {
-        Ok(data.to_owned())
+    fn unpad<'a>(&self, data: &[u8], _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+        destination.extend_from_slice(data);
+        Ok(())
     }
 }
 
@@ -168,35 +173,56 @@ mod test {
     fn default_padder() {
         let padder = DefaultPadder;
         let data = "qwer".as_bytes();
-        assert_result!(Ok("qwer333333".as_bytes().to_owned()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Right));
+        let mut destination = Vec::new();
+        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_eq!("qwer333333".as_bytes().to_owned(), destination);
+        destination.clear();
         let data = "qwer".as_bytes();
-        assert_result!(Ok("333333qwer".as_bytes().to_owned()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Left));
+        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_eq!("333333qwer".as_bytes().to_owned(), destination);
+        destination.clear();
         let data = "qwer333333".as_bytes();
-        assert_result!(Ok("qwer".as_bytes().to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_eq!("qwer".as_bytes().to_owned(), destination);
+        destination.clear();
         let data = "333333qwer".as_bytes();
-        assert_result!(Ok("qwer".as_bytes().to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_eq!("qwer".as_bytes().to_owned(), destination);
+        destination.clear();
         let data = "qwer333333".as_bytes();
-        assert_result!(Ok(data.to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_eq!(data.to_owned(), destination);
+        destination.clear();
         let data = "333333qwer".as_bytes();
-        assert_result!(Ok(data.to_owned()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_eq!(data.to_owned(), destination);
     }
 
     #[test]
     fn identity_padder() {
         let padder = IdentityPadder;
         let data = "qwer".as_bytes();
-        assert_result!(Ok(data.to_owned()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right));
-        assert_result!(Ok(data.to_owned()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Left));
-        assert_result!(Ok(data.to_owned()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Right));
-        assert_result!(Ok(data.to_owned()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Left));
+        let mut destination = Vec::new();
+        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_eq!(data.to_owned(), destination);
+        destination.clear();
+        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_eq!(data.to_owned(), destination);
+        destination.clear();
+        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_eq!(data.to_owned(), destination);
+        destination.clear();
+        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_eq!(data.to_owned(), destination);
     }
 
     #[test]
     fn padder_reference() {
         let padder = IdentityPadder;
         let data = "qwer".as_bytes();
-        assert_result!(Ok(data.to_owned()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right));
-        assert_result!(Ok(data.to_owned()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right));
+        let mut destination = Vec::new();
+        assert_result!(Ok(()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_result!(Ok(()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right, &mut destination));
     }
 
     #[test]

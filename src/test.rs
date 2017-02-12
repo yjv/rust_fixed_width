@@ -82,13 +82,19 @@ impl MockPadder {
 }
 
 impl Padder for MockPadder {
-    fn pad(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>, PaddingError> {
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<(), PaddingError> {
         for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
             if *expected_data == data
                 && expected_length == length
                 && &expected_padding[..] == padding
                 && expected_direction == direction {
-                return return_value.clone();
+                return match return_value.clone() {
+                    Ok(value) =>  {
+                        destination.extend(value.iter());
+                        Ok(())
+                    },
+                    Err(e) => Err(e)
+                };
             }
         }
 
@@ -97,12 +103,18 @@ impl Padder for MockPadder {
 }
 
 impl UnPadder for MockPadder {
-    fn unpad(&self, data: &[u8], padding: &[u8], direction: PaddingDirection) -> Result<Vec<u8>, PaddingError> {
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<(), PaddingError> {
         for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
             if *expected_data == data
                 && &expected_padding[..] == padding
                 && expected_direction == direction {
-                return return_value.clone();
+                return match return_value.clone() {
+                    Ok(value) =>  {
+                        destination.extend(value.iter());
+                        Ok(())
+                    },
+                    Err(e) => Err(e)
+                };
             }
         }
 
