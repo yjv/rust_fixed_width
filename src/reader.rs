@@ -1,4 +1,4 @@
-use spec::{RecordSpec, FieldSpec};
+use spec::{RecordSpec};
 use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::Read;
@@ -9,15 +9,16 @@ use super::{Error, Result, PositionalResult, Record, RecordRanges, PositionalErr
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
     recognizer: U,
-    specs: V
+    specs: V,
+    buffer: Vec<u8>
 }
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
-    pub fn read_field<'a, W, X>(&self, reader: &'a mut W, record_name: &'a str, name: &'a str, field: X) -> Result<Vec<u8>>
+    pub fn read_field<'a, W, X>(&mut self, reader: &'a mut W, record_name: &'a str, name: &'a str, field: X) -> Result<Vec<u8>>
         where W: 'a + Read,
               X: Into<Option<Vec<u8>>>
     {
-        let field = field.into().or_else(|| Some(Vec::new())).expect("should always be some");
+        let mut field = field.into().unwrap_or_else(|| Vec::new());
         let record_spec = self.specs.borrow()
             .get(record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_string()))?
@@ -26,17 +27,24 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .field_specs.get(name)
             .ok_or_else(|| Error::FieldSpecNotFound(record_name.to_string(), name.to_string()))?
         ;
-        let buffer = Vec::new();
-        Ok(self._unpad_field(&self._read_data(reader, field_spec.length, buffer)?[..], field_spec, field)?)
+        self.buffer.clear();
+        Self::_read_data(reader, field_spec.length, &mut self.buffer)?;
+        self.un_padder.unpad(
+            &self.buffer[..],
+            &field_spec.padding,
+            field_spec.padding_direction,
+            &mut field
+        )?;
+        Ok(field)
     }
 
-    pub fn read_record<'a, W, X, Y, Z>(&self, reader: &'a mut W, record_name: X, line: Z) -> PositionalResult<Record<Y>>
+    pub fn read_record<'a, W, X, Y, Z>(&mut self, reader: &'a mut W, record_name: X, line: Z) -> PositionalResult<Record<Y>>
         where W: 'a + Read,
               X: Into<Option<&'a str>>,
               Y: RecordRanges,
               Z: Into<Option<Vec<u8>>>
     {
-        let mut line = line.into().or_else(|| Some(Vec::new())).expect("should always be some");
+        let mut line = line.into().unwrap_or_else(|| Vec::new());
         let mut reader = RewindableReader::new(reader);
         let record_name = record_name
             .into()
@@ -51,57 +59,58 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
         reader.rewind();
-        let mut buffer = Vec::new();
         let mut ranges = Y::new();
 
+        self.buffer.clear();
+
         for (name, field_spec) in &record_spec.field_specs {
-            buffer = self._read_data(&mut reader, field_spec.length, buffer).map_err(|e| (e, record_name.clone(), name.clone()))?;
+            Self::_read_data(&mut reader, field_spec.length, &mut self.buffer).map_err(|e| (e, record_name.clone(), name.clone()))?;
             if !field_spec.filler {
                 let old_length = line.len();
-                line = self._unpad_field(&buffer[..], &field_spec, line).map_err(|e| (e, record_name.clone(), name.clone()))?;
+                self.un_padder.unpad(
+                    &self.buffer[..],
+                    &field_spec.padding,
+                    field_spec.padding_direction,
+                    &mut line
+                ).map_err(|e| (e, record_name.clone(), name.clone()))?;
                 ranges.insert(name.clone(), old_length..line.len());
             }
-            buffer.clear();
+            self.buffer.clear();
         }
 
-        self.absorb_line_ending(&mut reader, &record_spec.line_ending, buffer).map_err(|e| (e, record_name.clone()))?;
+        Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.clone()))?;
 
         Ok(Record { data: line, name: record_name, ranges: ranges })
     }
 
-    pub fn absorb_line_ending<'a, W: 'a + Read>(&self, reader: &'a mut W, line_ending: &[u8], mut buffer: Vec<u8>) -> Result<Vec<u8>> {
-        reader.by_ref().take(line_ending.len() as u64).read_to_end(&mut buffer)?;
-        if buffer.len() != 0 && buffer != &line_ending[..] {
+    pub fn absorb_line_ending<'a, W: 'a + Read>(&mut self, reader: &'a mut W, line_ending: &[u8]) -> Result<()> {
+        Self::_absorb_line_ending(reader, line_ending, &mut self.buffer)
+    }
+
+    fn _absorb_line_ending<'a, W: 'a + Read>(reader: &'a mut W, line_ending: &[u8], buffer: &mut Vec<u8>) -> Result<()> {
+        buffer.clear();
+        reader.by_ref().take(line_ending.len() as u64).read_to_end(buffer)?;
+        if buffer.len() != 0 && &buffer[..] != &line_ending[..] {
             return Err(Error::DataDoesNotMatchLineEnding(
                 line_ending.to_owned(),
-                buffer
+                buffer.clone()
             ));
         }
 
-        Ok(buffer)
+        Ok(())
     }
 
-    fn _unpad_field<'a>(&self, field: &[u8], field_spec: &'a FieldSpec, mut value: Vec<u8>) -> Result<Vec<u8>> {
-        self.un_padder.unpad(
-            field,
-            &field_spec.padding,
-            field_spec.padding_direction,
-            &mut value
-        )?;
-        Ok(value)
-    }
-
-    fn _read_data<'a, W: 'a + Read>(&self, reader: &'a mut W, length: usize, mut data: Vec<u8>) -> Result<Vec<u8>> {
-        let _ = reader.by_ref().take((length - data.len()) as u64).read_to_end(&mut data)?;
+    fn _read_data<'a, W: 'a + Read>(reader: &'a mut W, length: usize, data: &mut Vec<u8>) -> Result<()> {
+        let _ = reader.by_ref().take((length - data.len()) as u64).read_to_end(data)?;
 
         if data.len() < length {
-            Err(Error::CouldNotReadEnough(data))
+            Err(Error::CouldNotReadEnough(data.clone()))
         } else {
-            Ok(data)
+            Ok(())
         }
     }
 
-    pub fn iter<'a, W: 'a + Read, X: RecordRanges>(&'a self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
+    pub fn iter<'a, W: 'a + Read, X: RecordRanges>(&'a mut self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
         Iter {
             source: reader,
             reader: self,
@@ -160,14 +169,15 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         Reader {
             un_padder: self.un_padder.unwrap(),
             recognizer: self.recognizer.unwrap(),
-            specs: self.specs.expect("specs is required to build a writer")
+            specs: self.specs.expect("specs is required to build a writer"),
+            buffer: Vec::new()
         }
     }
 }
 
 pub struct Iter<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordRanges> {
     source: &'a mut W,
-    reader: &'a Reader<T, U, V>,
+    reader: &'a mut Reader<T, U, V>,
     marker: ::std::marker::PhantomData<X>
 }
 
@@ -266,7 +276,7 @@ mod test {
         un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(spec.record_specs)
             .build()
@@ -295,7 +305,7 @@ mod test {
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(spec.record_specs)
             .build()
@@ -315,7 +325,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -332,7 +342,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -353,7 +363,7 @@ mod test {
         un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
         let mut recognizer = MockRecognizer::new();
         recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .with_recognizer(recognizer)
@@ -375,7 +385,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Err(PaddingError::new("")));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -396,7 +406,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -418,7 +428,7 @@ mod test {
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Ok("hello".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -433,7 +443,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -450,7 +460,7 @@ mod test {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
         let un_padder = MockPadder::new();
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -468,7 +478,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Err(PaddingError::new("")));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_specs(&spec.record_specs)
             .build()
@@ -484,7 +494,7 @@ mod test {
         let spec = test_spec();
         let string = "123";
         let mut buf = Cursor::new(string.as_bytes());
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(MockPadder::new())
             .with_specs(&spec.record_specs)
             .build()
@@ -507,7 +517,7 @@ mod test {
         un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
         let mut recognizer = MockRecognizer::new();
         recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
-        let reader = ReaderBuilder::new()
+        let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
             .with_recognizer(recognizer)
             .with_specs(&spec.record_specs)

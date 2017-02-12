@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::collections::btree_map::Iter as BTreeMapIter;
-use std::collections::hash_map::Iter as HashMapIter;
+use std::collections::btree_map::{Iter as BTreeMapIter, IntoIter as BTreeMapIntoIter};
+use std::collections::hash_map::{Iter as HashMapIter, IntoIter as HashMapIntoIter};
 //use std::slice::Iter as VecIter;
 //use std::iter::Map;
 use std::ops::Range;
@@ -19,6 +19,11 @@ pub trait RecordRanges {
 pub trait IterableRecordRanges<'a>: RecordRanges {
     type Iter: Iterator<Item=(&'a String, &'a Range<usize>)>;
     fn field_iter(&'a self) -> Self::Iter;
+}
+
+pub trait IntoIterableRecordRanges: RecordRanges {
+    type Iter: Iterator<Item=(String, Range<usize>)>;
+    fn into_field_iter(self) -> Self::Iter;
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -55,6 +60,29 @@ impl<'a, T: IterableRecordRanges<'a>> Record<T> {
     }
 }
 
+pub struct IntoIter<T: Iterator<Item=(String, Range<usize>)>> {
+    iter: T,
+    data: Vec<u8>
+}
+
+impl<T: Iterator<Item=(String, Range<usize>)>>  Iterator for IntoIter<T> {
+    type Item = (String, Vec<u8>);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(name, range)| (name, self.data[range].to_owned()))
+    }
+}
+
+impl<T: IntoIterableRecordRanges> IntoIterator for Record<T> {
+    type Item = (String, Vec<u8>);
+    type IntoIter = IntoIter<T::Iter>;
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            iter: self.ranges.into_field_iter(),
+            data: self.data
+        }
+    }
+}
+
 impl RecordRanges for BTreeMap<String, Range<usize>> {
     fn new() -> Self {
         BTreeMap::new()
@@ -73,6 +101,13 @@ impl<'a> IterableRecordRanges<'a> for BTreeMap<String, Range<usize>> {
     type Iter = BTreeMapIter<'a, String, Range<usize>>;
     fn field_iter(&'a self) -> BTreeMapIter<'a, String, Range<usize>> {
         self.iter()
+    }
+}
+
+impl IntoIterableRecordRanges for BTreeMap<String, Range<usize>> {
+    type Iter = BTreeMapIntoIter<String, Range<usize>>;
+    fn into_field_iter(self) -> BTreeMapIntoIter<String, Range<usize>> {
+        self.into_iter()
     }
 }
 
@@ -97,6 +132,13 @@ impl<'a> IterableRecordRanges<'a> for HashMap<String, Range<usize>> {
     }
 }
 
+impl IntoIterableRecordRanges for HashMap<String, Range<usize>> {
+    type Iter = HashMapIntoIter<String, Range<usize>>;
+    fn into_field_iter(self) -> HashMapIntoIter<String, Range<usize>> {
+        self.into_iter()
+    }
+}
+
 impl RecordRanges for Vec<Range<usize>> {
     fn new() -> Self {
         Vec::new()
@@ -110,13 +152,6 @@ impl RecordRanges for Vec<Range<usize>> {
         None
     }
 }
-//
-//impl<'a> IterableRecordRanges<'a> for Vec<Range<usize>> {
-//    type Iter = Map<VecIter<'a, Range<usize>>, FnMut(&'a Range<usize>) -> (&'a String, &'a Range<usize>)>;
-//    fn field_iter(&'a self) -> VecIter<'a, Range<usize>> {
-//        self.iter().map(|range| (&"".to_string(), range))
-//    }
-//}
 
 impl RecordRanges for HashSet<Range<usize>> {
     fn new() -> Self {

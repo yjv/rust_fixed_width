@@ -173,6 +173,15 @@ impl From<(Error, String, String)> for PositionalError {
     }
 }
 
+impl From<(PadderError, String, String)> for PositionalError {
+    fn from(data: (PadderError, String, String)) -> Self {
+        PositionalError {
+            error: Error::from(data.0),
+            position: Some(Position::new(data.1, data.2))
+        }
+    }
+}
+
 impl ErrorTrait for PositionalError {
     fn description(&self) -> &str {
         self.error.description()
