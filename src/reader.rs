@@ -13,7 +13,11 @@ pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<St
 }
 
 impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> Reader<T, U, V> {
-    pub fn read_field<'a, W: 'a + Read>(&self, reader: &'a mut W, record_name: &'a str, name: &'a str, field: Vec<u8>) -> Result<Vec<u8>> {
+    pub fn read_field<'a, W, X>(&self, reader: &'a mut W, record_name: &'a str, name: &'a str, field: X) -> Result<Vec<u8>>
+        where W: 'a + Read,
+              X: Into<Option<Vec<u8>>>
+    {
+        let field = field.into().or_else(|| Some(Vec::new())).expect("should always be some");
         let record_spec = self.specs.borrow()
             .get(record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_string()))?
@@ -364,216 +368,240 @@ mod test {
         }), reader.read_record(&mut buf, None, None));
     }
 
-//    #[test]
-//    fn read_record_with_padding_error() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Err(PaddingError::new("")));
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(PositionalError {
-//                error: Error::PadderFailure(_),
-//                position: Some(Position { ref record, field: Some(ref field) })
-//            }) if record == "record1" && field == "field2",
-//            reader.read_record::<_, _, HashMap<String, Vec<u8>>>(&mut buf, "record1")
-//        );
-//    }
-//
-//    #[test]
-//    fn read_record_with_read_error() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(PositionalError {
-//                error: Error::CouldNotReadEnough(_),
-//                position: Some(Position { ref record, field: None })
-//            }) if record == "record1",
-//            reader.read_record::<_, _, HashMap<String, Vec<u8>>>(&mut buf, "record1")
-//        );
-//    }
-//
-//    #[test]
-//    fn read_field() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Ok("hello".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(Ok("hello".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field1"));
-//        assert_result!(Ok("hello2".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field2"));
-//    }
-//
-//    #[test]
-//    fn read_field_with_bad_record_name() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let un_padder = MockPadder::new();
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(Error::RecordSpecNotFound(ref record_name)) if record_name == "record5",
-//            reader.read_field(&mut buf, "record5", "field1")
-//        );
-//    }
-//
-//    #[test]
-//    fn read_field_with_bad_field_name() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let un_padder = MockPadder::new();
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(Error::FieldSpecNotFound(ref record_name, ref field_name)) if record_name == "record1" && field_name == "field5",
-//            reader.read_field(&mut buf, "record1", "field5")
-//        );
-//    }
-//
-//    #[test]
-//    fn read_field_with_padding_error() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Err(PaddingError::new("")));
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(Error::PadderFailure(_)),
-//            reader.read_field(&mut buf, "record1", "field1")
-//        );
-//    }
-//
-//    #[test]
-//    fn read_field_with_read_error() {
-//        let spec = test_spec();
-//        let string = "123";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(MockPadder::new())
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        assert_result!(
-//            Err(Error::CouldNotReadEnough(_)),
-//            reader.read_field(&mut buf, "record1", "field1")
-//        );
-//    }
-//
-//    #[test]
-//    fn iterator() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
-//        let mut recognizer = MockRecognizer::new();
-//        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
-//        let reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_recognizer(recognizer)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        let mut vec = Vec::new();
-//        vec.push(Record { data: [("field2".to_string(), "hello".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello2".as_bytes().to_owned())]
-//            .iter().cloned().collect::<HashMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        vec.push(Record { data: [("field2".to_string(), "hello3".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello4".as_bytes().to_owned())]
-//            .iter().cloned().collect::<HashMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Vec<u8>>>>>());
-//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-//
-//        let mut vec = Vec::new();
-//        vec.push(Record { data: [("field2".to_string(), "hello".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello2".as_bytes().to_owned())]
-//            .iter().cloned().collect::<BTreeMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        vec.push(Record { data: [("field2".to_string(), "hello3".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello4".as_bytes().to_owned())]
-//            .iter().cloned().collect::<BTreeMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Vec<u8>>>>>());let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-//
-//        let mut vec = Vec::new();
-//        vec.push(Record { data: [("field2".to_string(), "hello".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello2".as_bytes().to_owned())]
-//            .iter().cloned().collect::<BTreeMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        vec.push(Record { data: [("field2".to_string(), "hello3".as_bytes().to_owned()),
-//            ("field3".to_string(), "hello4".as_bytes().to_owned())]
-//            .iter().cloned().collect::<BTreeMap<String, Vec<u8>>>(), name: "record1".to_string() });
-//        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Vec<u8>>>>>());
-//    }
-//
-//    #[test]
-//    fn rewindable_reader() {
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut bytes = string.as_bytes();
-//        let mut buf = RewindableReader::new(&mut bytes);
-//        let mut data = [0; 45];
-//        assert_result!(
-//            Ok(45),
-//            buf.read(&mut data)
-//        );
-//        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
-//        buf.rewind();
-//        assert_result!(
-//            Ok(45),
-//            buf.read(&mut data)
-//        );
-//        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
-//        assert_result!(
-//            Ok(45),
-//            buf.read(&mut data)
-//        );
-//        assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
-//        buf.rewind();
-//        let mut data = String::new();
-//        assert_result!(
-//            Ok(90),
-//            buf.read_to_string(&mut data)
-//        );
-//        assert_eq!(string, data);
-//        buf.rewind();
-//        let mut data = String::new();
-//        assert_result!(
-//            Ok(90),
-//            buf.read_to_string(&mut data)
-//        );
-//        assert_eq!(string, data);
-//    }
+    #[test]
+    fn read_record_with_padding_error() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Err(PaddingError::new("")));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(PositionalError {
+                error: Error::PadderFailure(_),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field2",
+            reader.read_record::<_, _, HashMap<String, Range<usize>>, _>(&mut buf, "record1", None)
+        );
+    }
+
+    #[test]
+    fn read_record_with_read_error() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(PositionalError {
+                error: Error::CouldNotReadEnough(_),
+                position: Some(Position { ref record, field: Some(ref field) })
+            }) if record == "record1" && field == "field3",
+            reader.read_record::<_, _, HashMap<String, Range<usize>>, _>(&mut buf, "record1", None)
+        );
+    }
+
+    #[test]
+    fn read_field() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Ok("hello".as_bytes().to_owned()));
+        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(Ok("hello".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field1", None));
+        assert_result!(Ok("hello2".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field2", None));
+    }
+
+    #[test]
+    fn read_field_with_bad_record_name() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let un_padder = MockPadder::new();
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(Error::RecordSpecNotFound(ref record_name)) if record_name == "record5",
+            reader.read_field(&mut buf, "record5", "field1", None)
+        );
+    }
+
+    #[test]
+    fn read_field_with_bad_field_name() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let un_padder = MockPadder::new();
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(Error::FieldSpecNotFound(ref record_name, ref field_name)) if record_name == "record1" && field_name == "field5",
+            reader.read_field(&mut buf, "record1", "field5", None)
+        );
+    }
+
+    #[test]
+    fn read_field_with_padding_error() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Err(PaddingError::new("")));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(Error::PadderFailure(_)),
+            reader.read_field(&mut buf, "record1", "field1", None)
+        );
+    }
+
+    #[test]
+    fn read_field_with_read_error() {
+        let spec = test_spec();
+        let string = "123";
+        let mut buf = Cursor::new(string.as_bytes());
+        let reader = ReaderBuilder::new()
+            .with_un_padder(MockPadder::new())
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        assert_result!(
+            Err(Error::CouldNotReadEnough(_)),
+            reader.read_field(&mut buf, "record1", "field1", None)
+        );
+    }
+
+    #[test]
+    fn iterator() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut un_padder = MockPadder::new();
+        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
+        un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
+        un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
+        un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
+        let mut recognizer = MockRecognizer::new();
+        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1".to_string()));
+        let reader = ReaderBuilder::new()
+            .with_un_padder(&un_padder)
+            .with_recognizer(recognizer)
+            .with_specs(&spec.record_specs)
+            .build()
+        ;
+        let mut vec = Vec::new();
+        vec.push(Record {
+            data: "hellohello2".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..5),
+                ("field3".to_string(), 5..11)]
+                .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        vec.push(Record {
+            data: "hello3hello4".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..6),
+            ("field3".to_string(), 6..12)]
+            .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Range<usize>>>>>());
+        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut vec = Vec::new();
+        vec.push(Record {
+            data: "hellohello2".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..5),
+                ("field3".to_string(), 5..11)]
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        vec.push(Record {
+            data: "hello3hello4".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..6),
+                ("field3".to_string(), 6..12)]
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>>>>());let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut vec = Vec::new();
+        vec.push(Record {
+            data: "hellohello2".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..5),
+                ("field3".to_string(), 5..11)]
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        vec.push(Record {
+            data: "hello3hello4".as_bytes().to_owned(),
+            ranges: [("field2".to_string(), 0..6),
+                ("field3".to_string(), 6..12)]
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+            name: "record1".to_string()
+        });
+        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>>>>());
+    }
+
+    #[test]
+    fn rewindable_reader() {
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut bytes = string.as_bytes();
+        let mut buf = RewindableReader::new(&mut bytes);
+        let mut data = [0; 45];
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
+        buf.rewind();
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
+        assert_result!(
+            Ok(45),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
+        buf.rewind();
+        let mut data = String::new();
+        assert_result!(
+            Ok(90),
+            buf.read_to_string(&mut data)
+        );
+        assert_eq!(string, data);
+        buf.rewind();
+        let mut data = String::new();
+        assert_result!(
+            Ok(90),
+            buf.read_to_string(&mut data)
+        );
+        assert_eq!(string, data);
+    }
 }
