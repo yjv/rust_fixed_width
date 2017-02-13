@@ -4,7 +4,7 @@ use std::collections::{HashMap, BTreeMap};
 use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record};
+use super::{Error, Result, PositionalResult, Record, IntoIterableRecordRanges};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -151,20 +151,12 @@ impl From<BTreeMap<String, Vec<u8>>> for DataAndRecordName {
     }
 }
 
-impl From<Record<BTreeMap<String, Vec<u8>>>> for DataAndRecordName {
-    fn from(record: Record<BTreeMap<String, Vec<u8>>>) -> Self {
+impl<T: IntoIterableRecordRanges> From<Record<T>> for DataAndRecordName {
+    fn from(record: Record<T>) -> Self {
+        let (iter, name) = record.into_iter_and_name();
         DataAndRecordName {
-            data: record.data,
-            name: Some(record.name)
-        }
-    }
-}
-
-impl From<Record<HashMap<String, Vec<u8>>>> for DataAndRecordName {
-    fn from(record: Record<HashMap<String, Vec<u8>>>) -> Self {
-        DataAndRecordName {
-            data: record.data.into_iter().collect(),
-            name: Some(record.name)
+            name: Some(name),
+            data: iter.collect()
         }
     }
 }
@@ -204,11 +196,11 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
-            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record5".to_string() }, None)
+            writer.write_record(&mut buf, Record { data: Vec::new(), ranges: BTreeMap::new(), name: "record5".to_string() }, None)
         );
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
-            writer.write_record(&mut buf, Record { data: BTreeMap::new(), name: "record1".to_string() }, "record5")
+            writer.write_record(&mut buf, Record { data: Vec::new(), ranges: BTreeMap::new(), name: "record1".to_string() }, "record5")
         );
     }
 

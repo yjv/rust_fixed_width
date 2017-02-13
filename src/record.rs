@@ -83,6 +83,15 @@ impl<T: IntoIterableRecordRanges> IntoIterator for Record<T> {
     }
 }
 
+impl<T: IntoIterableRecordRanges> Record<T> {
+    pub fn into_iter_and_name(self) -> (IntoIter<T::Iter>, String) {
+        (IntoIter {
+            iter: self.ranges.into_field_iter(),
+            data: self.data
+        }, self.name)
+    }
+}
+
 impl RecordRanges for BTreeMap<String, Range<usize>> {
     fn new() -> Self {
         BTreeMap::new()
