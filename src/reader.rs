@@ -4,7 +4,8 @@ use std::collections::{HashMap};
 use std::io::Read;
 use std::borrow::Borrow;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record, RecordRanges, PositionalError};
+use super::{Error, Result, PositionalResult, Record, PositionalError};
+use record::{Data, DataRanges};
 
 pub struct Reader<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     un_padder: T,
@@ -41,7 +42,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
     pub fn read_record<'a, W, X, Y, Z>(&mut self, reader: &'a mut W, record_name: X, line: Z) -> PositionalResult<Record<Y>>
         where W: 'a + Read,
               X: Into<Option<&'a str>>,
-              Y: RecordRanges,
+              Y: DataRanges,
               Z: Into<Option<Vec<u8>>>
     {
         let mut line = line.into().unwrap_or_else(|| Vec::new());
@@ -80,7 +81,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
 
         Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.clone()))?;
 
-        Ok(Record { data: line, name: record_name, ranges: ranges })
+        Ok(Record { data: Data { data: line, ranges: ranges }, name: record_name })
     }
 
     pub fn absorb_line_ending<'a, W: 'a + Read>(&mut self, reader: &'a mut W, line_ending: &[u8]) -> Result<()> {
@@ -110,7 +111,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         }
     }
 
-    pub fn iter<'a, W: 'a + Read, X: RecordRanges>(&'a mut self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
+    pub fn iter<'a, W: 'a + Read, X: DataRanges>(&'a mut self, reader: &'a mut W) -> Iter<'a, T, U, V, W, X> {
         Iter {
             source: reader,
             reader: self,
@@ -118,7 +119,7 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
         }
     }
 
-    pub fn into_iter<W: Read, X: RecordRanges>(self, reader: W) -> IntoIter<T, U, V, W, X> {
+    pub fn into_iter<W: Read, X: DataRanges>(self, reader: W) -> IntoIter<T, U, V, W, X> {
         IntoIter {
             source: reader,
             reader: self,
@@ -175,13 +176,13 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
     }
 }
 
-pub struct Iter<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordRanges> {
+pub struct Iter<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: DataRanges> {
     source: &'a mut W,
     reader: &'a mut Reader<T, U, V>,
     marker: ::std::marker::PhantomData<X>
 }
 
-impl<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: RecordRanges> Iterator for Iter<'a, T, U, V, W, X> {
+impl<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<String, RecordSpec>> + 'a, W: Read + 'a, X: DataRanges> Iterator for Iter<'a, T, U, V, W, X> {
     type Item = PositionalResult<Record<X>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(self.source, None, Vec::new()) {
@@ -191,13 +192,13 @@ impl<'a, T: UnPadder + 'a, U: LineRecordSpecRecognizer + 'a, V: Borrow<HashMap<S
     }
 }
 
-pub struct IntoIter<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: RecordRanges> {
+pub struct IntoIter<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: DataRanges> {
     source: W,
     reader: Reader<T, U, V>,
     marker: ::std::marker::PhantomData<X>,
 }
 
-impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: RecordRanges> Iterator for IntoIter<T, U, V, W, X> {
+impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>, W: Read, X: DataRanges> Iterator for IntoIter<T, U, V, W, X> {
     type Item = PositionalResult<Record<X>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(&mut self.source, None, Vec::new()) {
@@ -257,7 +258,7 @@ impl<T: Read> Read for RewindableReader<T> {
 mod test {
 
     use super::*;
-    use super::super::{Error, PositionalError, Position, Record};
+    use super::super::{Error, PositionalError, Position, Record, Data};
     use test::*;
     use std::io::Cursor;
     use spec::PaddingDirection;
@@ -282,17 +283,17 @@ mod test {
             .build()
         ;
         assert_result!(Ok(Record {
-            data: "hellohello2".as_bytes().to_owned(),
+            data: Data { data: "hellohello2".as_bytes().to_owned(),
             ranges: [("field2".to_owned(), 0..5),
                 ("field3".to_owned(), 5..11)]
-                .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
             name: "record1".to_string()
         }), reader.read_record(&mut buf, "record1", Vec::new()));
         assert_result!(Ok(Record {
-            data: "hello3hello4".as_bytes().to_owned(),
+            data: Data { data: "hello3hello4".as_bytes().to_owned(),
             ranges: [("field2".to_owned(), 0..6),
                 ("field3".to_owned(), 6..12)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
             name: "record1".to_string()
         }), reader.read_record(&mut buf, "record1", Vec::new()));
     }
@@ -370,10 +371,10 @@ mod test {
             .build()
         ;
         assert_result!(Ok(Record {
-            data: "hellohello2".as_bytes().to_owned(),
+            data: Data { data: "hellohello2".as_bytes().to_owned(),
             ranges: [("field2".to_owned(), 0..5),
                 ("field3".to_owned(), 5..11)]
-                .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
             name: "record1".to_string()
         }), reader.read_record(&mut buf, None, None));
     }
@@ -525,17 +526,17 @@ mod test {
         ;
         let mut vec = Vec::new();
         vec.push(Record {
-            data: "hellohello2".as_bytes().to_owned(),
+            data: Data { data: "hellohello2".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..5),
                 ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         vec.push(Record {
-            data: "hello3hello4".as_bytes().to_owned(),
+            data: Data { data: "hello3hello4".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..6),
             ("field3".to_string(), 6..12)]
-            .iter().cloned().collect::<HashMap<String, Range<usize>>>(),
+            .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Range<usize>>>>>());
@@ -543,17 +544,17 @@ mod test {
 
         let mut vec = Vec::new();
         vec.push(Record {
-            data: "hellohello2".as_bytes().to_owned(),
+            data: Data { data: "hellohello2".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..5),
                 ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         vec.push(Record {
-            data: "hello3hello4".as_bytes().to_owned(),
+            data: Data { data: "hello3hello4".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..6),
                 ("field3".to_string(), 6..12)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>>>>());let _ = buf.seek(SeekFrom::Start(0)).unwrap();
@@ -561,17 +562,17 @@ mod test {
 
         let mut vec = Vec::new();
         vec.push(Record {
-            data: "hellohello2".as_bytes().to_owned(),
+            data: Data { data: "hellohello2".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..5),
                 ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         vec.push(Record {
-            data: "hello3hello4".as_bytes().to_owned(),
+            data: Data { data: "hello3hello4".as_bytes().to_owned(),
             ranges: [("field2".to_string(), 0..6),
                 ("field3".to_string(), 6..12)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>(),
+                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
             name: "record1".to_string()
         });
         assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>>>>());

@@ -1,8 +1,9 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap};
 use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
+use record::{Data, DataRanges};
 
 #[derive(Debug)]
 pub enum Error {
@@ -118,11 +119,11 @@ impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecog
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data(&self, data: &BTreeMap<String, Vec<u8>>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+    fn recognize_for_data<T: DataRanges>(&self, data: &Data<T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
 }
 
 impl<'a, T> DataRecordSpecRecognizer for &'a T where T: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data(&self, data: &BTreeMap<String, Vec<u8>>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<U: DataRanges>(&self, data: &Data<U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_data(data, record_specs)
     }
 }
@@ -165,12 +166,12 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data(&self, data: &BTreeMap<String, Vec<u8>>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges>(&self, data: &Data<T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     if let Some(data) = data.get(&self.id_field) {
-                        if data == default {
+                        if data == &default[..] {
                             return Ok(name.clone());
                         }
                     }
@@ -191,7 +192,7 @@ impl LineRecordSpecRecognizer for NoneRecognizer {
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data(&self, _: &BTreeMap<String, Vec<u8>>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges>(&self, _: &Data<T>, _: &HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -200,6 +201,7 @@ impl DataRecordSpecRecognizer for NoneRecognizer {
 #[macro_use]
 mod test {
     use super::*;
+    use super::super::Data;
     use spec::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::empty;
@@ -208,7 +210,7 @@ mod test {
     #[test]
     fn none_recognizer() {
         let recognizer = NoneRecognizer;
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&BTreeMap::new(), &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::new(), ranges: BTreeMap::new() }, &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
             &HashMap::new()

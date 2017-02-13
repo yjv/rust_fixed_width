@@ -4,7 +4,9 @@ use std::collections::{HashMap, BTreeMap};
 use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record, IntoIterableRecordRanges};
+use super::{Error, Result, PositionalResult, Record};
+use record::{Data, DataRanges};
+use std::ops::Range;
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -29,10 +31,11 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_record<'a, W, X, Y>(&self, writer: &'a mut W, record: X, record_name: Y) -> PositionalResult<()>
+    pub fn write_record<'a, W, X, Y, Z>(&self, writer: &'a mut W, record: X, record_name: Y) -> PositionalResult<()>
         where W: 'a + Write,
-              X: Into<DataAndRecordName>,
-              Y: Into<Option<&'a str>>
+              X: Into<DataAndRecordName<Z>>,
+              Y: Into<Option<&'a str>>,
+              Z: DataRanges
     {
         let data_and_record_name = record.into();
         let (data, record_name) = (
@@ -54,9 +57,9 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
             self._write_field(
                 writer,
                 field_spec,
-                &data.get(name)
-                    .or_else(|| field_spec.default.as_ref())
-                    .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?[..]
+                data.get(name)
+                    .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
+                    .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?
             ).map_err(|e| (e, record_name.clone(), name.clone()))?;
         }
 
@@ -128,12 +131,12 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     }
 }
 
-pub struct DataAndRecordName {
-    pub data: BTreeMap<String, Vec<u8>>,
+pub struct DataAndRecordName<T: DataRanges> {
+    pub data: Data<T>,
     pub name: Option<String>
 }
 
-impl From<HashMap<String, Vec<u8>>> for DataAndRecordName {
+impl From<HashMap<String, Vec<u8>>> for DataAndRecordName<HashMap<String, Range<usize>>> {
     fn from(data: HashMap<String, Vec<u8>>) -> Self {
         DataAndRecordName {
             data: data.into_iter().collect(),
@@ -142,21 +145,29 @@ impl From<HashMap<String, Vec<u8>>> for DataAndRecordName {
     }
 }
 
-impl From<BTreeMap<String, Vec<u8>>> for DataAndRecordName {
+impl From<BTreeMap<String, Vec<u8>>> for DataAndRecordName<BTreeMap<String, Range<usize>>> {
     fn from(data: BTreeMap<String, Vec<u8>>) -> Self {
         DataAndRecordName {
-            data: data,
+            data: data.into_iter().collect(),
             name: None
         }
     }
 }
 
-impl<T: IntoIterableRecordRanges> From<Record<T>> for DataAndRecordName {
+impl<T: DataRanges> From<Record<T>> for DataAndRecordName<T> {
     fn from(record: Record<T>) -> Self {
-        let (iter, name) = record.into_iter_and_name();
         DataAndRecordName {
-            name: Some(name),
-            data: iter.collect()
+            name: Some(record.name),
+            data: record.data
+        }
+    }
+}
+
+impl<T: DataRanges> From<Data<T>> for DataAndRecordName<T> {
+    fn from(data: Data<T>) -> Self {
+        DataAndRecordName {
+            name: None,
+            data: data
         }
     }
 }

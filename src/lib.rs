@@ -42,7 +42,7 @@ pub mod writer;
 pub use self::error::{Error, PositionalError, Position};
 pub use self::reader::{Reader, ReaderBuilder};
 pub use self::writer::{Writer, WriterBuilder};
-pub use self::record::{Record, RecordRanges, IterableRecordRanges, IntoIterableRecordRanges};
+pub use self::record::{Record, Data};
 
 type Result<T> = ::std::result::Result<T, Error>;
 type PositionalResult<T> = ::std::result::Result<T, PositionalError>;
