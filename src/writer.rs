@@ -1,12 +1,11 @@
 use spec::{RecordSpec, FieldSpec};
 use padder::{Padder, IdentityPadder};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record};
-use record::{Data, DataRanges};
-use std::ops::Range;
+use record::{Data, DataRanges, WritableDataHolder};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -31,21 +30,22 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
         Ok(())
     }
 
-    pub fn write_record<'a, W, X, Y, Z>(&self, writer: &'a mut W, record: X, record_name: Y) -> PositionalResult<()>
+    pub fn write_record<'a, W, X, Y, Z, A>(&self, writer: &'a mut W, record: X, record_name: Y) -> PositionalResult<()>
         where W: 'a + Write,
-              X: Into<DataAndRecordName<Z>>,
+              X: Into<(&'a Data<Z, A>, Option<&'a str>)>,
               Y: Into<Option<&'a str>>,
-              Z: DataRanges
+              Z: DataRanges + 'a,
+              A: WritableDataHolder + 'a
     {
         let data_and_record_name = record.into();
         let (data, record_name) = (
-            data_and_record_name.data,
-            record_name.into().map(|v| v.to_string()).or(data_and_record_name.name)
+            data_and_record_name.0,
+            record_name.into().or(data_and_record_name.1)
         );
         let record_name = record_name
             .map_or_else(
                 || self.recognizer.recognize_for_data(&data, self.specs.borrow()),
-                |name| Ok(name)
+                |name| Ok(name.to_owned())
             )?
         ;
         let record_spec = self.specs.borrow()
@@ -57,7 +57,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
             self._write_field(
                 writer,
                 field_spec,
-                data.get(name)
+                data.get_writable_data(name)
                     .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                     .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?
             ).map_err(|e| (e, record_name.clone(), name.clone()))?;
@@ -131,57 +131,28 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     }
 }
 
-pub struct DataAndRecordName<T: DataRanges> {
-    pub data: Data<T>,
-    pub name: Option<String>
-}
-
-impl From<HashMap<String, Vec<u8>>> for DataAndRecordName<HashMap<String, Range<usize>>> {
-    fn from(data: HashMap<String, Vec<u8>>) -> Self {
-        DataAndRecordName {
-            data: data.into_iter().collect(),
-            name: None
-        }
+impl<'a, T: DataRanges + 'a, U: WritableDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Data<T, U> {
+    fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
+        (self, None)
     }
 }
 
-impl From<BTreeMap<String, Vec<u8>>> for DataAndRecordName<BTreeMap<String, Range<usize>>> {
-    fn from(data: BTreeMap<String, Vec<u8>>) -> Self {
-        DataAndRecordName {
-            data: data.into_iter().collect(),
-            name: None
-        }
-    }
-}
-
-impl<T: DataRanges> From<Record<T>> for DataAndRecordName<T> {
-    fn from(record: Record<T>) -> Self {
-        DataAndRecordName {
-            name: Some(record.name),
-            data: record.data
-        }
-    }
-}
-
-impl<T: DataRanges> From<Data<T>> for DataAndRecordName<T> {
-    fn from(data: Data<T>) -> Self {
-        DataAndRecordName {
-            name: None,
-            data: data
-        }
+impl<'a, T: DataRanges + 'a, U: WritableDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Record<T, U> {
+    fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
+        (&self.data, Some(&self.name[..]))
     }
 }
 
 #[cfg(test)]
 mod test {
-
     use super::*;
-    use super::super::{Error, PositionalError, Position, Record};
+    use super::super::{Error, PositionalError, Position, Record, Data};
     use test::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::Cursor;
     use spec::PaddingDirection;
     use padder::Error as PaddingError;
+    use std::ops::Range;
 
     #[test]
     fn write_record() {
@@ -193,9 +164,9 @@ mod test {
         padder.add_pad_call("def".as_bytes().to_owned(), 5, " ".as_bytes().to_owned(), PaddingDirection::Right, Ok(string[4..9].as_bytes().to_owned()));
         padder.add_pad_call("hello2".as_bytes().to_owned(), 36, "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok(string[9..45].as_bytes().to_owned()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).build();
-        writer.write_record(&mut buf, [("field1".to_string(), "hello".as_bytes().to_owned()),
+        writer.write_record(&mut buf, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned()),
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
-            .iter().cloned().collect::<HashMap<_, _>>(), "record1").unwrap();
+            .iter().cloned().collect::<HashMap<_, _>>()), "record1").unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 
@@ -207,11 +178,11 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
-            writer.write_record(&mut buf, Record { data: Vec::new(), ranges: BTreeMap::new(), name: "record5".to_string() }, None)
+            writer.write_record(&mut buf, &Record { data: BTreeMap::new().into(), name: "record5".to_string() }, None)
         );
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNotFound(ref record), .. }) if record == "record5",
-            writer.write_record(&mut buf, Record { data: Vec::new(), ranges: BTreeMap::new(), name: "record1".to_string() }, "record5")
+            writer.write_record(&mut buf, &Record { data: BTreeMap::new().into(), name: "record1".to_string() }, "record5")
         );
     }
 
@@ -223,7 +194,7 @@ mod test {
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(spec.record_specs).build();
         assert_result!(
             Err(PositionalError { error: Error::RecordSpecNameRequired, .. }),
-            writer.write_record(&mut buf, HashMap::new(), None)
+            writer.write_record(&mut buf, &Data::from(HashMap::new()), None)
         );
     }
 
@@ -239,10 +210,10 @@ mod test {
         let data = [("field1".to_string(), "hello".as_bytes().to_owned()),
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
             .iter().cloned().collect();
-        let mut recognizer = MockRecognizer::new();
+        let mut recognizer = MockRecognizer::<BTreeMap<String, Range<usize>>>::new();
         recognizer.add_data_recognize_call(&data, &spec.record_specs, Ok("record1".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
-        writer.write_record(&mut buf, data.clone(), None).unwrap();
+        writer.write_record(&mut buf, &data, None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 
@@ -258,8 +229,8 @@ mod test {
                 error: Error::PadderFailure(_),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, [("field1".to_string(), "hello".as_bytes().to_owned())]
-                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1")
+            writer.write_record(&mut buf, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned())]
+                .iter().cloned().collect::<BTreeMap<_, _>>()), "record1")
         );
     }
 
@@ -274,8 +245,8 @@ mod test {
                 error: Error::FieldValueRequired,
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, [("field3".to_string(), "hello".as_bytes().to_owned())]
-                .iter().cloned().collect::<BTreeMap<_, _>>(), "record1")
+            writer.write_record(&mut buf, &Data::from([("field3".to_string(), "hello".as_bytes().to_owned())]
+                .iter().cloned().collect::<BTreeMap<_, _>>()), "record1")
         );
     }
 
@@ -291,8 +262,8 @@ mod test {
                 error: Error::PaddedValueWrongLength(4, ref value),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if *value == "hello2".as_bytes().to_owned() && record == "record1" && field == "field1",
-            writer.write_record(&mut buf, [("field1".to_string(), "hello".as_bytes().to_owned())]
-                .iter().cloned().collect::<HashMap<_, _>>(), "record1")
+            writer.write_record(&mut buf, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned())]
+                .iter().cloned().collect::<HashMap<_, _>>()), "record1")
         );
     }
 
@@ -309,8 +280,8 @@ mod test {
                 error: Error::IoError(_),
                 position: Some(Position { ref record, field: Some(ref field) })
             }) if record == "record1" && field == "field1",
-            writer.write_record(&mut buf, [("field1".to_string(), "hello".as_bytes().to_owned())]
-                .iter().cloned().collect::<HashMap<_, _>>(), "record1")
+            writer.write_record(&mut buf, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned())]
+                .iter().cloned().collect::<HashMap<_, _>>()), "record1")
         );
     }
 

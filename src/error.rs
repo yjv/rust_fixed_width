@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use padder::Error as PadderError;
 use std::io::Error as IoError;
 use recognizer::Error as RecognizerError;
+use record::DataHolderError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,7 +16,8 @@ pub enum Error {
     DataDoesNotMatchLineEnding(Vec<u8>, Vec<u8>),
     CouldNotReadEnough(Vec<u8>),
     PaddedValueWrongLength(usize, Vec<u8>),
-    FieldValueRequired
+    FieldValueRequired,
+    DataHolderError(DataHolderError)
 }
 
 impl ErrorTrait for Error {
@@ -30,7 +32,8 @@ impl ErrorTrait for Error {
             Error::CouldNotReadEnough(_) => "Could not read enough data",
             Error::DataDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
             Error::PaddedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
-            Error::FieldValueRequired => "The value for the given field is required since it has no default"
+            Error::FieldValueRequired => "The value for the given field is required since it has no default",
+            Error::DataHolderError(_) => "There was an error creating the records data holder"
         }
     }
 
@@ -39,6 +42,7 @@ impl ErrorTrait for Error {
             Error::RecordSpecRecognizerError(ref e) => Some(e),
             Error::PadderFailure(ref e) => Some(e),
             Error::IoError(ref e) => Some(e),
+            Error::DataHolderError(ref e) => Some(e),
             _ => None
         }
     }
@@ -82,7 +86,8 @@ impl Display for Error {
                 actual_value.len(),
                 expected_length
             ),
-            Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default")
+            Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default"),
+            Error::DataHolderError(ref e) => write!(f, "An error occurred while trying to create the record data holder: {}", e)
         }
     }
 }
@@ -110,6 +115,12 @@ impl From<RecognizerError> for Error {
             RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
             _ => Error::RecordSpecRecognizerError(e)
         }
+    }
+}
+
+impl From<DataHolderError> for Error {
+    fn from(e: DataHolderError) -> Self {
+        Error::DataHolderError(e)
     }
 }
 
@@ -143,6 +154,12 @@ impl PositionalError {
 impl From<RecognizerError> for PositionalError {
     fn from(error: RecognizerError) -> Self {
         PositionalError::from(Error::from(error))
+    }
+}
+
+impl From<DataHolderError> for PositionalError {
+    fn from(e: DataHolderError) -> Self {
+        PositionalError::from(Error::from(e))
     }
 }
 

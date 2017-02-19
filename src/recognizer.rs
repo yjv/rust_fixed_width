@@ -3,7 +3,7 @@ use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
-use record::{Data, DataRanges};
+use record::{Data, DataRanges, WritableDataHolder};
 
 #[derive(Debug)]
 pub enum Error {
@@ -119,11 +119,11 @@ impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecog
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data<T: DataRanges>(&self, data: &Data<T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
 }
 
 impl<'a, T> DataRecordSpecRecognizer for &'a T where T: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data<U: DataRanges>(&self, data: &Data<U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<U: DataRanges, V: WritableDataHolder>(&self, data: &Data<U, V>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_data(data, record_specs)
     }
 }
@@ -166,11 +166,11 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data<T: DataRanges>(&self, data: &Data<T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if let Some(data) = data.get(&self.id_field) {
+                    if let Some(data) = data.get_writable_data(&self.id_field) {
                         if data == &default[..] {
                             return Ok(name.clone());
                         }
@@ -192,7 +192,7 @@ impl LineRecordSpecRecognizer for NoneRecognizer {
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data<T: DataRanges>(&self, _: &Data<T>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, _: &Data<T, U>, _: &HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -291,32 +291,32 @@ mod test {
         let mut data = BTreeMap::new();
 
         data.insert("$id".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         data.insert("$id".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         data.insert("$id".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         data.insert("field1".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
         data.remove(&"$id".to_string());
 
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         data.insert("field1".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         data.insert("field1".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data, &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data, &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
 
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs));
         assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs));
@@ -330,7 +330,7 @@ mod test {
     #[test]
     fn recognizer_reference() {
         let recognizer = NoneRecognizer;
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new(), &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut Vec::new()),
