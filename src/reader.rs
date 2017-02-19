@@ -76,8 +76,9 @@ impl<T: UnPadder, U: LineRecordSpecRecognizer, V: Borrow<HashMap<String, RecordS
                     field_spec.padding_direction,
                     &mut line
                 ).map_err(|e| (e, record_name.clone(), name.clone()))?;
-                ranges.insert(name.clone(), old_length..line.len());
+                ranges.insert(name, old_length..line.len());
             }
+
             self.buffer.clear();
         }
 

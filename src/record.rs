@@ -20,7 +20,7 @@ pub struct Record<T: DataRanges, U> {
 
 pub trait DataRanges {
     fn new() -> Self;
-    fn insert(&mut self, name: String, range: Range<usize>);
+    fn insert<'a>(&mut self, name: &'a str, range: Range<usize>);
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>>;
 }
 
@@ -119,7 +119,7 @@ impl <T: DataRanges> Data<T, Vec<u8>> {
         }
     }
 
-    pub fn push<'a>(&mut self, name: String, data: &'a [u8]) {
+    pub fn push<'a>(&mut self, name: &'a str, data: &'a [u8]) {
         self.ranges.insert(name, self.data.len()..self.data.len() + data.len());
         self.data.extend(data);
     }
@@ -178,7 +178,7 @@ impl<T: DataRanges> FromIterator<(String, Vec<u8>)> for Data<T, Vec<u8>> {
         let mut current_index = 0;
 
         for (name, field) in iter {
-            ranges.insert(name, current_index..current_index + field.len());
+            ranges.insert(&name, current_index..current_index + field.len());
             data.extend(field.iter());
             current_index += field.len();
         }
@@ -192,8 +192,8 @@ impl DataRanges for BTreeMap<String, Range<usize>> {
         BTreeMap::new()
     }
 
-    fn insert(&mut self, name: String, range: Range<usize>) {
-        self.insert(name, range);
+    fn insert<'a>(&mut self, name: &'a str, range: Range<usize>) {
+        self.insert(name.to_owned(), range);
     }
 
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>> {
@@ -220,8 +220,8 @@ impl DataRanges for HashMap<String, Range<usize>> {
         HashMap::new()
     }
 
-    fn insert(&mut self, name: String, range: Range<usize>) {
-        self.insert(name, range);
+    fn insert<'a>(&mut self, name: &'a str, range: Range<usize>) {
+        self.insert(name.to_owned(), range);
     }
 
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>> {
@@ -248,8 +248,8 @@ impl DataRanges for Vec<Range<usize>> {
         Vec::new()
     }
 
-    fn insert(&mut self, _: String, value: Range<usize>) {
-        self.push(value);
+    fn insert<'a>(&mut self, _: &'a str, range: Range<usize>) {
+        self.push(range);
     }
 
     fn get<'a>(&self, _: &'a str) -> Option<Range<usize>> {
@@ -289,8 +289,8 @@ impl DataRanges for HashSet<Range<usize>> {
         HashSet::new()
     }
 
-    fn insert(&mut self, _: String, value: Range<usize>) {
-        self.insert(value);
+    fn insert<'a>(&mut self, _: &'a str, range: Range<usize>) {
+        self.insert(range);
     }
 
     fn get<'a>(&self, _: &'a str) -> Option<Range<usize>> {
@@ -303,7 +303,7 @@ impl DataRanges for () {
         ()
     }
 
-    fn insert(&mut self, _: String, _: Range<usize>) {}
+    fn insert<'a>(&mut self, _: &'a str, _: Range<usize>) {}
 
     fn get<'a>(&self, _: &'a str) -> Option<Range<usize>> {
         None
