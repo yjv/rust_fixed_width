@@ -1,6 +1,6 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use record::{DataType, DataRanges, Compatibility};
+use record::{DataType, BinaryType};
 
 #[derive(Debug)]
 pub struct Error {
@@ -47,21 +47,21 @@ impl Display for Error {
 
 type Result<T> = ::std::result::Result<T, Error>;
 
-pub trait Padder {
+pub trait Padder<T: DataType = BinaryType> {
     fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
 }
 
-impl<'a, T> Padder for &'a T where T: 'a + Padder {
+impl<'a, T, U: DataType> Padder<U> for &'a T where T: 'a + Padder<U> {
     fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
         (**self).pad(data, length, padding, direction, destination)
     }
 }
 
-pub trait UnPadder {
+pub trait UnPadder<T: DataType = BinaryType> {
     fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
 }
 
-impl<'a, T> UnPadder for &'a T where T: 'a + UnPadder {
+impl<'a, T, U: DataType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
     fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
         (**self).unpad(data, padding, direction, destination)
     }
@@ -107,7 +107,7 @@ impl From<PaddingError> for Error {
     }
 }
 
-impl Padder for DefaultPadder {
+impl Padder<BinaryType> for DefaultPadder {
     fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         if data.len() >= length {
             destination.extend_from_slice(&data[..length]);
@@ -125,7 +125,7 @@ impl Padder for DefaultPadder {
     }
 }
 
-impl UnPadder for DefaultPadder {
+impl UnPadder<BinaryType> for DefaultPadder {
     fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         let mut index = 0;
         let mut iter = data.chunks(padding.len());
@@ -149,16 +149,22 @@ impl UnPadder for DefaultPadder {
     }
 }
 
-pub struct IdentityPadder;
+pub struct IdentityPadder<T: DataType = BinaryType>(::std::marker::PhantomData<T>);
 
-impl Padder for IdentityPadder {
+impl <T: DataType> IdentityPadder<T> {
+    pub fn new() -> Self {
+        IdentityPadder(::std::marker::PhantomData)
+    }
+}
+
+impl<T: DataType> Padder<T> for IdentityPadder<T> {
     fn pad<'a>(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
 }
 
-impl UnPadder for IdentityPadder {
+impl<T: DataType> UnPadder<T> for IdentityPadder<T> {
     fn unpad<'a>(&self, data: &[u8], _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
@@ -169,6 +175,7 @@ impl UnPadder for IdentityPadder {
 mod test {
     use super::*;
     use spec::*;
+    use record::BinaryType;
 
     #[test]
     fn default_padder() {
@@ -201,7 +208,7 @@ mod test {
 
     #[test]
     fn identity_padder() {
-        let padder = IdentityPadder;
+        let padder = IdentityPadder::<BinaryType>::new();
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
         assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));
@@ -219,7 +226,7 @@ mod test {
 
     #[test]
     fn padder_reference() {
-        let padder = IdentityPadder;
+        let padder = IdentityPadder::<BinaryType>::new();
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
         assert_result!(Ok(()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));

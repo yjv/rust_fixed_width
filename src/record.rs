@@ -31,15 +31,17 @@ pub trait ReadDataHolder where Self: Sized {
 }
 
 pub trait DataType {
-    type DataHolder: ReadDataHolder;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+    type ReadDataHolder: ReadDataHolder;
+    type WriteDataHolder: WriteDataHolder;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError>;
 }
 
 pub struct BinaryType;
 
 impl DataType for BinaryType {
-    type DataHolder = Vec<u8>;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    type ReadDataHolder = Vec<u8>;
+    type WriteDataHolder = Vec<u8>;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError> {
         Ok(data)
     }
 }
@@ -47,30 +49,10 @@ impl DataType for BinaryType {
 pub struct StringType;
 
 impl DataType for StringType {
-    type DataHolder = String;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    type ReadDataHolder = String;
+    type WriteDataHolder = String;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError> {
         Ok(String::from_utf8(data)?)
-    }
-}
-
-pub trait Compatibility<T: DataType> {
-}
-
-pub struct RecordType<T: DataRanges, U> {
-    data_ranges: ::std::marker::PhantomData<T>,
-    data_holder: ::std::marker::PhantomData<U>
-}
-
-impl<T: DataRanges, U> RecordType<T, U> {
-    pub fn new() -> Self {
-        RecordType {
-            data_ranges: ::std::marker::PhantomData,
-            data_holder: ::std::marker::PhantomData
-        }
-    }
-
-    pub fn from_data(data: Data<T, U>) -> Self {
-        Self::new()
     }
 }
 
@@ -406,23 +388,23 @@ impl From<BTreeMap<String, Vec<u8>>> for Data<BTreeMap<String, Range<usize>>, Ve
     }
 }
 
-#[cfg(test)]
-mod test {
-
-    use super::*;
-    use std::collections::HashMap;
-    use std::ops::Range;
-
-    #[test]
-    fn iteration() {
-        let data  = Data {
-            data: "hellohello2".as_bytes().to_owned(),
-            ranges: [("field2".to_owned(), 0..5),
-                ("field3".to_owned(), 5..11)]
-                .iter().cloned().collect::<HashMap<String, Range<usize>>>()
-        };
-        for (name, field) in data.iter() {
-
-        }
-    }
-}
+//#[cfg(test)]
+//mod test {
+//
+//    use super::*;
+//    use std::collections::HashMap;
+//    use std::ops::Range;
+//
+//    #[test]
+//    fn iteration() {
+//        let data  = Data {
+//            data: "hellohello2".as_bytes().to_owned(),
+//            ranges: [("field2".to_owned(), 0..5),
+//                ("field3".to_owned(), 5..11)]
+//                .iter().cloned().collect::<HashMap<String, Range<usize>>>()
+//        };
+//        for (name, field) in data.iter() {
+//
+//        }
+//    }
+//}

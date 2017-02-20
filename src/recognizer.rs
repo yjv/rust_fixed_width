@@ -3,7 +3,7 @@ use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
-use record::{Data, DataRanges, WriteDataHolder};
+use record::{Data, DataRanges, WriteDataHolder, DataType, BinaryType};
 
 #[derive(Debug)]
 pub enum Error {
@@ -108,42 +108,43 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
     }
 }
 
-pub trait LineRecordSpecRecognizer {
-    fn recognize_for_line<'a, T: Read + 'a>(&self, buffer: LineBuffer<'a, T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+pub trait LineRecordSpecRecognizer<T: DataType> {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String>;
 }
 
-impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecognizer {
-    fn recognize_for_line<'b, T: Read + 'b>(&self, buffer: LineBuffer<'b, T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<'a, T, U: DataType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
+    fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_line(buffer, record_specs)
     }
 }
 
-pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+pub trait DataRecordSpecRecognizer<T: DataType> {
+    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, data: &Data<U, V>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String>;
 }
 
-impl<'a, T> DataRecordSpecRecognizer for &'a T where T: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data<U: DataRanges, V: WriteDataHolder>(&self, data: &Data<U, V>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<'a, T, U: DataType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
+    fn recognize_for_data<'b, V: DataRanges + 'b, W: WriteDataHolder + 'b>(&self, data: &Data<V, W>, record_specs: &'b HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_data(data, record_specs)
     }
 }
 
-pub struct IdFieldRecognizer {
-    id_field: String
+pub struct IdFieldRecognizer<T: DataType = BinaryType> {
+    id_field: String,
+    marker: ::std::marker::PhantomData<T>
 }
 
-impl IdFieldRecognizer {
+impl<T: DataType> IdFieldRecognizer<T> {
     pub fn new() -> Self {
         Self::new_with_field("$id")
     }
 
-    pub fn new_with_field<T: Into<String>>(id_field: T) -> Self {
-        IdFieldRecognizer { id_field: id_field.into() }
+    pub fn new_with_field<U: Into<String>>(id_field: U) -> Self {
+        IdFieldRecognizer { id_field: id_field.into(), marker: ::std::marker::PhantomData }
     }
 }
 
-impl LineRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_line<'a, T: Read + 'a>(&self, mut buffer: LineBuffer<'a, T>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: DataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, mut buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -165,8 +166,8 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
     }
 }
 
-impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: DataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
+    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, data: &Data<U, V>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -183,16 +184,22 @@ impl DataRecordSpecRecognizer for IdFieldRecognizer {
     }
 }
 
-pub struct NoneRecognizer;
+pub struct NoneRecognizer<T: DataType = BinaryType>(::std::marker::PhantomData<T>);
 
-impl LineRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_line<'a, T: Read + 'a>(&self, _: LineBuffer<'a, T>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: DataType> NoneRecognizer<T> {
+    pub fn new() -> Self {
+        NoneRecognizer(::std::marker::PhantomData)
+    }
+}
+
+impl<T: DataType> LineRecordSpecRecognizer<T> for NoneRecognizer<T> {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, _: LineBuffer<'a, U>, _: &'a HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
 
-impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, _: &Data<T, U>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: DataType> DataRecordSpecRecognizer<T> for NoneRecognizer<T> {
+    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, _: &Data<U, V>, _: &'a HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -206,10 +213,17 @@ mod test {
     use std::collections::{HashMap, BTreeMap};
     use std::io::empty;
     use padder::PaddingError;
+    use record::{BinaryType, StringType};
 
     #[test]
     fn none_recognizer() {
-        let recognizer = NoneRecognizer;
+        let recognizer = NoneRecognizer::<BinaryType>::new();
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::new(), ranges: BTreeMap::new() }, &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
+            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &HashMap::new()
+        ));
+        let recognizer = NoneRecognizer::<StringType>::new();
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::new(), ranges: BTreeMap::new() }, &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
@@ -286,8 +300,8 @@ mod test {
             .build()
             .record_specs
         ;
-        let recognizer = IdFieldRecognizer::new();
-        let recognizer_with_field = IdFieldRecognizer::new_with_field("field1");
+        let recognizer = IdFieldRecognizer::<BinaryType>::new();
+        let recognizer_with_field = IdFieldRecognizer::<BinaryType>::new_with_field("field1");
         let mut data = BTreeMap::new();
 
         data.insert("$id".to_string(), "bar".as_bytes().to_owned());
@@ -329,7 +343,14 @@ mod test {
 
     #[test]
     fn recognizer_reference() {
-        let recognizer = NoneRecognizer;
+        let recognizer = NoneRecognizer::<BinaryType>::new();
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new()));
+        assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
+            &&recognizer,
+            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &HashMap::new()
+        ));
+        let recognizer = NoneRecognizer::<StringType>::new();
         assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new()));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
