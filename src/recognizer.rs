@@ -3,7 +3,7 @@ use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
-use record::{Data, DataRanges, WritableDataHolder};
+use record::{Data, DataRanges, WriteDataHolder};
 
 #[derive(Debug)]
 pub enum Error {
@@ -119,11 +119,11 @@ impl<'a, V> LineRecordSpecRecognizer for &'a V where V: 'a + LineRecordSpecRecog
 }
 
 pub trait DataRecordSpecRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
+    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String>;
 }
 
 impl<'a, T> DataRecordSpecRecognizer for &'a T where T: 'a + DataRecordSpecRecognizer {
-    fn recognize_for_data<U: DataRanges, V: WritableDataHolder>(&self, data: &Data<U, V>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<U: DataRanges, V: WriteDataHolder>(&self, data: &Data<U, V>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         (**self).recognize_for_data(data, record_specs)
     }
 }
@@ -166,7 +166,7 @@ impl LineRecordSpecRecognizer for IdFieldRecognizer {
 }
 
 impl DataRecordSpecRecognizer for IdFieldRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, data: &Data<T, U>, record_specs: &HashMap<String, RecordSpec>) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -192,7 +192,7 @@ impl LineRecordSpecRecognizer for NoneRecognizer {
 }
 
 impl DataRecordSpecRecognizer for NoneRecognizer {
-    fn recognize_for_data<T: DataRanges, U: WritableDataHolder>(&self, _: &Data<T, U>, _: &HashMap<String, RecordSpec>) -> Result<String> {
+    fn recognize_for_data<T: DataRanges, U: WriteDataHolder>(&self, _: &Data<T, U>, _: &HashMap<String, RecordSpec>) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }

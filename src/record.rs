@@ -5,6 +5,8 @@ use std::ops::{Range, Index};
 use std::iter::{FromIterator, Enumerate};
 use std::error::Error;
 use std::fmt::{Formatter, Display, Error as FmtError};
+use std::string::FromUtf8Error;
+use std::str::Utf8Error;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Data<T: DataRanges, U> {
@@ -24,25 +26,55 @@ pub trait DataRanges {
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>>;
 }
 
-pub trait DataHolder where Self: Sized {
-    fn new(data: Vec<u8>) -> Result<Self, DataHolderError>;
+pub trait ReadDataHolder where Self: Sized {
+    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
 }
 
-pub struct RecordType<T: DataRanges, U: DataHolder> {
+pub trait DataType {
+    type DataHolder: ReadDataHolder;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+}
+
+pub struct BinaryType;
+
+impl DataType for BinaryType {
+    type DataHolder = Vec<u8>;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+        Ok(data)
+    }
+}
+
+pub struct StringType;
+
+impl DataType for StringType {
+    type DataHolder = String;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+        Ok(String::from_utf8(data)?)
+    }
+}
+
+pub trait Compatibility<T: DataType> {
+}
+
+pub struct RecordType<T: DataRanges, U> {
     data_ranges: ::std::marker::PhantomData<T>,
     data_holder: ::std::marker::PhantomData<U>
 }
 
-impl<T: DataRanges, U: DataHolder> RecordType<T, U> {
+impl<T: DataRanges, U> RecordType<T, U> {
     pub fn new() -> Self {
         RecordType {
             data_ranges: ::std::marker::PhantomData,
             data_holder: ::std::marker::PhantomData
         }
     }
+
+    pub fn from_data(data: Data<T, U>) -> Self {
+        Self::new()
+    }
 }
 
-pub trait WritableDataHolder {
+pub trait WriteDataHolder {
     fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8];
 }
 
@@ -89,6 +121,18 @@ impl Display for DataHolderError {
     }
 }
 
+impl From<FromUtf8Error> for DataHolderError {
+    fn from(e: FromUtf8Error) -> Self {
+        DataHolderError::new(e)
+    }
+}
+
+impl From<Utf8Error> for DataHolderError {
+    fn from(e: Utf8Error) -> Self {
+        DataHolderError::new(e)
+    }
+}
+
 pub trait IterableDataRanges<'a>: DataRanges {
     type Iter: Iterator<Item=(&'a String, &'a Range<usize>)>;
     fn field_iter(&'a self) -> Self::Iter;
@@ -105,7 +149,7 @@ impl<T: DataRanges, U: Index<Range<usize>>> Data<T, U> {
     }
 }
 
-impl<T: DataRanges, U: WritableDataHolder> Data<T, U> {
+impl<T: DataRanges, U: WriteDataHolder> Data<T, U> {
     pub fn get_writable_data<'a>(&'a self, name: &'a str) -> Option<&'a [u8]> {
         self.ranges.get(name).map(|range| self.data.get(range))
     }
@@ -179,6 +223,22 @@ impl<T: DataRanges> FromIterator<(String, Vec<u8>)> for Data<T, Vec<u8>> {
 
         for (name, field) in iter {
             ranges.insert(&name, current_index..current_index + field.len());
+            data.extend(field.iter());
+            current_index += field.len();
+        }
+
+        Data { data: data, ranges: ranges }
+    }
+}
+
+impl<'a, T: DataRanges> FromIterator<(&'a str, Vec<u8>)> for Data<T, Vec<u8>> {
+    fn from_iter<U: IntoIterator<Item = (&'a str, Vec<u8>)>>(iter: U) -> Self {
+        let mut ranges = T::new();
+        let mut data = Vec::new();
+        let mut current_index = 0;
+
+        for (name, field) in iter {
+            ranges.insert(name, current_index..current_index + field.len());
             data.extend(field.iter());
             current_index += field.len();
         }
@@ -310,25 +370,25 @@ impl DataRanges for () {
     }
 }
 
-impl DataHolder for Vec<u8> {
-    fn new(data: Vec<u8>) -> Result<Self, DataHolderError> {
-        Ok(data)
+impl ReadDataHolder for Vec<u8> {
+    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError> {
+        Ok(self.extend(data))
     }
 }
 
-impl WritableDataHolder for Vec<u8> {
+impl WriteDataHolder for Vec<u8> {
     fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
         &self[range]
     }
 }
 
-impl DataHolder for String {
-    fn new(data: Vec<u8>) -> Result<Self, DataHolderError> {
-        String::from_utf8(data).map_err(DataHolderError::new)
+impl ReadDataHolder for String {
+    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError> {
+        Ok(self.push_str(::std::str::from_utf8(data)?))
     }
 }
 
-impl WritableDataHolder for String {
+impl WriteDataHolder for String {
     fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
         self[range].as_ref()
     }

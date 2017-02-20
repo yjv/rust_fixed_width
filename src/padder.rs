@@ -1,5 +1,6 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
+use record::{DataType, DataRanges, Compatibility};
 
 #[derive(Debug)]
 pub struct Error {

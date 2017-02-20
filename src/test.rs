@@ -3,15 +3,15 @@ use padder::{Padder, UnPadder, Error as PaddingError};
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::Read;
-use record::{Data, DataRanges, WritableDataHolder};
+use record::{Data, DataRanges, WriteDataHolder};
 
 #[derive(Debug)]
-pub struct MockRecognizer<'a, T: DataRanges + 'a = (), U: WritableDataHolder + 'a = Vec<u8>> {
+pub struct MockRecognizer<'a, T: DataRanges + 'a = (), U: WriteDataHolder + 'a = Vec<u8>> {
     line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>,
     data_recognize_calls: Vec<(&'a Data<T, U>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
 }
 
-impl<'a, T: DataRanges + 'a, U: WritableDataHolder + 'a> MockRecognizer<'a, T, U> {
+impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a> MockRecognizer<'a, T, U> {
     pub fn new() -> Self {
         MockRecognizer {
             data_recognize_calls: Vec::new(),
@@ -43,8 +43,8 @@ impl<'a, T: DataRanges + 'a> LineRecordSpecRecognizer for MockRecognizer<'a, T> 
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WritableDataHolder + 'a> DataRecordSpecRecognizer for MockRecognizer<'a, T, U> {
-    fn recognize_for_data<V: DataRanges + 'a, W: WritableDataHolder + 'a>(&self, data: &Data<V, W>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
+impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a> DataRecordSpecRecognizer for MockRecognizer<'a, T, U> {
+    fn recognize_for_data<V: DataRanges + 'a, W: WriteDataHolder + 'a>(&self, data: &Data<V, W>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_data as *const Data<T, U> == data as *const Data<V, W> as *const Data<T, U>
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>

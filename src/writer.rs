@@ -5,7 +5,7 @@ use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record};
-use record::{Data, DataRanges, WritableDataHolder};
+use record::{Data, DataRanges, WriteDataHolder};
 
 pub struct Writer<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpec>>> {
     padder: T,
@@ -35,7 +35,7 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
               X: Into<(&'a Data<Z, A>, Option<&'a str>)>,
               Y: Into<Option<&'a str>>,
               Z: DataRanges + 'a,
-              A: WritableDataHolder + 'a
+              A: WriteDataHolder + 'a
     {
         let data_and_record_name = record.into();
         let (data, record_name) = (
@@ -131,13 +131,13 @@ impl<T: Padder, U: DataRecordSpecRecognizer, V: Borrow<HashMap<String, RecordSpe
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WritableDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Data<T, U> {
+impl<'a, T: DataRanges + 'a, U: WriteDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Data<T, U> {
     fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
         (self, None)
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WritableDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Record<T, U> {
+impl<'a, T: DataRanges + 'a, U: WriteDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Record<T, U> {
     fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
         (&self.data, Some(&self.name[..]))
     }
