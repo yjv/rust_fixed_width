@@ -48,22 +48,22 @@ impl Display for Error {
 type Result<T> = ::std::result::Result<T, Error>;
 
 pub trait Padder<T: WriteType> {
-    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
 }
 
 impl<'a, T, U: WriteType> Padder<U> for &'a T where T: 'a + Padder<U> {
-    fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
-        (**self).pad(data, length, padding, direction, destination, data_type)
+    fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, write_type: &'b U) -> Result<()> {
+        (**self).pad(data, length, padding, direction, destination, write_type)
     }
 }
 
 pub trait UnPadder<T: ReadType> {
-    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, read_type: &'a T) -> Result<()>;
 }
 
 impl<'a, T, U: ReadType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
-    fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
-        (**self).unpad(data, padding, direction, destination, data_type)
+    fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, read_type: &'b U) -> Result<()> {
+        (**self).unpad(data, padding, direction, destination, read_type)
     }
 }
 

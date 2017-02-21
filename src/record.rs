@@ -340,32 +340,19 @@ impl DataRanges for Vec<Range<usize>> {
     }
 }
 //
-//pub struct StringEnumerateIterator {
-//    iter: Enumerate<(usize, Range<usize>)>
-//}
-//
-//impl Iterator for StringEnumerateIterator {
-//    type Item = (String, Range<usize>);
-//    fn next(&mut self) -> Option<Self::Item> {
-//        self.iter.next().map(|(key, value)| (key.to_string(), value))
+//impl<'a> IterableDataRanges<'a> for Vec<Range<usize>> {
+//    type Iter = Box<Iterator<Item=(&'a String, &'a Range<usize>)>>;
+//    fn field_iter(&'a self) -> Box<Iterator<Item=(&'a String, &'a Range<usize>)>> {
+//        Box::new(self.iter().map(|range| (&string.to_string(), range)))
 //    }
 //}
-//
-//pub struct StrEnumerateIterator {
-//    iter: Enumerate<(usize, Range<usize>)>,
-//    key: Option
-//}
-//
-//impl Iterator for StringEnumerateIterator {
-//    type
-//    fn next(&mut self) -> Option<Self::Item> {
-//        self.iter.next().map(|(key, value)| (key.to_string(), value))
-//    }
-//}
-//
-//impl IterableDataRanges for Vec<Range<usize>> {
-//
-//}
+
+impl IntoIterableDataRanges for Vec<Range<usize>> {
+    type Iter = Box<Iterator<Item=(String, Range<usize>)>>;
+    fn into_field_iter(self) -> Box<Iterator<Item=(String, Range<usize>)>> {
+        Box::new(self.into_iter().map(|range| ("".to_string(), range)))
+    }
+}
 
 impl DataRanges for HashSet<Range<usize>> {
     fn new() -> Self {

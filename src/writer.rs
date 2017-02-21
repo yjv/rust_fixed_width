@@ -11,7 +11,7 @@ pub struct Writer<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMa
     padder: T,
     recognizer: U,
     specs: V,
-    data_type: W
+    write_type: W
 }
 
 impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> Writer<T, U, V, W> {
@@ -45,7 +45,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
         );
         let record_name = record_name
             .map_or_else(
-                || self.recognizer.recognize_for_data(&data, self.specs.borrow(), &self.data_type),
+                || self.recognizer.recognize_for_data(&data, self.specs.borrow(), &self.write_type),
                 |name| Ok(name.to_owned())
             )?
         ;
@@ -76,7 +76,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
 
     fn _write_field<'a, X: 'a + Write>(&self, writer: &'a mut X, field_spec: &FieldSpec, value: &'a [u8]) -> Result<()> {
         let mut destination = Vec::new();
-        self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction, &mut destination, &self.data_type)?;
+        self.padder.pad(value, field_spec.length, &field_spec.padding, field_spec.padding_direction, &mut destination, &self.write_type)?;
         if destination.len() != field_spec.length {
             return Err(Error::PaddedValueWrongLength(field_spec.length, destination));
         }
@@ -89,7 +89,7 @@ pub struct WriterBuilder<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow
     padder: T,
     recognizer: U,
     specs: Option<V>,
-    data_type: W
+    write_type: W
 }
 
 impl<V: Borrow<HashMap<String, RecordSpec>>> WriterBuilder<IdentityPadder, NoneRecognizer, V, BinaryType> {
@@ -98,7 +98,7 @@ impl<V: Borrow<HashMap<String, RecordSpec>>> WriterBuilder<IdentityPadder, NoneR
             padder: IdentityPadder,
             recognizer: NoneRecognizer,
             specs: None,
-            data_type: BinaryType
+            write_type: BinaryType
         }
     }
 }
@@ -109,7 +109,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             padder: padder,
             recognizer: self.recognizer,
             specs: self.specs,
-            data_type: self.data_type
+            write_type: self.write_type
         }
     }
 
@@ -118,7 +118,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             padder: self.padder,
             recognizer: recognizer,
             specs: self.specs,
-            data_type: self.data_type
+            write_type: self.write_type
         }
     }
 
@@ -127,7 +127,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
         self
     }
 
-    pub fn with_data_type<X: WriteType>(self, data_type: X) -> WriterBuilder<T, U, V, X>
+    pub fn with_write_type<X: WriteType>(self, write_type: X) -> WriterBuilder<T, U, V, X>
         where T: Padder<X>,
               U: DataRecordSpecRecognizer<X>
     {
@@ -135,7 +135,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             padder: self.padder,
             recognizer: self.recognizer,
             specs: self.specs,
-            data_type: data_type
+            write_type: write_type
         }
     }
 
@@ -144,7 +144,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             padder: self.padder,
             recognizer: self.recognizer,
             specs: self.specs.expect("specs is required to build a writer"),
-            data_type: self.data_type
+            write_type: self.write_type
         }
     }
 }

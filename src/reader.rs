@@ -12,7 +12,7 @@ pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<Hash
     recognizer: U,
     specs: V,
     buffer: Vec<u8>,
-    data_type: W
+    read_type: W
 }
 
 impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> Reader<T, U, V, W> {
@@ -36,7 +36,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             &field_spec.padding,
             field_spec.padding_direction,
             &mut field,
-            &self.data_type
+            &self.read_type
         )?;
         Ok(field)
     }
@@ -52,7 +52,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         let record_name = record_name
             .into()
             .map_or_else(
-                || self.recognizer.recognize_for_line(LineBuffer::new(&mut reader, &mut line), self.specs.borrow(), &self.data_type),
+                || self.recognizer.recognize_for_line(LineBuffer::new(&mut reader, &mut line), self.specs.borrow(), &self.read_type),
                 |name| Ok(name.to_string())
             )?
         ;
@@ -75,7 +75,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
                     &field_spec.padding,
                     field_spec.padding_direction,
                     &mut line,
-                    &self.data_type
+                    &self.read_type
                 ).map_err(|e| (e, record_name.clone(), name.clone()))?;
                 ranges.insert(name, old_length..line.len());
             }
@@ -85,7 +85,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
 
         Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.clone()))?;
 
-        Ok(Record { data: Data { data: self.data_type.new_data_holder(line, &ranges)?, ranges: ranges }, name: record_name })
+        Ok(Record { data: Data { data: self.read_type.new_data_holder(line, &ranges)?, ranges: ranges }, name: record_name })
     }
 
     pub fn absorb_line_ending<'a, Y: 'a + Read>(&mut self, reader: &'a mut Y, line_ending: &[u8]) -> Result<()> {
@@ -136,7 +136,7 @@ pub struct ReaderBuilder<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borr
     un_padder: T,
     recognizer: U,
     specs: Option<V>,
-    data_type: W
+    read_type: W
 }
 
 impl<V: Borrow<HashMap<String, RecordSpec>>> ReaderBuilder<IdentityPadder, NoneRecognizer, V, BinaryType> {
@@ -145,7 +145,7 @@ impl<V: Borrow<HashMap<String, RecordSpec>>> ReaderBuilder<IdentityPadder, NoneR
             un_padder: IdentityPadder,
             recognizer: NoneRecognizer,
             specs: None,
-            data_type: BinaryType
+            read_type: BinaryType
         }
     }
 }
@@ -155,7 +155,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         ReaderBuilder {
             un_padder: reader.un_padder,
             recognizer: reader.recognizer,
-            data_type: reader.data_type,
+            read_type: reader.read_type,
             specs: Some(reader.specs)
         }
     }
@@ -165,7 +165,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             un_padder: un_padder,
             recognizer: self.recognizer,
             specs: self.specs,
-            data_type: self.data_type
+            read_type: self.read_type
         }
     }
 
@@ -174,7 +174,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             un_padder: self.un_padder,
             recognizer: recognizer,
             specs: self.specs,
-            data_type: self.data_type
+            read_type: self.read_type
         }
     }
 
@@ -183,7 +183,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         self
     }
 
-    pub fn with_data_type<X: ReadType>(self, data_type: X) -> ReaderBuilder<T, U, V, X>
+    pub fn with_read_type<X: ReadType>(self, read_type: X) -> ReaderBuilder<T, U, V, X>
         where T: UnPadder<X>,
               U: LineRecordSpecRecognizer<X>
     {
@@ -191,7 +191,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             un_padder: self.un_padder,
             recognizer: self.recognizer,
             specs: self.specs,
-            data_type: data_type
+            read_type: read_type
         }
     }
 
@@ -201,7 +201,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             recognizer: self.recognizer,
             specs: self.specs.expect("specs is required to build a writer"),
             buffer: Vec::new(),
-            data_type: self.data_type
+            read_type: self.read_type
         }
     }
 }

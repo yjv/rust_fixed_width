@@ -109,22 +109,22 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
 }
 
 pub trait LineRecordSpecRecognizer<T: ReadType> {
-    fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
+    fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a T) -> Result<String>;
 }
 
 impl<'a, T, U: ReadType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
-    fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
-        (**self).recognize_for_line(buffer, record_specs, data_type)
+    fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'b U) -> Result<String> {
+        (**self).recognize_for_line(buffer, record_specs, read_type)
     }
 }
 
 pub trait DataRecordSpecRecognizer<T: WriteType> {
-    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, write_type: &'a T) -> Result<String>;
 }
 
 impl<'a, T, U: WriteType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
-    fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
-        (**self).recognize_for_data(data, record_specs, data_type)
+    fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'b U) -> Result<String> {
+        (**self).recognize_for_data(data, record_specs, write_type)
     }
 }
 
