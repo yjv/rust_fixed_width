@@ -637,19 +637,22 @@ mod test {
             buf.read(&mut data)
         );
         assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
+        buf.rewind();
+        let mut data = [0; 30];
+        assert_result!(
+            Ok(30),
+            buf.read(&mut data)
+        );
+        assert_eq!(&string[..30], ::std::str::from_utf8(&data).unwrap());
         buf.reset();
         buf.rewind();
+        let mut data = [0; 45];
         assert_result!(
             Ok(45),
             buf.read(&mut data)
         );
-        assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
-        buf.rewind();
-        assert_result!(
-            Ok(45),
-            buf.read(&mut data)
-        );
-        assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
+        assert_eq!(&string[30..75], ::std::str::from_utf8(&data).unwrap());
+
         let mut bytes = string.as_bytes();
         let mut buf = RewindableReader::new(&mut bytes);
         assert_result!(
