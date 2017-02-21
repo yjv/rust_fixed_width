@@ -26,13 +26,13 @@ pub trait DataRanges {
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>>;
 }
 
-pub trait ReadDataHolder where Self: Sized {
+pub trait ReadDataHolder {
     fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
 }
 
 pub trait ReadableDataType {
-    type DataHolder: WriteDataHolder;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+    type DataHolder: ReadDataHolder;
+    fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, ranges: &'a T) -> Result<Self::DataHolder, DataHolderError>;
 }
 
 pub trait WritableDataType {
@@ -43,7 +43,7 @@ pub struct BinaryType;
 
 impl ReadableDataType for BinaryType {
     type DataHolder = Vec<u8>;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, _: &'a T) -> Result<Self::DataHolder, DataHolderError> {
         Ok(data)
     }
 }
@@ -56,7 +56,7 @@ pub struct StringType;
 
 impl ReadableDataType for StringType {
     type DataHolder = String;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, _: &'a T) -> Result<Self::DataHolder, DataHolderError> {
         Ok(String::from_utf8(data)?)
     }
 }

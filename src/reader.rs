@@ -85,7 +85,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
 
         Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.clone()))?;
 
-        Ok(Record { data: Data { data: self.data_type.new_data_holder(line)?, ranges: ranges }, name: record_name })
+        Ok(Record { data: Data { data: self.data_type.new_data_holder(line, &ranges)?, ranges: ranges }, name: record_name })
     }
 
     pub fn absorb_line_ending<'a, Y: 'a + Read>(&mut self, reader: &'a mut Y, line_ending: &[u8]) -> Result<()> {
