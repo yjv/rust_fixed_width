@@ -3,7 +3,7 @@ use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
-use record::{Data, DataRanges, WriteDataHolder, DataType, BinaryType};
+use record::{Data, DataRanges, ReadableDataType, WritableDataType};
 
 #[derive(Debug)]
 pub enum Error {
@@ -108,43 +108,42 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
     }
 }
 
-pub trait LineRecordSpecRecognizer<T: DataType> {
-    fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String>;
+pub trait LineRecordSpecRecognizer<T: ReadableDataType> {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
 }
 
-impl<'a, T, U: DataType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
-    fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>) -> Result<String> {
-        (**self).recognize_for_line(buffer, record_specs)
+impl<'a, T, U: ReadableDataType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
+    fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
+        (**self).recognize_for_line(buffer, record_specs, data_type)
     }
 }
 
-pub trait DataRecordSpecRecognizer<T: DataType> {
-    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, data: &Data<U, V>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String>;
+pub trait DataRecordSpecRecognizer<T: WritableDataType> {
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
 }
 
-impl<'a, T, U: DataType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
-    fn recognize_for_data<'b, V: DataRanges + 'b, W: WriteDataHolder + 'b>(&self, data: &Data<V, W>, record_specs: &'b HashMap<String, RecordSpec>) -> Result<String> {
-        (**self).recognize_for_data(data, record_specs)
+impl<'a, T, U: WritableDataType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
+    fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
+        (**self).recognize_for_data(data, record_specs, data_type)
     }
 }
 
-pub struct IdFieldRecognizer<T: DataType = BinaryType> {
-    id_field: String,
-    marker: ::std::marker::PhantomData<T>
+pub struct IdFieldRecognizer {
+    id_field: String
 }
 
-impl<T: DataType> IdFieldRecognizer<T> {
+impl IdFieldRecognizer {
     pub fn new() -> Self {
         Self::new_with_field("$id")
     }
 
     pub fn new_with_field<U: Into<String>>(id_field: U) -> Self {
-        IdFieldRecognizer { id_field: id_field.into(), marker: ::std::marker::PhantomData }
+        IdFieldRecognizer { id_field: id_field.into() }
     }
 }
 
-impl<T: DataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
-    fn recognize_for_line<'a, U: Read + 'a>(&self, mut buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: ReadableDataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, mut buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -166,8 +165,8 @@ impl<T: DataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
     }
 }
 
-impl<T: DataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
-    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, data: &Data<U, V>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: WritableDataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
@@ -184,22 +183,16 @@ impl<T: DataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer<T> {
     }
 }
 
-pub struct NoneRecognizer<T: DataType = BinaryType>(::std::marker::PhantomData<T>);
+pub struct NoneRecognizer;
 
-impl<T: DataType> NoneRecognizer<T> {
-    pub fn new() -> Self {
-        NoneRecognizer(::std::marker::PhantomData)
-    }
-}
-
-impl<T: DataType> LineRecordSpecRecognizer<T> for NoneRecognizer<T> {
-    fn recognize_for_line<'a, U: Read + 'a>(&self, _: LineBuffer<'a, U>, _: &'a HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: ReadableDataType> LineRecordSpecRecognizer<T> for NoneRecognizer {
+    fn recognize_for_line<'a, U: Read + 'a>(&self, _: LineBuffer<'a, U>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
 
-impl<T: DataType> DataRecordSpecRecognizer<T> for NoneRecognizer<T> {
-    fn recognize_for_data<'a, U: DataRanges + 'a, V: WriteDataHolder + 'a>(&self, _: &Data<U, V>, _: &'a HashMap<String, RecordSpec>) -> Result<String> {
+impl<T: WritableDataType> DataRecordSpecRecognizer<T> for NoneRecognizer {
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, _: &Data<U, T::DataHolder>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -217,17 +210,21 @@ mod test {
 
     #[test]
     fn none_recognizer() {
-        let recognizer = NoneRecognizer::<BinaryType>::new();
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::new(), ranges: BTreeMap::new() }, &HashMap::new()));
+        let recognizer = NoneRecognizer;
+        let data_type = BinaryType;
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::<u8>::new(), ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
-            &HashMap::new()
+            &HashMap::new(),
+            &data_type
         ));
-        let recognizer = NoneRecognizer::<StringType>::new();
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::new(), ranges: BTreeMap::new() }, &HashMap::new()));
+        let recognizer = NoneRecognizer;
+        let data_type = StringType;
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: String::new(), ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
-            &HashMap::new()
+            &HashMap::new(),
+            &data_type
         ));
     }
 
@@ -300,62 +297,67 @@ mod test {
             .build()
             .record_specs
         ;
-        let recognizer = IdFieldRecognizer::<BinaryType>::new();
-        let recognizer_with_field = IdFieldRecognizer::<BinaryType>::new_with_field("field1");
+        let recognizer = IdFieldRecognizer::new();
+        let recognizer_with_field = IdFieldRecognizer::new_with_field("field1");
         let mut data = BTreeMap::new();
+        let data_type = BinaryType;
 
         data.insert("$id".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
         data.insert("$id".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
         data.insert("$id".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
         data.insert("field1".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
         data.remove(&"$id".to_string());
 
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
         data.insert("field1".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
         data.insert("field1".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
 
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "ba".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs));
-        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "ba".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
     }
 
     #[test]
     fn recognizer_reference() {
-        let recognizer = NoneRecognizer::<BinaryType>::new();
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new()));
+        let recognizer = NoneRecognizer;
+        let data_type = BinaryType;
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut Vec::new()),
-            &HashMap::new()
+            &HashMap::new(),
+            &data_type
         ));
-        let recognizer = NoneRecognizer::<StringType>::new();
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new()));
+        let recognizer = NoneRecognizer;
+        let data_type = StringType;
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut Vec::new()),
-            &HashMap::new()
+            &HashMap::new(),
+            &data_type
         ));
     }
 

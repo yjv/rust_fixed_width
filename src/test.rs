@@ -3,7 +3,7 @@ use padder::{Padder, UnPadder, Error as PaddingError};
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::Read;
-use record::{Data, DataRanges, WriteDataHolder, DataType};
+use record::{Data, DataRanges, WriteDataHolder, ReadableDataType, WritableDataType};
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a, T: DataRanges + 'a = (), U: WriteDataHolder + 'a = Vec<u8>> {
@@ -30,8 +30,8 @@ impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a> MockRecognizer<'a, T, U> {
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: DataType> LineRecordSpecRecognizer<U> for MockRecognizer<'a, T> {
-    fn recognize_for_line<'b, V: Read + 'b>(&self, _: LineBuffer<'b, V>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
+impl<'a, T: DataRanges + 'a, U: ReadableDataType> LineRecordSpecRecognizer<U> for MockRecognizer<'a, T> {
+    fn recognize_for_line<'b, V: Read + 'b>(&self, _: LineBuffer<'b, V>, record_specs: &HashMap<String, RecordSpec>, _: &'b U) -> Result<String, ::recognizer::Error> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
             {
@@ -43,10 +43,10 @@ impl<'a, T: DataRanges + 'a, U: DataType> LineRecordSpecRecognizer<U> for MockRe
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a, V: DataType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T, U> {
-    fn recognize_for_data<'b, W: DataRanges + 'b, X: WriteDataHolder + 'b>(&self, data: &Data<W, X>, record_specs: &HashMap<String, RecordSpec>) -> Result<String, ::recognizer::Error> {
+impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a, V: WritableDataType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T, U> {
+    fn recognize_for_data<'b, W: DataRanges + 'b>(&self, data: &Data<W, V::DataHolder>, record_specs: &HashMap<String, RecordSpec>, _: &'b V) -> Result<String, ::recognizer::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
-            if *expected_data as *const Data<T, U> == data as *const Data<W, X> as *const Data<T, U>
+            if *expected_data as *const Data<T, U> == data as *const Data<W, V::DataHolder> as *const Data<T, U>
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
                     return (*return_value).clone();
@@ -82,8 +82,8 @@ impl MockPadder {
     }
 }
 
-impl<T: DataType> Padder<T> for MockPadder {
-    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<(), PaddingError> {
+impl<T: WritableDataType> Padder<T> for MockPadder {
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), PaddingError> {
         for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
             if *expected_data == data
                 && expected_length == length
@@ -103,8 +103,8 @@ impl<T: DataType> Padder<T> for MockPadder {
     }
 }
 
-impl<T: DataType> UnPadder<T> for MockPadder {
-    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<(), PaddingError> {
+impl<T: ReadableDataType> UnPadder<T> for MockPadder {
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), PaddingError> {
         for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
             if *expected_data == data
                 && &expected_padding[..] == padding

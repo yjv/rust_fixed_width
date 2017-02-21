@@ -30,30 +30,39 @@ pub trait ReadDataHolder where Self: Sized {
     fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
 }
 
-pub trait DataType {
-    type ReadDataHolder: ReadDataHolder;
-    type WriteDataHolder: WriteDataHolder;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError>;
+pub trait ReadableDataType {
+    type DataHolder: WriteDataHolder;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+}
+
+pub trait WritableDataType {
+    type DataHolder: WriteDataHolder;
 }
 
 pub struct BinaryType;
 
-impl DataType for BinaryType {
-    type ReadDataHolder = Vec<u8>;
-    type WriteDataHolder = Vec<u8>;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError> {
+impl ReadableDataType for BinaryType {
+    type DataHolder = Vec<u8>;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
         Ok(data)
     }
 }
 
+impl WritableDataType for BinaryType {
+    type DataHolder = Vec<u8>;
+}
+
 pub struct StringType;
 
-impl DataType for StringType {
-    type ReadDataHolder = String;
-    type WriteDataHolder = String;
-    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::ReadDataHolder, DataHolderError> {
+impl ReadableDataType for StringType {
+    type DataHolder = String;
+    fn new_data_holder(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
         Ok(String::from_utf8(data)?)
     }
+}
+
+impl WritableDataType for StringType {
+    type DataHolder = String;
 }
 
 pub trait WriteDataHolder {
@@ -229,6 +238,38 @@ impl<'a, T: DataRanges> FromIterator<(&'a str, Vec<u8>)> for Data<T, Vec<u8>> {
     }
 }
 
+impl<T: DataRanges> FromIterator<(String, String)> for Data<T, String> {
+    fn from_iter<U: IntoIterator<Item = (String, String)>>(iter: U) -> Self {
+        let mut ranges = T::new();
+        let mut data = String::new();
+        let mut current_index = 0;
+
+        for (name, field) in iter {
+            ranges.insert(&name, current_index..current_index + field.len());
+            data.push_str(&field);
+            current_index += field.len();
+        }
+
+        Data { data: data, ranges: ranges }
+    }
+}
+
+impl<'a, T: DataRanges> FromIterator<(&'a str, String)> for Data<T, String> {
+    fn from_iter<U: IntoIterator<Item = (&'a str, String)>>(iter: U) -> Self {
+        let mut ranges = T::new();
+        let mut data = String::new();
+        let mut current_index = 0;
+
+        for (name, field) in iter {
+            ranges.insert(name, current_index..current_index + field.len());
+            data.push_str(&field);
+            current_index += field.len();
+        }
+
+        Data { data: data, ranges: ranges }
+    }
+}
+
 impl DataRanges for BTreeMap<String, Range<usize>> {
     fn new() -> Self {
         BTreeMap::new()
@@ -384,6 +425,18 @@ impl From<HashMap<String, Vec<u8>>> for Data<HashMap<String, Range<usize>>, Vec<
 
 impl From<BTreeMap<String, Vec<u8>>> for Data<BTreeMap<String, Range<usize>>, Vec<u8>> {
     fn from(data: BTreeMap<String, Vec<u8>>) -> Self {
+        data.into_iter().collect()
+    }
+}
+
+impl From<HashMap<String, String>> for Data<HashMap<String, Range<usize>>, String> {
+    fn from(data: HashMap<String, String>) -> Self {
+        data.into_iter().collect()
+    }
+}
+
+impl From<BTreeMap<String, String>> for Data<BTreeMap<String, Range<usize>>, String> {
+    fn from(data: BTreeMap<String, String>) -> Self {
         data.into_iter().collect()
     }
 }

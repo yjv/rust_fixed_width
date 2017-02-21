@@ -1,6 +1,6 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use record::{DataType, BinaryType};
+use record::{ReadableDataType, WritableDataType, BinaryType};
 
 #[derive(Debug)]
 pub struct Error {
@@ -47,23 +47,23 @@ impl Display for Error {
 
 type Result<T> = ::std::result::Result<T, Error>;
 
-pub trait Padder<T: DataType = BinaryType> {
-    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
+pub trait Padder<T: WritableDataType> {
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: DataType> Padder<U> for &'a T where T: 'a + Padder<U> {
-    fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
-        (**self).pad(data, length, padding, direction, destination)
+impl<'a, T, U: WritableDataType> Padder<U> for &'a T where T: 'a + Padder<U> {
+    fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
+        (**self).pad(data, length, padding, direction, destination, data_type)
     }
 }
 
-pub trait UnPadder<T: DataType = BinaryType> {
-    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()>;
+pub trait UnPadder<T: ReadableDataType> {
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: DataType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
-    fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>) -> Result<()> {
-        (**self).unpad(data, padding, direction, destination)
+impl<'a, T, U: ReadableDataType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
+    fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
+        (**self).unpad(data, padding, direction, destination, data_type)
     }
 }
 
@@ -108,7 +108,7 @@ impl From<PaddingError> for Error {
 }
 
 impl Padder<BinaryType> for DefaultPadder {
-    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a BinaryType) -> Result<()> {
         if data.len() >= length {
             destination.extend_from_slice(&data[..length]);
             return Ok(());
@@ -126,7 +126,7 @@ impl Padder<BinaryType> for DefaultPadder {
 }
 
 impl UnPadder<BinaryType> for DefaultPadder {
-    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a BinaryType) -> Result<()> {
         let mut index = 0;
         let mut iter = data.chunks(padding.len());
 
@@ -149,23 +149,17 @@ impl UnPadder<BinaryType> for DefaultPadder {
     }
 }
 
-pub struct IdentityPadder<T: DataType = BinaryType>(::std::marker::PhantomData<T>);
+pub struct IdentityPadder;
 
-impl <T: DataType> IdentityPadder<T> {
-    pub fn new() -> Self {
-        IdentityPadder(::std::marker::PhantomData)
-    }
-}
-
-impl<T: DataType> Padder<T> for IdentityPadder<T> {
-    fn pad<'a>(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+impl<T: WritableDataType> Padder<T> for IdentityPadder {
+    fn pad<'a>(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
 }
 
-impl<T: DataType> UnPadder<T> for IdentityPadder<T> {
-    fn unpad<'a>(&self, data: &[u8], _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>) -> Result<()> {
+impl<T: ReadableDataType> UnPadder<T> for IdentityPadder {
+    fn unpad<'a>(&self, data: &[u8], _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
@@ -175,62 +169,69 @@ impl<T: DataType> UnPadder<T> for IdentityPadder<T> {
 mod test {
     use super::*;
     use spec::*;
-    use record::BinaryType;
+    use record::{BinaryType, StringType};
 
     #[test]
     fn default_padder() {
         let padder = DefaultPadder;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        let data_type = BinaryType;
+        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
         assert_eq!("qwer333333".as_bytes().to_owned(), destination);
         destination.clear();
         let data = "qwer".as_bytes();
-        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_result!(Ok(()), padder.pad(data, 10, "33".as_bytes(), PaddingDirection::Left, &mut destination, &data_type));
         assert_eq!("333333qwer".as_bytes().to_owned(), destination);
         destination.clear();
         let data = "qwer333333".as_bytes();
-        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
         assert_eq!("qwer".as_bytes().to_owned(), destination);
         destination.clear();
         let data = "333333qwer".as_bytes();
-        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination, &data_type));
         assert_eq!("qwer".as_bytes().to_owned(), destination);
         destination.clear();
         let data = "qwer333333".as_bytes();
-        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Left, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
         destination.clear();
         let data = "333333qwer".as_bytes();
-        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination));
+        assert_result!(Ok(()), padder.unpad(data, "33".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
     }
 
     #[test]
     fn identity_padder() {
-        let padder = IdentityPadder::<BinaryType>::new();
+        let padder = IdentityPadder;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));
+        let data_type = BinaryType;
+        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
         destination.clear();
-        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_result!(Ok(()), padder.pad(data, 10, "3".as_bytes(), PaddingDirection::Left, &mut destination, &data_type));
+        assert_eq!(data.to_owned(), destination);
+        let data_type = StringType;
+        destination.clear();
+        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
         destination.clear();
-        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Right, &mut destination));
-        assert_eq!(data.to_owned(), destination);
-        destination.clear();
-        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Left, &mut destination));
+        assert_result!(Ok(()), padder.unpad(data, "3".as_bytes(), PaddingDirection::Left, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
     }
 
     #[test]
     fn padder_reference() {
-        let padder = IdentityPadder::<BinaryType>::new();
+        let padder = IdentityPadder;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        assert_result!(Ok(()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination));
-        assert_result!(Ok(()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right, &mut destination));
+        let data_type = BinaryType;
+        assert_result!(Ok(()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
+        assert_result!(Ok(()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
+        let data_type = StringType;
+        assert_result!(Ok(()), Padder::pad(&&padder, data, 10, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
+        assert_result!(Ok(()), UnPadder::unpad(&&padder, data, "3".as_bytes(), PaddingDirection::Right, &mut destination, &data_type));
     }
 
     #[test]
