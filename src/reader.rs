@@ -5,9 +5,9 @@ use std::io::Read;
 use std::borrow::Borrow;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, PositionalError};
-use record::{Data, DataRanges, ReadableDataType, BinaryType};
+use record::{Data, DataRanges, ReadType, BinaryType};
 
-pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadableDataType> {
+pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
     un_padder: T,
     recognizer: U,
     specs: V,
@@ -15,7 +15,7 @@ pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<Hash
     data_type: W
 }
 
-impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadableDataType> Reader<T, U, V, W> {
+impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> Reader<T, U, V, W> {
     pub fn read_field<'a, X, Y>(&mut self, reader: &'a mut X, record_name: &'a str, name: &'a str, field: Y) -> Result<Vec<u8>>
         where X: 'a + Read,
               Y: Into<Option<Vec<u8>>>
@@ -132,7 +132,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
     }
 }
 
-pub struct ReaderBuilder<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadableDataType> {
+pub struct ReaderBuilder<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
     un_padder: T,
     recognizer: U,
     specs: Option<V>,
@@ -150,7 +150,7 @@ impl<V: Borrow<HashMap<String, RecordSpec>>> ReaderBuilder<IdentityPadder, NoneR
     }
 }
 
-impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadableDataType> ReaderBuilder<T, U, V, W> {
+impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> ReaderBuilder<T, U, V, W> {
     pub fn from_reader(reader: Reader<T, U, V, W>) -> Self {
         ReaderBuilder {
             un_padder: reader.un_padder,
@@ -183,7 +183,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         self
     }
 
-    pub fn with_data_type<X: ReadableDataType>(self, data_type: X) -> ReaderBuilder<T, U, V, X>
+    pub fn with_data_type<X: ReadType>(self, data_type: X) -> ReaderBuilder<T, U, V, X>
         where T: UnPadder<X>,
               U: LineRecordSpecRecognizer<X>
     {
@@ -206,13 +206,13 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
     }
 }
 
-pub struct Iter<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadableDataType + 'a, Y: DataRanges + 'a> {
+pub struct Iter<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: DataRanges + 'a> {
     source: &'a mut T,
     reader: &'a mut Reader<U, V, W, X>,
     marker: ::std::marker::PhantomData<Y>
 }
 
-impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadableDataType + 'a, Y: DataRanges + 'a> Iterator for Iter<'a, T, U, V, W, X, Y> {
+impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: DataRanges + 'a> Iterator for Iter<'a, T, U, V, W, X, Y> {
     type Item = PositionalResult<Record<Y, X::DataHolder>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(self.source, None, None) {
@@ -222,13 +222,13 @@ impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a,
     }
 }
 
-pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadableDataType, Y: DataRanges> {
+pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: DataRanges> {
     source: T,
     reader: Reader<U, V, W, X>,
     marker: ::std::marker::PhantomData<Y>
 }
 
-impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadableDataType, Y: DataRanges> Iterator for IntoIter<T, U, V, W, X, Y> {
+impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: DataRanges> Iterator for IntoIter<T, U, V, W, X, Y> {
     type Item = PositionalResult<Record<Y, X::DataHolder>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(&mut self.source, None, None) {

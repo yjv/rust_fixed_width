@@ -3,7 +3,7 @@ use spec::RecordSpec;
 use std::io::{Read, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
-use record::{Data, DataRanges, ReadableDataType, WritableDataType};
+use record::{Data, DataRanges, ReadType, WriteType};
 
 #[derive(Debug)]
 pub enum Error {
@@ -108,21 +108,21 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
     }
 }
 
-pub trait LineRecordSpecRecognizer<T: ReadableDataType> {
+pub trait LineRecordSpecRecognizer<T: ReadType> {
     fn recognize_for_line<'a, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
 }
 
-impl<'a, T, U: ReadableDataType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
+impl<'a, T, U: ReadType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
     fn recognize_for_line<'b, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
         (**self).recognize_for_line(buffer, record_specs, data_type)
     }
 }
 
-pub trait DataRecordSpecRecognizer<T: WritableDataType> {
+pub trait DataRecordSpecRecognizer<T: WriteType> {
     fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, data_type: &'a T) -> Result<String>;
 }
 
-impl<'a, T, U: WritableDataType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
+impl<'a, T, U: WriteType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
     fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, data_type: &'b U) -> Result<String> {
         (**self).recognize_for_data(data, record_specs, data_type)
     }
@@ -142,7 +142,7 @@ impl IdFieldRecognizer {
     }
 }
 
-impl<T: ReadableDataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
+impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
     fn recognize_for_line<'a, U: Read + 'a>(&self, mut buffer: LineBuffer<'a, U>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
@@ -165,7 +165,7 @@ impl<T: ReadableDataType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
     }
 }
 
-impl<T: WritableDataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
+impl<T: WriteType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
     fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
@@ -185,13 +185,13 @@ impl<T: WritableDataType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
 
 pub struct NoneRecognizer;
 
-impl<T: ReadableDataType> LineRecordSpecRecognizer<T> for NoneRecognizer {
+impl<T: ReadType> LineRecordSpecRecognizer<T> for NoneRecognizer {
     fn recognize_for_line<'a, U: Read + 'a>(&self, _: LineBuffer<'a, U>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
 
-impl<T: WritableDataType> DataRecordSpecRecognizer<T> for NoneRecognizer {
+impl<T: WriteType> DataRecordSpecRecognizer<T> for NoneRecognizer {
     fn recognize_for_data<'a, U: DataRanges + 'a>(&self, _: &Data<U, T::DataHolder>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }

@@ -30,38 +30,38 @@ pub trait ReadDataHolder {
     fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
 }
 
-pub trait ReadableDataType {
+pub trait ReadType {
     type DataHolder: ReadDataHolder;
     fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, ranges: &'a T) -> Result<Self::DataHolder, DataHolderError>;
 }
 
-pub trait WritableDataType {
+pub trait WriteType {
     type DataHolder: WriteDataHolder;
 }
 
 pub struct BinaryType;
 
-impl ReadableDataType for BinaryType {
+impl ReadType for BinaryType {
     type DataHolder = Vec<u8>;
     fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, _: &'a T) -> Result<Self::DataHolder, DataHolderError> {
         Ok(data)
     }
 }
 
-impl WritableDataType for BinaryType {
+impl WriteType for BinaryType {
     type DataHolder = Vec<u8>;
 }
 
 pub struct StringType;
 
-impl ReadableDataType for StringType {
+impl ReadType for StringType {
     type DataHolder = String;
     fn new_data_holder<'a, T: DataRanges + 'a>(&self, data: Vec<u8>, _: &'a T) -> Result<Self::DataHolder, DataHolderError> {
         Ok(String::from_utf8(data)?)
     }
 }
 
-impl WritableDataType for StringType {
+impl WriteType for StringType {
     type DataHolder = String;
 }
 

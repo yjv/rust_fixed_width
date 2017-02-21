@@ -1,6 +1,6 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use record::{ReadableDataType, WritableDataType, BinaryType};
+use record::{ReadType, WriteType, BinaryType};
 
 #[derive(Debug)]
 pub struct Error {
@@ -47,21 +47,21 @@ impl Display for Error {
 
 type Result<T> = ::std::result::Result<T, Error>;
 
-pub trait Padder<T: WritableDataType> {
+pub trait Padder<T: WriteType> {
     fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: WritableDataType> Padder<U> for &'a T where T: 'a + Padder<U> {
+impl<'a, T, U: WriteType> Padder<U> for &'a T where T: 'a + Padder<U> {
     fn pad<'b>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
         (**self).pad(data, length, padding, direction, destination, data_type)
     }
 }
 
-pub trait UnPadder<T: ReadableDataType> {
+pub trait UnPadder<T: ReadType> {
     fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, data_type: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: ReadableDataType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
+impl<'a, T, U: ReadType> UnPadder<U> for &'a T where T: 'a + UnPadder<U> {
     fn unpad<'b>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'b mut Vec<u8>, data_type: &'b U) -> Result<()> {
         (**self).unpad(data, padding, direction, destination, data_type)
     }
@@ -151,14 +151,14 @@ impl UnPadder<BinaryType> for DefaultPadder {
 
 pub struct IdentityPadder;
 
-impl<T: WritableDataType> Padder<T> for IdentityPadder {
+impl<T: WriteType> Padder<T> for IdentityPadder {
     fn pad<'a>(&self, data: &[u8], _: usize, _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
 }
 
-impl<T: ReadableDataType> UnPadder<T> for IdentityPadder {
+impl<T: ReadType> UnPadder<T> for IdentityPadder {
     fn unpad<'a>(&self, data: &[u8], _: &[u8], _: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())

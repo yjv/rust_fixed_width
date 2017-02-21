@@ -5,16 +5,16 @@ use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record};
-use record::{Data, DataRanges, WriteDataHolder, WritableDataType, BinaryType};
+use record::{Data, DataRanges, WriteDataHolder, WriteType, BinaryType};
 
-pub struct Writer<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WritableDataType> {
+pub struct Writer<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> {
     padder: T,
     recognizer: U,
     specs: V,
     data_type: W
 }
 
-impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WritableDataType> Writer<T, U, V, W> {
+impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> Writer<T, U, V, W> {
     pub fn write_field<'a, X>(&self, writer: &'a mut X, value: &'a [u8], record_name: &'a str, name: &'a str) -> Result<()>
         where X: 'a + Write
     {
@@ -85,7 +85,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
     }
 }
 
-pub struct WriterBuilder<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WritableDataType> {
+pub struct WriterBuilder<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> {
     padder: T,
     recognizer: U,
     specs: Option<V>,
@@ -103,7 +103,7 @@ impl<V: Borrow<HashMap<String, RecordSpec>>> WriterBuilder<IdentityPadder, NoneR
     }
 }
 
-impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WritableDataType> WriterBuilder<T, U, V, W> {
+impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> WriterBuilder<T, U, V, W> {
     pub fn with_padder<X: Padder<W>>(self, padder: X) -> WriterBuilder<X, U, V, W> {
         WriterBuilder {
             padder: padder,
@@ -127,7 +127,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
         self
     }
 
-    pub fn with_data_type<X: WritableDataType>(self, data_type: X) -> WriterBuilder<T, U, V, X>
+    pub fn with_data_type<X: WriteType>(self, data_type: X) -> WriterBuilder<T, U, V, X>
         where T: Padder<X>,
               U: DataRecordSpecRecognizer<X>
     {
