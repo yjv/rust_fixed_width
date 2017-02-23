@@ -6,12 +6,12 @@ use std::io::Read;
 use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
 
 #[derive(Debug)]
-pub struct MockRecognizer<'a, T: DataRanges + 'a = (), U: WriteDataHolder + 'a = Vec<u8>> {
+pub struct MockRecognizer<'a, T: DataRanges + 'a = ()> {
     line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>,
-    data_recognize_calls: Vec<(&'a Data<T, U>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
+    data_recognize_calls: Vec<(&'a Data<T, &'a [u8]>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
 }
 
-impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a> MockRecognizer<'a, T, U> {
+impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
     pub fn new() -> Self {
         MockRecognizer {
             data_recognize_calls: Vec::new(),
@@ -24,7 +24,7 @@ impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a> MockRecognizer<'a, T, U> {
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: &'a Data<T, U>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, data: &'a Data<T, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
         self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
@@ -43,10 +43,10 @@ impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRe
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WriteDataHolder + 'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T, U> {
-    fn recognize_for_data<'b, W: DataRanges + 'b>(&self, data: &Data<W, V::DataHolder>, record_specs: &HashMap<String, RecordSpec>, _: &'b V) -> Result<String, ::recognizer::Error> {
+impl<'a, T: DataRanges + 'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T> {
+    fn recognize_for_data<'b, W: DataRanges + 'b>(&self, data: &'b Data<W, &'b [u8]>, record_specs: &HashMap<String, RecordSpec>, _: &'b V) -> Result<String, ::recognizer::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
-            if *expected_data as *const Data<T, U> == data as *const Data<W, V::DataHolder> as *const Data<T, U>
+            if *expected_data as *const Data<T, &'a [u8]> == data as *const Data<W, &'b [u8]> as *const Data<T, &'b [u8]>
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
                     return (*return_value).clone();

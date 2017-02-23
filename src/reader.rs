@@ -3,9 +3,10 @@ use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::Read;
 use std::borrow::Borrow;
+use std::ops::Range;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, PositionalError};
-use record::{Data, DataRanges, ReadType, BinaryType};
+use record::{Data, DataRanges, MutableDataRanges, ReadType, BinaryType};
 
 pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
     un_padder: T,
@@ -45,10 +46,10 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         where X: 'a + Read,
               Y: Into<Option<&'a str>>,
               Z: Into<Option<Vec<u8>>>,
-              A: DataRanges
+              A: MutableDataRanges
     {
         let mut line = line.into().unwrap_or_else(|| Vec::new());
-        let mut reader = RewindableReader::new(reader);
+        let mut reader = RememberingReader::new(reader);
         let record_name = record_name
             .into()
             .map_or_else(
@@ -61,7 +62,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             .get(&record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
         ;
-        reader.rewind();
+        reader.restart();
         let mut ranges = A::new();
 
         self.buffer.clear();
@@ -85,7 +86,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
 
         Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.clone()))?;
 
-        Ok(Record { data: Data { data: self.read_type.new_data_holder(line, &ranges)?, ranges: ranges }, name: record_name })
+        Ok(Record { data: self.read_type.upcast_data(Data { data: line, ranges: ranges })?, name: record_name })
     }
 
     pub fn absorb_line_ending<'a, Y: 'a + Read>(&mut self, reader: &'a mut Y, line_ending: &[u8]) -> Result<()> {
@@ -115,7 +116,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         }
     }
 
-    pub fn iter<'a, X: 'a + Read, Y: DataRanges + 'a>(&'a mut self, reader: &'a mut X) -> Iter<'a, X, T, U, V, W, Y> {
+    pub fn iter<'a, X: 'a + Read, Y: MutableDataRanges + 'a>(&'a mut self, reader: &'a mut X) -> Iter<'a, X, T, U, V, W, Y> {
         Iter {
             source: reader,
             reader: self,
@@ -123,7 +124,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         }
     }
 
-    pub fn into_iter<X: Read, Y: DataRanges>(self, reader: X) -> IntoIter<X, T, U, V, W, Y> {
+    pub fn into_iter<X: Read, Y: MutableDataRanges>(self, reader: X) -> IntoIter<X, T, U, V, W, Y> {
         IntoIter {
             source: reader,
             reader: self,
@@ -206,13 +207,13 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
     }
 }
 
-pub struct Iter<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: DataRanges + 'a> {
+pub struct Iter<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: MutableDataRanges + 'a> {
     source: &'a mut T,
     reader: &'a mut Reader<U, V, W, X>,
     marker: ::std::marker::PhantomData<Y>
 }
 
-impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: DataRanges + 'a> Iterator for Iter<'a, T, U, V, W, X, Y> {
+impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: MutableDataRanges + 'a> Iterator for Iter<'a, T, U, V, W, X, Y> {
     type Item = PositionalResult<Record<Y, X::DataHolder>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(self.source, None, None) {
@@ -222,13 +223,13 @@ impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a,
     }
 }
 
-pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: DataRanges> {
+pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: MutableDataRanges> {
     source: T,
     reader: Reader<U, V, W, X>,
     marker: ::std::marker::PhantomData<Y>
 }
 
-impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: DataRanges> Iterator for IntoIter<T, U, V, W, X, Y> {
+impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: MutableDataRanges> Iterator for IntoIter<T, U, V, W, X, Y> {
     type Item = PositionalResult<Record<Y, X::DataHolder>>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.reader.read_record(&mut self.source, None, None) {
@@ -238,26 +239,26 @@ impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<
     }
 }
 
-pub struct RewindableReader<T: Read> {
+pub struct RememberingReader<T: Read> {
     inner: T,
     pos: usize,
     buf: Vec<u8>
 }
 
-impl<T: Read> RewindableReader<T> {
+impl<T: Read> RememberingReader<T> {
     pub fn new(reader: T) -> Self {
-        RewindableReader {
+        RememberingReader {
             inner: reader,
             pos: 0,
             buf: Vec::new()
         }
     }
 
-    pub fn rewind(&mut self) {
+    pub fn restart(&mut self) {
         self.pos = 0;
     }
 
-    pub fn reset(&mut self) {
+    pub fn forget(&mut self) {
         self.buf = self.buf.split_off(self.pos);
         self.pos = 0;
     }
@@ -267,9 +268,22 @@ impl<T: Read> RewindableReader<T> {
     pub fn get_ref(&self) -> &T { &self.inner }
 
     pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
+
+    pub fn read_range(&mut self, range: Range<usize>) -> ::std::result::Result<Option<&[u8]>, ::std::io::Error> {
+        if self.buf.len() < range.end {
+            let amount = self.inner.by_ref().take((range.end - self.buf.len()) as u64).read(&mut self.buf)?;
+            self.pos += amount;
+        }
+
+        if self.buf.len() >= range.end {
+            Ok(Some(&self.buf[range]))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
-impl<T: Read> Read for RewindableReader<T> {
+impl<T: Read> Read for RememberingReader<T> {
     fn read(&mut self, buf: &mut [u8]) -> ::std::io::Result<usize> {
         let mut already_read = 0;
 
@@ -630,22 +644,22 @@ mod test {
     fn rewindable_reader() {
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut bytes = string.as_bytes();
-        let mut buf = RewindableReader::new(&mut bytes);
+        let mut buf = RememberingReader::new(&mut bytes);
         let mut data = [0; 45];
         assert_result!(
             Ok(45),
             buf.read(&mut data)
         );
         assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
-        buf.rewind();
+        buf.restart();
         let mut data = [0; 30];
         assert_result!(
             Ok(30),
             buf.read(&mut data)
         );
         assert_eq!(&string[..30], ::std::str::from_utf8(&data).unwrap());
-        buf.reset();
-        buf.rewind();
+        buf.forget();
+        buf.restart();
         let mut data = [0; 45];
         assert_result!(
             Ok(45),
@@ -654,13 +668,13 @@ mod test {
         assert_eq!(&string[30..75], ::std::str::from_utf8(&data).unwrap());
 
         let mut bytes = string.as_bytes();
-        let mut buf = RewindableReader::new(&mut bytes);
+        let mut buf = RememberingReader::new(&mut bytes);
         assert_result!(
             Ok(45),
             buf.read(&mut data)
         );
         assert_eq!(&string[..45], ::std::str::from_utf8(&data).unwrap());
-        buf.rewind();
+        buf.restart();
         assert_result!(
             Ok(45),
             buf.read(&mut data)
@@ -671,14 +685,14 @@ mod test {
             buf.read(&mut data)
         );
         assert_eq!(&string[45..], ::std::str::from_utf8(&data).unwrap());
-        buf.rewind();
+        buf.restart();
         let mut data = String::new();
         assert_result!(
             Ok(90),
             buf.read_to_string(&mut data)
         );
         assert_eq!(string, data);
-        buf.rewind();
+        buf.restart();
         let mut data = String::new();
         assert_result!(
             Ok(90),

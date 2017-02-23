@@ -119,11 +119,11 @@ impl<'a, T, U: ReadType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a 
 }
 
 pub trait DataRecordSpecRecognizer<T: WriteType> {
-    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, write_type: &'a T) -> Result<String>;
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &'a Data<U, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, write_type: &'a T) -> Result<String>;
 }
 
 impl<'a, T, U: WriteType + 'a> DataRecordSpecRecognizer<U> for &'a T where T: 'a + DataRecordSpecRecognizer<U> {
-    fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'b U) -> Result<String> {
+    fn recognize_for_data<'b, V: DataRanges + 'b>(&self, data: &'b Data<V, &'b [u8]>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'b U) -> Result<String> {
         (**self).recognize_for_data(data, record_specs, write_type)
     }
 }
@@ -166,11 +166,11 @@ impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
 }
 
 impl<T: WriteType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
-    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &Data<U, T::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, data: &'a Data<U, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    if let Some(data) = data.get_writable_data(&self.id_field) {
+                    if let Some(data) = data.get_write_data(&self.id_field) {
                         if data == &default[..] {
                             return Ok(name.clone());
                         }
@@ -192,7 +192,7 @@ impl<T: ReadType> LineRecordSpecRecognizer<T> for NoneRecognizer {
 }
 
 impl<T: WriteType> DataRecordSpecRecognizer<T> for NoneRecognizer {
-    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, _: &Data<U, T::DataHolder>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
+    fn recognize_for_data<'a, U: DataRanges + 'a>(&self, _: &'a Data<U, &'a [u8]>, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Result<String> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -212,7 +212,7 @@ mod test {
     fn none_recognizer() {
         let recognizer = NoneRecognizer;
         let data_type = BinaryType;
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: Vec::<u8>::new(), ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: &Vec::<u8>::new()[..], ranges: &BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
             &HashMap::new(),
@@ -220,7 +220,7 @@ mod test {
         ));
         let recognizer = NoneRecognizer;
         let data_type = StringType;
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: String::new(), ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: &Vec::<u8>::new()[..], ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
             LineBuffer::new(&mut empty(), &mut Vec::new()),
             &HashMap::new(),

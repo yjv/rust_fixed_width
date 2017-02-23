@@ -40,7 +40,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
     {
         let data_and_record_name = record.into();
         let (data, record_name) = (
-            data_and_record_name.0,
+            self.write_type.downcast_data(data_and_record_name.0)?,
             record_name.into().or(data_and_record_name.1)
         );
         let record_name = record_name
@@ -58,7 +58,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             self._write_field(
                 writer,
                 field_spec,
-                data.get_writable_data(name)
+                data.get_write_data(name)
                     .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                     .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?
             ).map_err(|e| (e, record_name.clone(), name.clone()))?;
@@ -149,13 +149,13 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WriteDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Data<T, U> {
+impl<'a, T: DataRanges + 'a, U> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Data<T, U> {
     fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
         (self, None)
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: WriteDataHolder> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Record<T, U> {
+impl<'a, T: DataRanges + 'a, U> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a Record<T, U> {
     fn into(self) -> (&'a Data<T, U>, Option<&'a str>) {
         (&self.data, Some(&self.name[..]))
     }
