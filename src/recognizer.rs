@@ -303,32 +303,32 @@ mod test {
         let data_type = BinaryType;
 
         data.insert("$id".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         data.insert("$id".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         data.insert("$id".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         data.insert("field1".to_string(), "bar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
         data.remove(&"$id".to_string());
 
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         data.insert("field1".to_string(), "foo".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         data.insert("field1".to_string(), "foobar".as_bytes().to_owned());
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&data.clone().into(), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&data.clone().into(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
@@ -343,7 +343,7 @@ mod test {
     fn recognizer_reference() {
         let recognizer = NoneRecognizer;
         let data_type = BinaryType;
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new(), &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &Data::<HashMap<_, _>, _>::new().internal_references(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut Vec::new()),
@@ -352,7 +352,7 @@ mod test {
         ));
         let recognizer = NoneRecognizer;
         let data_type = StringType;
-        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &BTreeMap::new().into(), &HashMap::new(), &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &Data::<HashMap<_, _>, _>::new().internal_references(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
             LineBuffer::new(&mut empty(), &mut Vec::new()),

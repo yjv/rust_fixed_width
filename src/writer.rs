@@ -227,9 +227,9 @@ mod test {
         padder.add_pad_call("hello2".as_bytes().to_owned(), 36, "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok(string[9..45].as_bytes().to_owned()));
         let data = [("field1".to_string(), "hello".as_bytes().to_owned()),
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
-            .iter().cloned().collect();
+            .iter().cloned().collect::<Data<_, _>>();
         let mut recognizer = MockRecognizer::<BTreeMap<String, Range<usize>>>::new();
-        recognizer.add_data_recognize_call(&data, &spec.record_specs, Ok("record1".to_string()));
+        recognizer.add_data_recognize_call(data.internal_references(), &spec.record_specs, Ok("record1".to_string()));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
         writer.write_record(&mut buf, &data, None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());

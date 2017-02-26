@@ -61,7 +61,7 @@ impl ReadType for BinaryType {
 impl WriteType for BinaryType {
     type DataHolder = Vec<u8>;
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError> {
-        Ok(Data { ranges: &data.ranges, data: &data.data[..] })
+        Ok(data.internal_references())
     }
 }
 
@@ -156,9 +156,19 @@ impl<T: DataRanges, U: Index<Range<usize>>> Data<T, U> {
     }
 }
 
+impl<'a, T: DataRanges + 'a> Data<T, Vec<u8>> {
+    pub fn internal_references(&'a self) -> Data<&'a T, &'a [u8]> {
+        Data { ranges: &self.ranges, data: &self.data[..] }
+    }
+}
+
 impl<'a, T: DataRanges + 'a> Data<T, &'a [u8]> {
     pub fn get_write_data<'b>(&'b self, name: &'b str) -> Option<&'b [u8]> {
         self.ranges.get(name).map(|range| &self.data[range])
+    }
+
+    pub fn internal_references(&'a self) -> Data<&'a T, &'a [u8]> {
+        Data { ranges: &self.ranges, data: &self.data[..] }
     }
 }
 
