@@ -161,27 +161,27 @@ impl<'a, T: DataRanges + 'a, U> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a 
     }
 }
 
-pub trait FieldWriteProcessor<T: WriteType> {
-    fn process<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
+pub trait FieldFormatter<T: WriteType> {
+    fn format<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
 }
 
 pub trait DataWriter<T: WriteType> {
     fn write<'a, U: Write + 'a>(&mut self, writer: &'a mut U, source: &'a [u8], amount: usize, write_type: &'a T) -> Result<()>;
 }
 
-pub struct FieldWriter<T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> {
+pub struct FieldWriter<T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> {
     buffer: Vec<u8>,
     data_writer: T,
     post_processor: U,
     write_type: V
 }
 
-impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> FieldWriter<T, U, V> {
+impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> FieldWriter<T, U, V> {
     pub fn write<'a, W>(&mut self, writer: &'a mut W, spec: &'a FieldSpec, data: &'a [u8]) -> Result<usize>
         where W: Write + 'a
 
     {
-        self.post_processor.process(data, spec, &mut self.buffer, &self.write_type)?;
+        self.post_processor.format(data, spec, &mut self.buffer, &self.write_type)?;
         self.data_writer.write(writer, &self.buffer[..], spec.length, &self.write_type)?;
         let amount = self.buffer.len();
         self.buffer.clear();
@@ -189,12 +189,14 @@ impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> FieldWriter<T, 
     }
 }
 
-
-pub struct RecordWriter<T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> {
-    field_writer: FieldWriter<T, U, V>
+pub struct RecordWriter<T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> {
+    buffer: Vec<u8>,
+    data_writer: T,
+    post_processor: U,
+    write_type: V
 }
 
-impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> RecordWriter<T, U, V> {
+impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> RecordWriter<T, U, V> {
     pub fn write<'a, W, X>(&mut self, writer: &'a mut W, spec: &'a RecordSpec, data: &'a Data<X, V::DataHolder>) -> PositionalResult<()>
         where W: Write + 'a,
               X: DataRanges + 'a
@@ -202,11 +204,13 @@ impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> RecordWriter<T,
         let (ranges, data) = (&data.ranges, &data.data);
 
         for (name, field_spec) in &spec.field_specs {
-            self.field_writer.write(writer, field_spec, ranges.get(name)
-                    .map(|range| data.get(range).expect("badly built record data somehow has value missing for ranges entry"))
-                    .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
-                    .ok_or_else(|| (Error::FieldValueRequired, name.clone()))?
-            )?;
+            let field_data = ranges.get(name)
+                .map(|range| data.get(range).expect("badly built record data somehow has value missing for ranges entry"))
+                .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
+                .ok_or_else(|| (Error::FieldValueRequired, name.clone()))?
+            ;
+            self.post_processor.format(field_data, field_spec, &mut self.buffer, &self.write_type)?;
+            self.data_writer.write(writer, &self.buffer[..], field_spec.length, &self.write_type)?;
         }
 
         Ok(())
