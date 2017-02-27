@@ -213,6 +213,8 @@ impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> RecordWriter<T, U, V
             self.data_writer.write(writer, &self.buffer[..], field_spec.length, &self.write_type)?;
         }
 
+        self.data_writer.write(writer, &spec.line_ending[..], spec.line_ending.len(), &self.write_type)?;
+
         Ok(())
     }
 }
