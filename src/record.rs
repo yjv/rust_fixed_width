@@ -24,7 +24,7 @@ pub trait DataRanges {
     fn get<'a>(&self, name: &'a str) -> Option<Range<usize>>;
 }
 
-pub trait MutableDataRanges: DataRanges {
+pub trait BuildableDataRanges: DataRanges {
     fn new() -> Self;
     fn insert<'a>(&mut self, name: &'a str, range: Range<usize>);
 }
@@ -40,21 +40,32 @@ pub trait ReadDataHolder {
 }
 
 pub trait ReadType {
-    type DataHolder;
+    type DataHolder: BuildableFieldData;
+    fn new_data(&self) -> Self::DataHolder;
     fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError>;
 }
 
+pub trait BuildableFieldData {
+    fn push<'a>(&'a mut self, &'a [u8]) -> Result<Range<usize>, DataHolderError>;
+}
+
 pub trait WriteType {
-    type DataHolder;
+    type DataHolder: FieldData;
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError>;
 }
 
+pub trait FieldData {
+    fn get<'a>(&'a self, Range<usize>) -> Result<&'a [u8], DataHolderError>;
+}
 pub struct BinaryType;
 
 impl ReadType for BinaryType {
     type DataHolder = Vec<u8>;
     fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError> {
         Ok(data)
+    }
+    fn new_data(&self) -> Self::DataHolder {
+        Vec::new()
     }
 }
 
@@ -71,6 +82,9 @@ impl ReadType for StringType {
     type DataHolder = String;
     fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError> {
         Ok(Data { data: String::from_utf8(data.data)?, ranges: data.ranges })
+    }
+    fn new_data(&self) -> Self::DataHolder {
+        String::new()
     }
 }
 
@@ -172,7 +186,7 @@ impl<'a, T: DataRanges + 'a> Data<T, &'a [u8]> {
     }
 }
 
-impl <T: MutableDataRanges> Data<T, Vec<u8>> {
+impl <T: BuildableDataRanges> Data<T, Vec<u8>> {
     pub fn new() -> Self {
         Data {
             ranges: T::new(),
@@ -232,7 +246,7 @@ impl<T: IntoIterableDataRanges, U: ToOwned, V: Index<Range<usize>, Output=U>> In
     }
 }
 
-impl<T: MutableDataRanges> FromIterator<(String, Vec<u8>)> for Data<T, Vec<u8>> {
+impl<T: BuildableDataRanges> FromIterator<(String, Vec<u8>)> for Data<T, Vec<u8>> {
     fn from_iter<U: IntoIterator<Item = (String, Vec<u8>)>>(iter: U) -> Self {
         let mut ranges = T::new();
         let mut data = Vec::new();
@@ -248,7 +262,7 @@ impl<T: MutableDataRanges> FromIterator<(String, Vec<u8>)> for Data<T, Vec<u8>> 
     }
 }
 
-impl<'a, T: MutableDataRanges> FromIterator<(&'a str, Vec<u8>)> for Data<T, Vec<u8>> {
+impl<'a, T: BuildableDataRanges> FromIterator<(&'a str, Vec<u8>)> for Data<T, Vec<u8>> {
     fn from_iter<U: IntoIterator<Item = (&'a str, Vec<u8>)>>(iter: U) -> Self {
         let mut ranges = T::new();
         let mut data = Vec::new();
@@ -264,7 +278,7 @@ impl<'a, T: MutableDataRanges> FromIterator<(&'a str, Vec<u8>)> for Data<T, Vec<
     }
 }
 
-impl<T: MutableDataRanges> FromIterator<(String, String)> for Data<T, String> {
+impl<T: BuildableDataRanges> FromIterator<(String, String)> for Data<T, String> {
     fn from_iter<U: IntoIterator<Item = (String, String)>>(iter: U) -> Self {
         let mut ranges = T::new();
         let mut data = String::new();
@@ -280,7 +294,7 @@ impl<T: MutableDataRanges> FromIterator<(String, String)> for Data<T, String> {
     }
 }
 
-impl<'a, T: MutableDataRanges> FromIterator<(&'a str, String)> for Data<T, String> {
+impl<'a, T: BuildableDataRanges> FromIterator<(&'a str, String)> for Data<T, String> {
     fn from_iter<U: IntoIterator<Item = (&'a str, String)>>(iter: U) -> Self {
         let mut ranges = T::new();
         let mut data = String::new();
@@ -302,7 +316,7 @@ impl DataRanges for BTreeMap<String, Range<usize>> {
     }
 }
 
-impl MutableDataRanges for BTreeMap<String, Range<usize>> {
+impl BuildableDataRanges for BTreeMap<String, Range<usize>> {
     fn new() -> Self {
         BTreeMap::new()
     }
@@ -332,7 +346,7 @@ impl DataRanges for HashMap<String, Range<usize>> {
     }
 }
 
-impl MutableDataRanges for HashMap<String, Range<usize>> {
+impl BuildableDataRanges for HashMap<String, Range<usize>> {
     fn new() -> Self {
         HashMap::new()
     }
@@ -362,7 +376,7 @@ impl DataRanges for Vec<Range<usize>> {
     }
 }
 
-impl MutableDataRanges for Vec<Range<usize>> {
+impl BuildableDataRanges for Vec<Range<usize>> {
     fn new() -> Self {
         Vec::new()
     }
@@ -392,7 +406,7 @@ impl DataRanges for HashSet<Range<usize>> {
     }
 }
 
-impl MutableDataRanges for HashSet<Range<usize>> {
+impl BuildableDataRanges for HashSet<Range<usize>> {
     fn new() -> Self {
         HashSet::new()
     }
@@ -408,7 +422,7 @@ impl DataRanges for () {
     }
 }
 
-impl MutableDataRanges for () {
+impl BuildableDataRanges for () {
     fn new() -> Self {
         ()
     }
@@ -428,6 +442,19 @@ impl WriteDataHolder for Vec<u8> {
     }
 }
 
+impl BuildableFieldData for Vec<u8> {
+    fn push<'a>(&'a mut self, data: &'a [u8]) -> Result<Range<usize>, DataHolderError> {
+        self.extend(data);
+        Ok(self.len() - data.len()..self.len())
+    }
+}
+
+impl FieldData for Vec<u8> {
+    fn get<'a>(&'a self, range: Range<usize>) -> Result<&'a [u8], DataHolderError> {
+        Ok(&self[range])
+    }
+}
+
 impl ReadDataHolder for String {
     fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError> {
         Ok(self.push_str(::std::str::from_utf8(data)?))
@@ -437,6 +464,19 @@ impl ReadDataHolder for String {
 impl WriteDataHolder for String {
     fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
         self[range].as_ref()
+    }
+}
+
+impl BuildableFieldData for String {
+    fn push<'a>(&'a mut self, data: &'a [u8]) -> Result<Range<usize>, DataHolderError> {
+        self.push_str(::std::str::from_utf8(data)?);
+        Ok(self.len() - data.len()..self.len())
+    }
+}
+
+impl FieldData for String {
+    fn get<'a>(&'a self, range: Range<usize>) -> Result<&'a [u8], DataHolderError> {
+        Ok(self[range].as_bytes())
     }
 }
 

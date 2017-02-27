@@ -5,7 +5,7 @@ use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record};
-use record::{Data, DataRanges, WriteDataHolder, WriteType, BinaryType};
+use record::{Data, DataRanges, WriteDataHolder, FieldData, WriteType, BinaryType};
 
 pub struct Writer<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> {
     padder: T,
@@ -46,12 +46,12 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
         let record_name = record_name
             .map_or_else(
                 || self.recognizer.recognize_for_data(&data, self.specs.borrow(), &self.write_type),
-                |name| Ok(name.to_owned())
+                |name| Ok(name)
             )?
         ;
         let record_spec = self.specs.borrow()
-            .get(&record_name)
-            .ok_or_else(|| Error::RecordSpecNotFound(record_name.clone()))?
+            .get(record_name)
+            .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_owned()))?
         ;
 
         for (name, field_spec) in &record_spec.field_specs {
@@ -60,11 +60,11 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
                 field_spec,
                 data.get_write_data(name)
                     .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
-                    .ok_or_else(|| (Error::FieldValueRequired, record_name.clone(), name.clone()))?
-            ).map_err(|e| (e, record_name.clone(), name.clone()))?;
+                    .ok_or_else(|| (Error::FieldValueRequired, record_name.to_owned(), name.clone()))?
+            ).map_err(|e| (e, record_name.to_owned(), name.clone()))?;
         }
 
-        self.write_line_ending(writer, &record_spec.line_ending).map_err(|e| (e, record_name.clone()))?;
+        self.write_line_ending(writer, &record_spec.line_ending).map_err(|e| (e, record_name.to_owned()))?;
 
         Ok(())
     }
@@ -161,6 +161,58 @@ impl<'a, T: DataRanges + 'a, U> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a 
     }
 }
 
+pub trait FieldWriteProcessor<T: WriteType> {
+    fn process<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
+}
+
+pub trait DataWriter<T: WriteType> {
+    fn write<'a, U: Write + 'a>(&mut self, writer: &'a mut U, source: &'a [u8], amount: usize, write_type: &'a T) -> Result<()>;
+}
+
+pub struct FieldWriter<T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> {
+    buffer: Vec<u8>,
+    data_writer: T,
+    post_processor: U,
+    write_type: V
+}
+
+impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> FieldWriter<T, U, V> {
+    pub fn write<'a, W>(&mut self, writer: &'a mut W, spec: &'a FieldSpec, data: &'a [u8]) -> Result<usize>
+        where W: Write + 'a
+
+    {
+        self.post_processor.process(data, spec, &mut self.buffer, &self.write_type)?;
+        self.data_writer.write(writer, &self.buffer[..], spec.length, &self.write_type)?;
+        let amount = self.buffer.len();
+        self.buffer.clear();
+        Ok(amount)
+    }
+}
+
+
+pub struct RecordWriter<T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> {
+    field_writer: FieldWriter<T, U, V>
+}
+
+impl <T: DataWriter<V>, U: FieldWriteProcessor<V>, V: WriteType> RecordWriter<T, U, V> {
+    pub fn write<'a, W, X>(&mut self, writer: &'a mut W, spec: &'a RecordSpec, data: &'a Data<X, V::DataHolder>) -> PositionalResult<()>
+        where W: Write + 'a,
+              X: DataRanges + 'a
+    {
+        let (ranges, data) = (&data.ranges, &data.data);
+
+        for (name, field_spec) in &spec.field_specs {
+            self.field_writer.write(writer, field_spec, ranges.get(name)
+                    .map(|range| data.get(range).expect("badly built record data somehow has value missing for ranges entry"))
+                    .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
+                    .ok_or_else(|| (Error::FieldValueRequired, name.clone()))?
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -229,7 +281,7 @@ mod test {
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
             .iter().cloned().collect::<Data<_, _>>();
         let mut recognizer = MockRecognizer::<BTreeMap<String, Range<usize>>>::new();
-        recognizer.add_data_recognize_call(data.internal_references(), &spec.record_specs, Ok("record1".to_string()));
+        recognizer.add_data_recognize_call(data.internal_references(), &spec.record_specs, Ok("record1"));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
         writer.write_record(&mut buf, &data, None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());

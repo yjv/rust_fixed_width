@@ -7,8 +7,8 @@ use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a, T: DataRanges + 'a = ()> {
-    line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>,
-    data_recognize_calls: Vec<(Data<&'a T, &'a [u8]>, &'a HashMap<String, RecordSpec>, Result<String, ::recognizer::Error>)>
+    line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>,
+    data_recognize_calls: Vec<(Data<&'a T, &'a [u8]>, &'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>
 }
 
 impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
@@ -19,23 +19,34 @@ impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
         }
     }
 
-    pub fn add_line_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
+    pub fn add_line_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
         self.line_recognize_calls.push((record_specs, return_value));
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: Data<&'a T, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<String, ::recognizer::Error>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, data: Data<&'a T, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
         self.data_recognize_calls.push((data, record_specs, return_value));
         self
     }
 }
 
 impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a, T> {
-    fn recognize_for_line<'b, V: Read + 'b>(&self, _: LineBuffer<'b, V>, record_specs: &HashMap<String, RecordSpec>, _: &'b U) -> Result<String, ::recognizer::Error> {
+    fn recognize_for_line<'b, 'c, V: Read + 'b>(&self, _: LineBuffer<'b, V>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<&'c str, ::recognizer::Error> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
             {
-                return return_value.clone();
+                return match *return_value {
+                    Ok(ref v) => {
+                        for (key, _) in record_specs {
+                            if key == v {
+                                return Ok(key as &str);
+                            }
+                        }
+
+                        panic!("key {:?} not found in {:?}");
+                    },
+                    Err(ref e) => Err(e.clone())
+                }
             }
         }
 
@@ -44,12 +55,23 @@ impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRe
 }
 
 impl<'a, T: DataRanges + 'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T> {
-    fn recognize_for_data<'b, W: DataRanges + 'b>(&self, data: &'b Data<W, &'b [u8]>, record_specs: &HashMap<String, RecordSpec>, _: &'b V) -> Result<String, ::recognizer::Error> {
+    fn recognize_for_data<'b, 'c, W: DataRanges + 'b>(&self, data: &'b Data<W, &'b [u8]>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<&'c str, ::recognizer::Error> {
         for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if expected_data.data == data.data
                 && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
-                    return (*return_value).clone();
+                    return match *return_value {
+                        Ok(ref v) => {
+                            for (key, _) in record_specs {
+                                if key == v {
+                                    return Ok(key as &str);
+                                }
+                            }
+
+                            panic!("key {:?} not found in {:?}");
+                        },
+                        Err(ref e) => Err(e.clone())
+                    }
                 }
         }
 
@@ -135,7 +157,7 @@ pub fn test_spec() -> Spec {
                         .with_length(4)
                         .with_padding("dsasd")
                         .with_padding_direction(PaddingDirection::Left)
-                        .make_filler()
+                        .write_only()
                 )
                 .with_field(
                     "field2",
@@ -184,7 +206,7 @@ pub fn test_spec() -> Spec {
                         padding: "sdfsd".as_bytes().to_owned(),
                         padding_direction: PaddingDirection::Left,
                         default: None,
-                        filler: false
+                        write_only: false
                     }
                 )
         )

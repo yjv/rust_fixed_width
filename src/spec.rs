@@ -119,7 +119,7 @@ pub struct FieldSpec {
     pub padding_direction: PaddingDirection,
     pub padding: Vec<u8>,
     pub default: Option<Vec<u8>>,
-    pub filler: bool
+    pub write_only: bool
 }
 
 impl Builder<FieldSpec> for FieldSpec {
@@ -134,7 +134,7 @@ pub struct FieldSpecBuilder {
     padding_direction: Option<PaddingDirection>,
     padding: Option<Vec<u8>>,
     default: Option<Vec<u8>>,
-    filler: bool
+    write_only: bool
 }
 
 impl FieldSpecBuilder {
@@ -144,7 +144,7 @@ impl FieldSpecBuilder {
             padding_direction: None,
             padding: None,
             default: None,
-            filler: false
+            write_only: false
         }
     }
 
@@ -168,7 +168,7 @@ impl FieldSpecBuilder {
         Self::new_string()
             .with_default(repeat(" ").take(length).collect::<String>())
             .with_length(length)
-            .make_filler()
+            .write_only()
     }
 
     pub fn with_length(mut self, length: usize) -> Self {
@@ -191,8 +191,8 @@ impl FieldSpecBuilder {
         self
     }
 
-    pub fn make_filler(mut self) -> Self {
-        self.filler = true;
+    pub fn write_only(mut self) -> Self {
+        self.write_only = true;
         self
     }
 }
@@ -204,7 +204,7 @@ impl Builder<FieldSpec> for FieldSpecBuilder {
             padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
             padding: self.padding.expect("padding must be set in order to build"),
             default: self.default,
-            filler: self.filler
+            write_only: self.write_only
         }
     }
 }
@@ -225,21 +225,21 @@ mod test {
             padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            filler: true
+            write_only: true
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 5,
             padding: " ".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: Some("def".as_bytes().to_owned()),
-            filler: false
+            write_only: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 36,
             padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: None,
-            filler: false
+            write_only: false
         });
         record_specs.insert("record1".to_string(), RecordSpec {
             line_ending: "\n".as_bytes().to_owned(),
@@ -251,28 +251,28 @@ mod test {
             padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            filler: false
+            write_only: false
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 4,
             padding: "sdf".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: Some("defa".as_bytes().to_owned()),
-            filler: false
+            write_only: false
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 27,
             padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
             default: None,
-            filler: false
+            write_only: false
         });
         field_specs.insert("field4".to_string(), FieldSpec {
             length: 8,
             padding: "sdfsd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
             default: None,
-            filler: false
+            write_only: false
         });
         record_specs.insert("record2".to_string(), RecordSpec {
             line_ending: "\n".as_bytes().to_owned(),
