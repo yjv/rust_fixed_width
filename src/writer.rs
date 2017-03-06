@@ -169,28 +169,30 @@ pub trait DataWriter<T: WriteType> {
     fn write<'a, U: Write + 'a>(&mut self, writer: &'a mut U, source: &'a [u8], amount: usize, write_type: &'a T) -> Result<()>;
 }
 
-pub struct FieldWriter<T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> {
-    buffer: Vec<u8>,
-    data_writer: T,
-    post_processor: U,
-    write_type: V
+pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {
+    formatter: T,
+    write_type: U
 }
 
-impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> FieldWriter<T, U, V> {
-    pub fn write<'a, W>(&mut self, writer: &'a mut W, spec: &'a FieldSpec, data: &'a [u8]) -> Result<usize>
-        where W: Write + 'a
-
+impl <T: FieldFormatter<U>, U: WriteType> FieldWriter<T, U> {
+    pub fn write<'a, V>(&self, writer: &'a mut V, spec: &'a FieldSpec, data: &'a [u8], buffer: &mut Vec<u8>) -> PositionalResult<usize>
+        where V: Write + 'a
     {
-        self.post_processor.format(data, spec, &mut self.buffer, &self.write_type)?;
-        self.data_writer.write(writer, &self.buffer[..], spec.length, &self.write_type)?;
-        let amount = self.buffer.len();
-        self.buffer.clear();
-        Ok(amount)
+        buffer.clear();
+        self.formatter.format(data, spec, buffer, &self.write_type)?;
+
+        if buffer.len() != spec.length {
+            return Err(Error::PaddedValueWrongLength(spec.length, buffer.clone()).into());
+        }
+
+        writer.write_all(&buffer[..])?;
+
+        Ok(buffer.len())
     }
 }
 
 pub struct RecordWriter<T: FieldFormatter<U>, U: WriteType> {
-    formatter: T,
+    field_write: FieldWriter<T, U>,
     write_type: U
 }
 
@@ -203,20 +205,13 @@ impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
         let (ranges, data) = (&data.ranges, &data.data);
 
         for (name, field_spec) in &spec.field_specs {
-            buffer.clear();
+
             let field_data = ranges.get(name)
                 .map(|range| self.write_type.get_data(range, data).expect("badly built record data somehow has value missing for ranges entry"))
                 .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                 .ok_or_else(|| (Error::FieldValueRequired, name))?
             ;
-            self.formatter.format(field_data, field_spec, buffer, &self.write_type)?;
-
-            if buffer.len() != field_spec.length {
-                return Err((Error::PaddedValueWrongLength(field_spec.length, buffer.clone()), name).into());
-            }
-
-            writer.write_all(&buffer[..])?;
-            amount_written += buffer.len();
+            amount_written += self.field_write.write(writer, field_spec, field_data, buffer)?;
         }
 
         writer.write_all(&spec.line_ending[..])?;

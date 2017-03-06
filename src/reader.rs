@@ -317,31 +317,46 @@ pub trait DataReader<T: ReadType> {
     }
 }
 
-pub struct RecordReader<T: FieldParser<U>, U: ReadType> {
+pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
     parser: T,
     read_type: U
 }
 
+impl <T: FieldParser<U>, U: ReadType> FieldReader<T, U> {
+    pub fn read<'a, V>(&self, reader: &'a mut V, field_spec: &'a FieldSpec, field_buffer: &'a mut Vec<u8>, buffer: &'a mut Vec<u8>) -> PositionalResult<()>
+        where V: Read + 'a
+    {
+        buffer.clear();
+        while let ShouldReadMore::More(amount) = self.read_type.should_read_more(field_spec.length, &buffer[..]) {
+            reader.by_ref().take(amount as u64).read_to_end(buffer)?;
+        }
+
+        self.parser.parse(&buffer[..], field_spec, field_buffer, &self.read_type)?;
+
+        Ok(())
+    }
+}
+
+pub struct RecordReader<T: FieldParser<U>, U: ReadType> {
+    field_reader: FieldReader<T, U>,
+    read_type: U
+}
+
 impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
-    pub fn read<'a, V, X>(&mut self, reader: &'a mut V, spec: &'a RecordSpec, buffer: &'a mut Vec<u8>) -> PositionalResult<Data<X, U::DataHolder>>
+    pub fn read<'a, V, X>(&self, reader: &'a mut V, spec: &'a RecordSpec, mut field_buffer: Vec<u8>, buffer: &'a mut Vec<u8>) -> PositionalResult<Data<X, U::DataHolder>>
         where V: Read + 'a,
               X: BuildableDataRanges + 'a
     {
-        let mut field_buffer = Vec::new();
         let mut ranges = X::new();
         for (name, field_spec) in &spec.field_specs {
-            if !field_spec.write_only {
-                while let ShouldReadMore::More(amount) = self.read_type.should_read_more(field_spec.length, &buffer[..]) {
-                    reader.by_ref().take(amount as u64).read_to_end(buffer)?;
-                }
+            let old_length = field_buffer.len();
+            self.field_reader.read(reader, field_spec, &mut field_buffer, buffer)?;
 
-                let old_length = field_buffer.len();
-                self.parser.parse(&buffer, field_spec, &mut field_buffer, &self.read_type)?;
+            if !field_spec.write_only {
                 ranges.insert(name, self.read_type.get_range(
                     old_length,
                     &field_buffer[..]
                 ));
-                buffer.clear();
             }
         }
 
