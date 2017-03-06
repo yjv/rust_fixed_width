@@ -360,9 +360,8 @@ impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
             }
         }
 
-        let amount_read = reader.by_ref().take(spec.line_ending.len() as u64).read_to_end(buffer)?;
-
-        if &buffer[..] != &spec.line_ending[..] && amount_read != 0 {
+        if reader.by_ref().take(spec.line_ending.len() as u64).read_to_end(buffer)? != 0
+            && &buffer[..] != &spec.line_ending[..] {
             return Err(Error::DataDoesNotMatchLineEnding(
                 spec.line_ending.clone(),
                 buffer[..].to_owned()
