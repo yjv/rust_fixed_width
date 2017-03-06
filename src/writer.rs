@@ -64,7 +64,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             ).map_err(|e| (e, record_name.to_owned(), name.clone()))?;
         }
 
-        self.write_line_ending(writer, &record_spec.line_ending).map_err(|e| (e, record_name.to_owned()))?;
+        self.write_line_ending(writer, &record_spec.line_ending).map_err(|e| (e, record_name))?;
 
         Ok(())
     }
@@ -195,30 +195,33 @@ pub struct RecordWriter<T: FieldFormatter<U>, U: WriteType> {
 }
 
 impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
-    pub fn write<'a, V, W>(&self, writer: &'a mut V, spec: &'a RecordSpec, data: &'a Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> PositionalResult<()>
+    pub fn write<'a, V, W>(&self, writer: &'a mut V, spec: &'a RecordSpec, data: &'a Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> PositionalResult<usize>
         where V: Write + 'a,
               W: DataRanges + 'a
     {
+        let mut amount_written = 0;
         let (ranges, data) = (&data.ranges, &data.data);
 
         for (name, field_spec) in &spec.field_specs {
+            buffer.clear();
             let field_data = ranges.get(name)
                 .map(|range| self.write_type.get_data(range, data).expect("badly built record data somehow has value missing for ranges entry"))
                 .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
-                .ok_or_else(|| (Error::FieldValueRequired, name.clone()))?
+                .ok_or_else(|| (Error::FieldValueRequired, name))?
             ;
             self.formatter.format(field_data, field_spec, buffer, &self.write_type)?;
 
             if buffer.len() != field_spec.length {
-                return Err(Error::PaddedValueWrongLength(field_spec.length, buffer.clone()).into());
+                return Err((Error::PaddedValueWrongLength(field_spec.length, buffer.clone()), name).into());
             }
 
             writer.write_all(&buffer[..])?;
+            amount_written += buffer.len();
         }
 
         writer.write_all(&spec.line_ending[..])?;
 
-        Ok(())
+        Ok(amount_written + spec.line_ending.len())
     }
 }
 

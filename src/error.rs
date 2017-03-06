@@ -178,11 +178,20 @@ impl From<Error> for PositionalError {
     }
 }
 
-impl From<(Error, String)> for PositionalError {
-    fn from(data: (Error, String)) -> Self {
+impl<'a> From<(Error, &'a String)> for PositionalError {
+    fn from(data: (Error, &'a String)) -> Self {
         PositionalError {
             error: data.0,
-            position: Some(Position::new_from_record(data.1))
+            position: Some(Position::new_from_record(data.1.clone()))
+        }
+    }
+}
+
+impl<'a> From<(Error, &'a str)> for PositionalError {
+    fn from(data: (Error, &'a str)) -> Self {
+        PositionalError {
+            error: data.0,
+            position: Some(Position::new_from_record(data.1.to_string()))
         }
     }
 }
