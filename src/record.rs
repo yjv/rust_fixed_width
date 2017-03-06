@@ -39,33 +39,42 @@ pub trait ReadDataHolder {
     fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
 }
 
-pub trait ReadType {
-    type DataHolder: BuildableFieldData;
-    fn new_data(&self) -> Self::DataHolder;
-    fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError>;
+pub enum ShouldReadMore {
+    More(usize),
+    NoMore
 }
 
-pub trait BuildableFieldData {
-    fn push<'a>(&'a mut self, &'a [u8]) -> Result<Range<usize>, DataHolderError>;
+pub trait ReadType {
+    type DataHolder;
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+    fn get_range(&self, old_length: usize, data: &[u8]) -> Range<usize> {
+        old_length..data.len()
+    }
+    fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
+        if wanted_length > data.len() {
+            ShouldReadMore::More(wanted_length - data.len())
+        } else {
+            ShouldReadMore::NoMore
+        }
+    }
 }
 
 pub trait WriteType {
-    type DataHolder: FieldData;
+    type DataHolder;
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError>;
+    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]>;
 }
 
 pub trait FieldData {
     fn get<'a>(&'a self, Range<usize>) -> Result<&'a [u8], DataHolderError>;
 }
+
 pub struct BinaryType;
 
 impl ReadType for BinaryType {
     type DataHolder = Vec<u8>;
-    fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError> {
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
         Ok(data)
-    }
-    fn new_data(&self) -> Self::DataHolder {
-        Vec::new()
     }
 }
 
@@ -74,17 +83,33 @@ impl WriteType for BinaryType {
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError> {
         Ok(data.internal_references())
     }
+
+    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
+        Some(&data[range])
+    }
 }
 
 pub struct StringType;
 
 impl ReadType for StringType {
     type DataHolder = String;
-    fn upcast_data<'a, T: DataRanges + 'a>(&self, data: Data<T, Vec<u8>>) -> Result<Data<T, Self::DataHolder>, DataHolderError> {
-        Ok(Data { data: String::from_utf8(data.data)?, ranges: data.ranges })
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+        Ok(String::from_utf8(data)?)
     }
-    fn new_data(&self) -> Self::DataHolder {
-        String::new()
+
+    fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
+        let length = match ::std::str::from_utf8(data) {
+            Ok(ref string) => string,
+            Err(e) => unsafe {
+                ::std::str::from_utf8_unchecked(&data[..e.valid_up_to()])
+            }
+        }.chars().count();
+
+        if wanted_length > length {
+            ShouldReadMore::More(wanted_length - length)
+        } else {
+            ShouldReadMore::NoMore
+        }
     }
 }
 
@@ -92,6 +117,9 @@ impl WriteType for StringType {
     type DataHolder = String;
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError> {
         Ok(Data { ranges: &data.ranges, data: data.data.as_ref() })
+    }
+    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
+        Some(data[range].as_bytes())
     }
 }
 
@@ -442,13 +470,6 @@ impl WriteDataHolder for Vec<u8> {
     }
 }
 
-impl BuildableFieldData for Vec<u8> {
-    fn push<'a>(&'a mut self, data: &'a [u8]) -> Result<Range<usize>, DataHolderError> {
-        self.extend(data);
-        Ok(self.len() - data.len()..self.len())
-    }
-}
-
 impl FieldData for Vec<u8> {
     fn get<'a>(&'a self, range: Range<usize>) -> Result<&'a [u8], DataHolderError> {
         Ok(&self[range])
@@ -464,13 +485,6 @@ impl ReadDataHolder for String {
 impl WriteDataHolder for String {
     fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
         self[range].as_ref()
-    }
-}
-
-impl BuildableFieldData for String {
-    fn push<'a>(&'a mut self, data: &'a [u8]) -> Result<Range<usize>, DataHolderError> {
-        self.push_str(::std::str::from_utf8(data)?);
-        Ok(self.len() - data.len()..self.len())
     }
 }
 

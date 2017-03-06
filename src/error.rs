@@ -163,6 +163,12 @@ impl From<DataHolderError> for PositionalError {
     }
 }
 
+impl From<IoError> for PositionalError {
+    fn from(error: IoError) -> Self {
+        PositionalError::from(Error::from(error))
+    }
+}
+
 impl From<Error> for PositionalError {
     fn from(error: Error) -> Self {
         PositionalError {

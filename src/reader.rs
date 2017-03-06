@@ -1,12 +1,12 @@
 use spec::{RecordSpec, FieldSpec};
 use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
-use std::io::{Read, BufRead};
+use std::io::{Read, BufRead, BufReader};
 use std::borrow::Borrow;
 use std::ops::Range;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, PositionalError};
-use record::{Data, DataRanges, BuildableDataRanges, BuildableFieldData, ReadType, BinaryType};
+use record::{Data, DataRanges, BuildableDataRanges, ReadType, BinaryType, ShouldReadMore};
 
 pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
     un_padder: T,
@@ -87,7 +87,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
 
         Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name.to_owned()))?;
 
-        Ok(Record { data: self.read_type.upcast_data(Data { data: line, ranges: ranges})?, name: record_name.to_owned() })
+        Ok(Record { data: Data { data: self.read_type.upcast_data(line)?, ranges: ranges}, name: record_name.to_owned() })
     }
 
     pub fn absorb_line_ending<'a, Y: 'a + Read>(&mut self, reader: &'a mut Y, line_ending: &[u8]) -> Result<()> {
@@ -317,64 +317,44 @@ pub trait DataReader<T: ReadType> {
     }
 }
 
-pub struct FieldReader<T: DataReader<V>, U: FieldParser<V>, V: ReadType> {
-    buffer: Vec<u8>,
-    data_reader: T,
-    post_processor: U,
-    read_type: V
+pub struct RecordReader<T: FieldParser<U>, U: ReadType> {
+    parser: T,
+    read_type: U
 }
 
-impl <T: DataReader<V>, U: FieldParser<V>, V: ReadType> FieldReader<T, U, V> {
-    pub fn read<'a, W>(&mut self, reader: &'a mut W, field_spec: &'a FieldSpec, field_data: &'a mut Vec<u8>) -> Result<usize>
-        where W: Read + 'a
-
-    {
-        self.data_reader.read(reader, &mut self.buffer, field_spec.length, &self.read_type)?;
-        self.post_processor.parse(&self.buffer[..], field_spec, field_data, &self.read_type)?;
-        let amount = self.buffer.len();
-        self.buffer.clear();
-        Ok(amount)
-    }
-}
-
-pub struct RecordReader<T: DataReader<V>, U: FieldParser<V>, V: ReadType> {
-    buffer1: Vec<u8>,
-    buffer2: Vec<u8>,
-    data_reader: T,
-    post_processor: U,
-    read_type: V
-}
-
-impl <T: DataReader<V>, U: FieldParser<V>, V: ReadType> RecordReader<T, U, V> {
-    pub fn read<'a, W, X>(&mut self, reader: &'a mut W, spec: &'a RecordSpec) -> PositionalResult<Data<X, V::DataHolder>>
-        where W: Read + 'a,
+impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
+    pub fn read<'a, V, X>(&mut self, reader: &'a mut V, spec: &'a RecordSpec, buffer: &'a mut Vec<u8>) -> PositionalResult<Data<X, U::DataHolder>>
+        where V: Read + 'a,
               X: BuildableDataRanges + 'a
     {
-        let mut data = self.read_type.new_data();
+        let mut field_buffer = Vec::new();
         let mut ranges = X::new();
         for (name, field_spec) in &spec.field_specs {
             if !field_spec.write_only {
-                self.data_reader.read(reader, &mut self.buffer1, field_spec.length, &self.read_type)?;
-                self.post_processor.parse(&self.buffer1[..], field_spec, &mut self.buffer2, &self.read_type)?;
-                ranges.insert(name, data.push(&self.buffer2[..])?);
-                self.buffer1.clear();
-                self.buffer2.clear();
+                while let ShouldReadMore::More(amount) = self.read_type.should_read_more(field_spec.length, &buffer[..]) {
+                    reader.by_ref().take(amount as u64).read_to_end(buffer)?;
+                }
+
+                let old_length = field_buffer.len();
+                self.parser.parse(&buffer, field_spec, &mut field_buffer, &self.read_type)?;
+                ranges.insert(name, self.read_type.get_range(
+                    old_length,
+                    &field_buffer[..]
+                ));
+                buffer.clear();
             }
         }
 
-        if
-            !self.data_reader.read_and_compare(reader, &mut self.buffer1, &spec.line_ending[..], &self.read_type)?
-            && self.buffer1.len() != 0
-        {
+        let amount_read = reader.by_ref().take(spec.line_ending.len() as u64).read_to_end(buffer)?;
+
+        if &buffer[..] != &spec.line_ending[..] && amount_read != 0 {
             return Err(Error::DataDoesNotMatchLineEnding(
                 spec.line_ending.clone(),
-                self.buffer1.clone()
+                buffer[..].to_owned()
             ))?;
         }
 
-        self.buffer1.clear();
-
-        Ok(Data { ranges: ranges, data: data })
+        Ok(Data { ranges: ranges, data: self.read_type.upcast_data(field_buffer)? })
     }
 }
 //
@@ -384,6 +364,14 @@ impl <T: DataReader<V>, U: FieldParser<V>, V: ReadType> RecordReader<T, U, V> {
 //
 //impl RecordRecognizer {
 //    pub fn recognize<'a, T: BufRead + 'a>(&self, reader: &'a mut T) -> Result<&'a str> {
+//
+//    }
+//
+//    pub fn buffer<'a, T: Read + 'a>(&self, reader: T) -> BufReader<T> {
+//        BufReader::with_capacity(self.get_suggested_buffer_size(), reader)
+//    }
+//
+//    pub fn get_suggested_buffer_size(&self) -> usize {
 //
 //    }
 //}

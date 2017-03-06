@@ -189,31 +189,34 @@ impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> FieldWriter<T, U, V>
     }
 }
 
-pub struct RecordWriter<T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> {
-    buffer: Vec<u8>,
-    data_writer: T,
-    post_processor: U,
-    write_type: V
+pub struct RecordWriter<T: FieldFormatter<U>, U: WriteType> {
+    formatter: T,
+    write_type: U
 }
 
-impl <T: DataWriter<V>, U: FieldFormatter<V>, V: WriteType> RecordWriter<T, U, V> {
-    pub fn write<'a, W, X>(&mut self, writer: &'a mut W, spec: &'a RecordSpec, data: &'a Data<X, V::DataHolder>) -> PositionalResult<()>
-        where W: Write + 'a,
-              X: DataRanges + 'a
+impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
+    pub fn write<'a, V, W>(&self, writer: &'a mut V, spec: &'a RecordSpec, data: &'a Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> PositionalResult<()>
+        where V: Write + 'a,
+              W: DataRanges + 'a
     {
         let (ranges, data) = (&data.ranges, &data.data);
 
         for (name, field_spec) in &spec.field_specs {
             let field_data = ranges.get(name)
-                .map(|range| data.get(range).expect("badly built record data somehow has value missing for ranges entry"))
+                .map(|range| self.write_type.get_data(range, data).expect("badly built record data somehow has value missing for ranges entry"))
                 .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                 .ok_or_else(|| (Error::FieldValueRequired, name.clone()))?
             ;
-            self.post_processor.format(field_data, field_spec, &mut self.buffer, &self.write_type)?;
-            self.data_writer.write(writer, &self.buffer[..], field_spec.length, &self.write_type)?;
+            self.formatter.format(field_data, field_spec, buffer, &self.write_type)?;
+
+            if buffer.len() != field_spec.length {
+                return Err(Error::PaddedValueWrongLength(field_spec.length, buffer.clone()).into());
+            }
+
+            writer.write_all(&buffer[..])?;
         }
 
-        self.data_writer.write(writer, &spec.line_ending[..], spec.line_ending.len(), &self.write_type)?;
+        writer.write_all(&spec.line_ending[..])?;
 
         Ok(())
     }
