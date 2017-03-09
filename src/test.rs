@@ -2,7 +2,7 @@ use spec::*;
 use padder::{Padder, UnPadder, Error as PaddingError};
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
 use std::collections::{HashMap, BTreeMap};
-use std::io::Read;
+use std::io::{Read, BufRead};
 use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
 }
 
 impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a, T> {
-    fn recognize_for_line<'b, 'c, V: Read + 'b>(&self, _: LineBuffer<'b, V>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<&'c str, ::recognizer::Error> {
+    fn recognize_for_line<'b, 'c, V: BufRead + 'b>(&self, _: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<&'c str, ::recognizer::Error> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
             {

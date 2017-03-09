@@ -54,7 +54,7 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
         let record_name = record_name
             .into()
             .map_or_else(
-                || self.recognizer.recognize_for_line(LineBuffer::new(&mut reader, &mut line), specs, &self.read_type),
+                || self.recognizer.recognize_for_line(&mut BufReader::new(&mut reader), specs, &self.read_type),
                 |name| Ok(name)
             )?
         ;
@@ -371,24 +371,28 @@ impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
         Ok(Data { ranges: ranges, data: self.read_type.upcast_data(field_buffer)? })
     }
 }
-//
-//pub struct RecordRecognizer {
-//
-//}
-//
-//impl RecordRecognizer {
-//    pub fn recognize<'a, T: BufRead + 'a>(&self, reader: &'a mut T) -> Result<&'a str> {
-//
-//    }
-//
-//    pub fn buffer<'a, T: Read + 'a>(&self, reader: T) -> BufReader<T> {
-//        BufReader::with_capacity(self.get_suggested_buffer_size(), reader)
-//    }
-//
-//    pub fn get_suggested_buffer_size(&self) -> usize {
-//
-//    }
-//}
+
+pub struct RecordRecognizer<T: LineRecordSpecRecognizer<U>, U: ReadType> {
+    recognizer: T,
+    read_type: U
+}
+
+impl<T: LineRecordSpecRecognizer<U>, U: ReadType> RecordRecognizer<T, U> {
+    pub fn recognize<'a, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'a HashMap<String, RecordSpec>) -> Result<&'a str> {
+        Ok(self.recognizer.recognize_for_line(reader, record_specs, &self.read_type)?)
+    }
+
+    pub fn buffer<'a, V: Read + 'a>(&self, reader: V, record_specs: &'a HashMap<String, RecordSpec>) -> BufReader<V> {
+        match self.get_suggested_buffer_size(record_specs) {
+            Some(size) => BufReader::with_capacity(size, reader),
+            None => BufReader::new(reader)
+        }
+    }
+
+    pub fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
+        self.recognizer.get_suggested_buffer_size(record_specs, &self.read_type)
+    }
+}
 
 #[cfg(test)]
 mod test {

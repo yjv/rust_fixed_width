@@ -1,6 +1,6 @@
 use std::collections::{HashMap};
 use spec::RecordSpec;
-use std::io::{Read, Error as IoError};
+use std::io::{Read, BufRead, Error as IoError};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::error::Error as ErrorTrait;
 use record::{Data, DataRanges, ReadType, WriteType};
@@ -109,12 +109,19 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
 }
 
 pub trait LineRecordSpecRecognizer<T: ReadType> {
-    fn recognize_for_line<'a, 'b, U: Read + 'a>(&self, buffer: LineBuffer<'a, U>, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
+    fn recognize_for_line<'a, 'b, U: BufRead + 'a>(&self, buffer: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a T) -> Option<usize> {
+        None
+    }
 }
 
 impl<'a, T, U: ReadType + 'a> LineRecordSpecRecognizer<U> for &'a T where T: 'a + LineRecordSpecRecognizer<U> {
-    fn recognize_for_line<'b, 'c, V: Read + 'b>(&self, buffer: LineBuffer<'b, V>, record_specs: &'c HashMap<String, RecordSpec>, read_type: &'b U) -> Result<&'c str> {
+    fn recognize_for_line<'b, 'c, V: BufRead + 'b>(&self, buffer: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, read_type: &'b U) -> Result<&'c str> {
         (**self).recognize_for_line(buffer, record_specs, read_type)
+    }
+
+    fn get_suggested_buffer_size<'b>(&self, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'b U) -> Option<usize> {
+        (**self).get_suggested_buffer_size(record_specs, read_type)
     }
 }
 
@@ -143,18 +150,17 @@ impl IdFieldRecognizer {
 }
 
 impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
-    fn recognize_for_line<'a, 'b, U: Read + 'a>(&self, mut buffer: LineBuffer<'a, U>, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<&'b str> {
+    fn recognize_for_line<'a, 'b, U: BufRead + 'a>(&self, mut buffer: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<&'b str> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
                     let field_range = record_spec.field_range(&self.id_field).expect("This should never be None");
-                    buffer.fill_to(field_range.end)?;
 
-                    if buffer.get_line().len() < field_range.end {
+                    if buffer.fill_buf()?.len() < field_range.end {
                         continue;
                     }
 
-                    if &buffer.get_line()[field_range] == &default[..] {
+                    if &buffer.fill_buf()?[field_range] == &default[..] {
                         return Ok(name);
                     }
                 }
@@ -162,6 +168,15 @@ impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
         }
 
         Err(Error::CouldNotRecognize)
+    }
+
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Option<usize> {
+        let min = record_specs.iter().map(|(_, spec)| spec.field_range(&self.id_field).map(|range| range.end).unwrap_or(0)).min().unwrap_or(0);
+        if min == 0 {
+            None
+        } else {
+            Some(min)
+        }
     }
 }
 
@@ -186,7 +201,7 @@ impl<T: WriteType> DataRecordSpecRecognizer<T> for IdFieldRecognizer {
 pub struct NoneRecognizer;
 
 impl<T: ReadType> LineRecordSpecRecognizer<T> for NoneRecognizer {
-    fn recognize_for_line<'a, 'b, U: Read + 'a>(&self, _: LineBuffer<'a, U>, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<&'b str> {
+    fn recognize_for_line<'a, 'b, U: Read + 'a>(&self, _: &'a mut U, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<&'b str> {
         Err(Error::CouldNotRecognize)
     }
 }
@@ -204,7 +219,7 @@ mod test {
     use super::super::Data;
     use spec::*;
     use std::collections::{HashMap, BTreeMap};
-    use std::io::empty;
+    use std::io::{empty, BufReader};
     use padder::PaddingError;
     use record::{BinaryType, StringType};
 
@@ -214,7 +229,7 @@ mod test {
         let data_type = BinaryType;
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: &Vec::<u8>::new()[..], ranges: &BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
-            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &mut BufReader::new(&mut empty()),
             &HashMap::new(),
             &data_type
         ));
@@ -222,7 +237,7 @@ mod test {
         let data_type = StringType;
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Data { data: &Vec::<u8>::new()[..], ranges: BTreeMap::new() }, &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(
-            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &mut BufReader::new(&mut empty()),
             &HashMap::new(),
             &data_type
         ));
@@ -330,13 +345,13 @@ mod test {
         assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
         assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_data(&Into::<Data<_, Vec<u8>>>::into(data.clone()).internal_references(), &specs, &data_type));
 
-        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "dsfdsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "ba".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "barasdasdd".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
-        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_line(LineBuffer::new(&mut "foodsfsdfd".as_bytes(), &mut Vec::new()), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer.recognize_for_line(&mut BufReader::new(&mut "dsfdsfsdfd".as_bytes()), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(&mut BufReader::new(&mut "dsfdsfsdfd".as_bytes()), &specs, &data_type));
+        assert_result!(Err(Error::CouldNotRecognize), recognizer_with_field.recognize_for_line(&mut BufReader::new(&mut "ba".as_bytes()), &specs, &data_type));
+        assert_result!(Ok("record2".to_string()), recognizer.recognize_for_line(&mut BufReader::new(&mut "barasdasdd".as_bytes()), &specs, &data_type));
+        assert_result!(Ok("record3".to_string()), recognizer_with_field.recognize_for_line(&mut BufReader::new(&mut "barasdasdd".as_bytes()), &specs, &data_type));
+        assert_result!(Ok("record4".to_string()), recognizer.recognize_for_line(&mut BufReader::new(&mut "foodsfsdfd".as_bytes()), &specs, &data_type));
+        assert_result!(Ok("record1".to_string()), recognizer_with_field.recognize_for_line(&mut BufReader::new(&mut "foodsfsdfd".as_bytes()), &specs, &data_type));
     }
 
     #[test]
@@ -346,7 +361,7 @@ mod test {
         assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &Data::<HashMap<_, _>, _>::new().internal_references(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
-            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &mut BufReader::new(&mut empty()),
             &HashMap::new(),
             &data_type
         ));
@@ -355,7 +370,7 @@ mod test {
         assert_result!(Err(Error::CouldNotRecognize), DataRecordSpecRecognizer::recognize_for_data(&&recognizer, &Data::<HashMap<_, _>, _>::new().internal_references(), &HashMap::new(), &data_type));
         assert_result!(Err(Error::CouldNotRecognize), LineRecordSpecRecognizer::recognize_for_line(
             &&recognizer,
-            LineBuffer::new(&mut empty(), &mut Vec::new()),
+            &mut BufReader::new(&mut empty()),
             &HashMap::new(),
             &data_type
         ));
