@@ -63,6 +63,9 @@ pub trait WriteType {
     type DataHolder;
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError>;
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]>;
+    fn get_data_by_name<'a, T: DataRanges + 'a>(&self, name: &'a str, data: &'a Data<T, Self::DataHolder>) -> Option<&'a [u8]> {
+        data.ranges.get(name).and_then(|range| self.get_data(range, &data.data))
+    }
 }
 
 pub trait FieldData {
@@ -118,6 +121,7 @@ impl WriteType for StringType {
     fn downcast_data<'a, T: DataRanges + 'a>(&self, data: &'a Data<T, Self::DataHolder>) -> Result<Data<&'a T, &'a [u8]>, DataHolderError> {
         Ok(Data { ranges: &data.ranges, data: data.data.as_ref() })
     }
+
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
         Some(data[range].as_bytes())
     }

@@ -43,12 +43,7 @@ impl<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, Rec
             self.write_type.downcast_data(data_and_record_name.0)?,
             record_name.into().or(data_and_record_name.1)
         );
-        let record_name = record_name
-            .map_or_else(
-                || self.recognizer.recognize_for_data(&data, self.specs.borrow(), &self.write_type),
-                |name| Ok(name)
-            )?
-        ;
+        let record_name = record_name.unwrap();
         let record_spec = self.specs.borrow()
             .get(record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_owned()))?
@@ -202,12 +197,9 @@ impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
               W: DataRanges + 'a
     {
         let mut amount_written = 0;
-        let (ranges, data) = (&data.ranges, &data.data);
 
         for (name, field_spec) in &spec.field_specs {
-
-            let field_data = ranges.get(name)
-                .map(|range| self.write_type.get_data(range, data).expect("badly built record data somehow has value missing for ranges entry"))
+            let field_data = self.write_type.get_data_by_name(name, data)
                 .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                 .ok_or_else(|| (Error::FieldValueRequired, name))?
             ;
@@ -217,6 +209,17 @@ impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
         writer.write_all(&spec.line_ending[..])?;
 
         Ok(amount_written + spec.line_ending.len())
+    }
+}
+
+pub struct RecordRecognizer<T: DataRecordSpecRecognizer<U>, U: WriteType> {
+    recognizer: T,
+    write_type: U
+}
+
+impl<T: DataRecordSpecRecognizer<U>, U: WriteType> RecordRecognizer<T, U> {
+    pub fn recognize<'a, V: DataRanges + 'a>(&self, data: &'a Data<V, U::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<&'a str> {
+        Ok(self.recognizer.recognize_for_data(data, record_specs, &self.write_type)?)
     }
 }
 
@@ -286,9 +289,9 @@ mod test {
         padder.add_pad_call("hello2".as_bytes().to_owned(), 36, "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok(string[9..45].as_bytes().to_owned()));
         let data = [("field1".to_string(), "hello".as_bytes().to_owned()),
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
-            .iter().cloned().collect::<Data<_, _>>();
-        let mut recognizer = MockRecognizer::<BTreeMap<String, Range<usize>>>::new();
-        recognizer.add_data_recognize_call(data.internal_references(), &spec.record_specs, Ok("record1"));
+            .iter().cloned().collect::<Data<BTreeMap<_, _>, _>>();
+        let mut recognizer = MockRecognizer::new();
+        recognizer.add_data_recognize_call(&spec.record_specs, Ok("record1"));
         let writer = WriterBuilder::new().with_padder(&padder).with_specs(&spec.record_specs).with_recognizer(&recognizer).build();
         writer.write_record(&mut buf, &data, None).unwrap();
         assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());

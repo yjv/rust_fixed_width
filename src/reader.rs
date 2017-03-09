@@ -507,7 +507,7 @@ mod test {
         let mut un_padder = MockPadder::new();
         un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-        let mut recognizer = MockRecognizer::<()>::new();
+        let mut recognizer = MockRecognizer::new();
         recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1"));
         let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)
@@ -661,7 +661,7 @@ mod test {
         un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
         un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
-        let mut recognizer = MockRecognizer::<()>::new();
+        let mut recognizer = MockRecognizer::new();
         recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1"));
         let mut reader = ReaderBuilder::new()
             .with_un_padder(&un_padder)

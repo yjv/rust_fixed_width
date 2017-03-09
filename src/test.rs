@@ -6,12 +6,12 @@ use std::io::{Read, BufRead};
 use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
 
 #[derive(Debug)]
-pub struct MockRecognizer<'a, T: DataRanges + 'a = ()> {
+pub struct MockRecognizer<'a> {
     line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>,
-    data_recognize_calls: Vec<(Data<&'a T, &'a [u8]>, &'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>
+    data_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>
 }
 
-impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
+impl<'a> MockRecognizer<'a> {
     pub fn new() -> Self {
         MockRecognizer {
             data_recognize_calls: Vec::new(),
@@ -24,13 +24,13 @@ impl<'a, T: DataRanges + 'a> MockRecognizer<'a, T> {
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, data: Data<&'a T, &'a [u8]>, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
-        self.data_recognize_calls.push((data, record_specs, return_value));
+    pub fn add_data_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
+        self.data_recognize_calls.push((record_specs, return_value));
         self
     }
 }
 
-impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a, T> {
+impl<'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a> {
     fn recognize_for_line<'b, 'c, V: BufRead + 'b>(&self, _: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<&'c str, ::recognizer::Error> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
@@ -54,11 +54,10 @@ impl<'a, T: DataRanges + 'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRe
     }
 }
 
-impl<'a, T: DataRanges + 'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a, T> {
-    fn recognize_for_data<'b, 'c, W: DataRanges + 'b>(&self, data: &'b Data<W, &'b [u8]>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<&'c str, ::recognizer::Error> {
-        for &(ref expected_data, ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
-            if expected_data.data == data.data
-                && *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
+impl<'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a> {
+    fn recognize_for_data<'b, 'c, W: DataRanges + 'b>(&self, _: &'b Data<W, V::DataHolder>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<&'c str, ::recognizer::Error> {
+        for &(ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
+            if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
                     return match *return_value {
                         Ok(ref v) => {
@@ -75,7 +74,7 @@ impl<'a, T: DataRanges + 'a, V: WriteType> DataRecordSpecRecognizer<V> for MockR
                 }
         }
 
-        panic!("Method recognize_for_data was not expected to be called with {:?}", (data.data, record_specs))
+        panic!("Method recognize_for_data was not expected to be called with {:?}", (record_specs))
     }
 }
 
