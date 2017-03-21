@@ -1,9 +1,12 @@
 use spec::*;
+use super::Error;
 use padder::{Padder, UnPadder, Error as PaddingError};
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Read, BufRead};
 use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
+use reader::FieldParser;
+use writer::FieldFormatter;
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
@@ -141,6 +144,79 @@ impl<T: ReadType> UnPadder<T> for MockPadder {
         }
 
         panic!("Method unpad was not expected to be called with {:?}", (data, padding, direction))
+    }
+}
+
+#[derive(Debug)]
+pub struct MockFormatter {
+    format_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>, Error>)>
+}
+
+impl MockFormatter {
+    pub fn new() -> Self {
+        MockFormatter {
+            format_calls: Vec::new()
+        }
+    }
+
+    pub fn add_format_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>, Error>) -> &mut Self {
+        self.format_calls.push((data, field_spec, return_value));
+        self
+    }
+}
+
+impl<T: WriteType> FieldFormatter<T> for MockFormatter {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), Error> {
+        for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.format_calls {
+            if *expected_data == data && expected_field_spec == field_spec {
+                return match *return_value {
+                    Ok(ref value) =>  {
+                        destination.extend(value.iter());
+                        Ok(())
+                    },
+                    Err(_) => Err(Error::RecordSpecNameRequired)
+                };
+            }
+        }
+
+        panic!("Method format was not expected to be called with {:?}", (data, field_spec))
+    }
+}
+
+#[derive(Debug)]
+pub struct MockParser {
+    parse_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>, Error>)>
+}
+
+impl MockParser {
+    pub fn new() -> Self {
+        MockParser {
+            parse_calls: Vec::new()
+        }
+    }
+
+    pub fn add_parse_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>, Error>) -> &mut Self {
+        self.parse_calls.push((data, field_spec, return_value));
+        self
+    }
+}
+
+impl<T: ReadType> FieldParser<T> for MockParser {
+    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), Error> {
+        for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.parse_calls {
+            if *expected_data == data
+                && expected_field_spec == field_spec {
+                return match *return_value {
+                    Ok(ref value) =>  {
+                        destination.extend(value.iter());
+                        Ok(())
+                    },
+                    Err(ref e) => Err(Error::RecordSpecNameRequired)
+                };
+            }
+        }
+
+        panic!("Method parse was not expected to be called with {:?}", (data, field_spec))
     }
 }
 

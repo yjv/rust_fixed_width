@@ -235,6 +235,85 @@ impl Display for PositionalError {
 }
 
 #[derive(Debug)]
+pub struct FieldError {
+    pub error: Error,
+    pub field: Option<String>
+}
+
+impl FieldError {
+    pub fn new(error: Error, field: String) -> Self {
+        FieldError {
+            error: error,
+            field: Some(field)
+        }
+    }
+}
+
+impl From<RecognizerError> for FieldError {
+    fn from(error: RecognizerError) -> Self {
+        FieldError::from(Error::from(error))
+    }
+}
+
+impl From<DataHolderError> for FieldError {
+    fn from(e: DataHolderError) -> Self {
+        FieldError::from(Error::from(e))
+    }
+}
+
+impl From<IoError> for FieldError {
+    fn from(error: IoError) -> Self {
+        FieldError::from(Error::from(error))
+    }
+}
+
+impl From<Error> for FieldError {
+    fn from(error: Error) -> Self {
+        FieldError {
+            error: error,
+            field: None
+        }
+    }
+}
+
+impl<'a> From<(Error, &'a String)> for FieldError {
+    fn from(data: (Error, &'a String)) -> Self {
+        FieldError {
+            error: data.0,
+            field: Some(data.1.to_string())
+        }
+    }
+}
+
+impl<'a> From<(Error, &'a str)> for FieldError {
+    fn from(data: (Error, &'a str)) -> Self {
+        FieldError {
+            error: data.0,
+            field: Some(data.1.to_string())
+        }
+    }
+}
+
+impl ErrorTrait for FieldError {
+    fn description(&self) -> &str {
+        self.error.description()
+    }
+
+    fn cause(&self) -> Option<&ErrorTrait> {
+        self.error.cause()
+    }
+}
+
+impl Display for FieldError {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
+        match self.field {
+            None => self.error.fmt(f),
+            Some(ref field) => write!(f, "{} at field {}", self.error, field)
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Position {
     pub record: String,
     pub field: Option<String>
