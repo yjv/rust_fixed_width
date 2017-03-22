@@ -526,83 +526,50 @@ mod test {
         let spec = test_spec();
         let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Ok("hello".as_bytes().to_owned()));
-        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-        assert_result!(Ok("hello".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field1", None));
-        assert_result!(Ok("hello2".as_bytes().to_owned()), reader.read_field(&mut buf, "record1", "field2", None));
+        let mut buffer = Vec::new();
+        let mut parser = MockParser::new();
+        let record_spec = &spec.record_specs.get("record1").unwrap();
+        parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
+        parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
+        let mut reader = FieldReader::new(&parser, BinaryType);
+        assert_result!(Ok(()), reader.read(&mut buf,&record_spec.field_specs.get("field1").unwrap(), &mut buffer, &mut Vec::new()));
+        assert_eq!("hello".as_bytes().to_owned(), buffer);
+        assert_result!(Ok(()), reader.read(&mut buf,&record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new()));
+        assert_eq!("hellohello2".as_bytes().to_owned(), buffer);
     }
 
     #[test]
-    fn read_field_with_bad_record_name() {
+    fn read_field_with_parsing_error() {
         let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
         let mut buf = Cursor::new(string.as_bytes());
-        let un_padder = MockPadder::new();
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
+        let mut buffer = Vec::new();
+        let mut parser = MockParser::new();
+        let record_spec = &spec.record_specs.get("record1").unwrap();
+        parser.add_parse_call(string[..5].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
+        let mut reader = FieldReader::new(&parser, BinaryType);
         assert_result!(
-            Err(Error::RecordSpecNotFound(ref record_name)) if record_name == "record5",
-            reader.read_field(&mut buf, "record5", "field1", None)
-        );
-    }
-
-    #[test]
-    fn read_field_with_bad_field_name() {
-        let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-        let mut buf = Cursor::new(string.as_bytes());
-        let un_padder = MockPadder::new();
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-        assert_result!(
-            Err(Error::FieldSpecNotFound(ref record_name, ref field_name)) if record_name == "record1" && field_name == "field5",
-            reader.read_field(&mut buf, "record1", "field5", None)
-        );
-    }
-
-    #[test]
-    fn read_field_with_padding_error() {
-        let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];dfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-        let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[0..4].as_bytes().to_owned(), "dsasd".as_bytes().to_owned(), PaddingDirection::Left, Err(PaddingError::new("")));
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-        assert_result!(
-            Err(Error::PadderFailure(_)),
-            reader.read_field(&mut buf, "record1", "field1", None)
+            Err(Error::RecordSpecNameRequired),
+            reader.read(&mut buf, &record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
 
     #[test]
     fn read_field_with_read_error() {
         let spec = test_spec();
-        let string = "123";
+        let string = "1234567890qwertyuiopasdfghjkl;";
         let mut buf = Cursor::new(string.as_bytes());
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(MockPadder::new())
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
+        let mut buffer = Vec::new();
+        let mut parser = MockParser::new();
+        let record_spec = &spec.record_specs.get("record1").unwrap();
+        parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
+        parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
+        let mut reader = FieldReader::new(&parser, BinaryType);
+        assert_result!(Ok(()), reader.read(&mut buf, &record_spec.field_specs.get("field1").unwrap(), &mut buffer, &mut Vec::new()));
+        assert_result!(Ok(()), reader.read(&mut buf, &record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new()));
         assert_result!(
             Err(Error::CouldNotReadEnough(_)),
-            reader.read_field(&mut buf, "record1", "field1", None)
+            reader.read(&mut buf, &record_spec.field_specs.get("field3").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
 
