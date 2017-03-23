@@ -1,6 +1,8 @@
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
 use padder::Error as PadderError;
+use formatter::Error as FormatterError;
+use parser::Error as ParserError;
 use std::io::Error as IoError;
 use recognizer::Error as RecognizerError;
 use record::DataHolderError;
@@ -12,6 +14,8 @@ pub enum Error {
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
     PadderFailure(PadderError),
+    ParserFailure(ParserError),
+    FormatterFailure(FormatterError),
     IoError(IoError),
     DataDoesNotMatchLineEnding(Vec<u8>, Vec<u8>),
     CouldNotReadEnough(Vec<u8>),
@@ -28,6 +32,8 @@ impl ErrorTrait for Error {
             Error::RecordSpecNotFound(_) => "record spec could not be found",
             Error::FieldSpecNotFound(_, _) => "field spec could not be found",
             Error::PadderFailure(_) => "The un-padder encountered an error",
+            Error::ParserFailure(_) => "The field parser encountered an error",
+            Error::FormatterFailure(_) => "The field formatter encountered an error",
             Error::IoError(_) => "An IO error occurred while trying to read",
             Error::CouldNotReadEnough(_) => "Could not read enough data",
             Error::DataDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
@@ -67,6 +73,8 @@ impl Display for Error {
             Error::RecordSpecNotFound(ref name) => write!(f, "record spec named {} could not be found", name),
             Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
             Error::PadderFailure(ref e) => write!(f, "The un-padder encountered an error: {}", e),
+            Error::ParserFailure(ref e) => write!(f, "The field parser encountered an error: {}", e),
+            Error::FormatterFailure(ref e) => write!(f, "The field formatter encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
             Error::CouldNotReadEnough(ref data) => write!(
                 f,
@@ -127,6 +135,17 @@ impl From<DataHolderError> for Error {
 impl From<PadderError> for Error {
     fn from(e: PadderError) -> Self {
         Error::PadderFailure(e)
+    }
+}
+
+impl From<FormatterError> for Error {
+    fn from(e: FormatterError) -> Self {
+        Error::FormatterFailure(e)
+    }
+}
+impl From<ParserError> for Error {
+    fn from(e: ParserError) -> Self {
+        Error::ParserFailure(e)
     }
 }
 

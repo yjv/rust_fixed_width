@@ -5,8 +5,8 @@ use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer}
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Read, BufRead};
 use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
-use reader::FieldParser;
-use writer::FieldFormatter;
+use formatter::{FieldFormatter, Error as FormatterError};
+use parser::{FieldParser, Error as ParserError};
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {
@@ -166,7 +166,7 @@ impl MockFormatter {
 }
 
 impl<T: WriteType> FieldFormatter<T> for MockFormatter {
-    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), Error> {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), FormatterError> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.format_calls {
             if *expected_data == data && expected_field_spec == field_spec {
                 return match *return_value {
@@ -174,7 +174,7 @@ impl<T: WriteType> FieldFormatter<T> for MockFormatter {
                         destination.extend(value.iter());
                         Ok(())
                     },
-                    Err(_) => Err(Error::RecordSpecNameRequired)
+                    Err(_) => Err(FormatterError::new(""))
                 };
             }
         }
@@ -202,7 +202,7 @@ impl MockParser {
 }
 
 impl<T: ReadType> FieldParser<T> for MockParser {
-    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), Error> {
+    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), ParserError> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.parse_calls {
             if *expected_data == data
                 && expected_field_spec == field_spec {
@@ -211,7 +211,7 @@ impl<T: ReadType> FieldParser<T> for MockParser {
                         destination.extend(value.iter());
                         Ok(())
                     },
-                    Err(ref e) => Err(Error::RecordSpecNameRequired)
+                    Err(ref e) => Err(ParserError::new(""))
                 };
             }
         }

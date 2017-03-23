@@ -6,6 +6,7 @@ use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, FieldResult};
 use record::{Data, DataRanges, WriteDataHolder, WriteType, BinaryType, Length};
+use formatter::FieldFormatter;
 
 pub struct Writer<T: Padder<W>, U: DataRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: WriteType> {
     padder: T,
@@ -156,16 +157,6 @@ impl<'a, T: DataRanges + 'a, U> Into<(&'a Data<T, U>, Option<&'a str>)> for &'a 
     }
 }
 
-pub trait FieldFormatter<T: WriteType> {
-    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
-}
-
-impl<'a, T, U: WriteType> FieldFormatter<U> for &'a T where T: 'a + FieldFormatter<U> {
-    fn format<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, write_type: &'b U) -> Result<()> {
-        (**self).format(data, field_spec, destination, write_type)
-    }
-}
-
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {
     formatter: T,
     write_type: U
@@ -286,7 +277,7 @@ mod test {
         let writer = RecordWriter::new(FieldWriter::new(&formatter, BinaryType));
         assert_result!(
             Err(FieldError {
-                error: Error::RecordSpecNameRequired,
+                error: Error::FormatterFailure(_),
                 field: Some(ref field)
             }) if field == "field1",
             writer.write(&mut buf, record_spec, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned())]
@@ -378,7 +369,7 @@ mod test {
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
         let writer = FieldWriter::new(&formatter, BinaryType);
         assert_result!(
-            Err(Error::RecordSpecNameRequired),
+            Err(Error::FormatterFailure(_)),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
         );
     }

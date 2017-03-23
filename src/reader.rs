@@ -7,6 +7,7 @@ use std::ops::Range;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, PositionalError, FieldResult};
 use record::{Data, DataRanges, BuildableDataRanges, ReadType, BinaryType, ShouldReadMore};
+use parser::FieldParser;
 
 pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
     un_padder: T,
@@ -49,12 +50,12 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
               A: BuildableDataRanges
     {
         let mut line = line.into().unwrap_or_else(|| Vec::new());
-        let mut reader = RememberingReader::new(reader);
+        let mut reader = BufReader::new(reader);
         let specs = self.specs.borrow();
         let record_name = record_name
             .into()
             .map_or_else(
-                || self.recognizer.recognize_for_line(&mut BufReader::new(&mut reader), specs, &self.read_type),
+                || self.recognizer.recognize_for_line(&mut reader, specs, &self.read_type),
                 |name| Ok(name)
             )?
         ;
@@ -63,7 +64,6 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             .get(record_name)
             .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_owned()))?
         ;
-        reader.restart();
         let mut ranges = A::new();
 
         self.buffer.clear();
@@ -237,16 +237,6 @@ impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<
             Err(PositionalError { error: Error::CouldNotReadEnough(ref string), .. }) if string.len() == 0 => None,
             r => Some(r)
         }
-    }
-}
-
-pub trait FieldParser<T: ReadType> {
-    fn parse<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, read_type: &'a T) -> Result<()>;
-}
-
-impl<'a, T, U: ReadType> FieldParser<U> for &'a T where T: 'a + FieldParser<U> {
-    fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_type: &'b U) -> Result<()> {
-        (**self).parse(data, field_spec, destination, read_type)
     }
 }
 
@@ -431,7 +421,7 @@ mod test {
         let mut reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
             Err(FieldError {
-                error: Error::RecordSpecNameRequired,
+                error: Error::ParserFailure(_),
                 field: Some(ref field)
             }) if field == "field1",
             reader.read::<_, BTreeMap<_, _>>(&mut buf, record_spec, Vec::new(), &mut Vec::new())
@@ -485,7 +475,7 @@ mod test {
         parser.add_parse_call(string[..5].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
         let mut reader = FieldReader::new(&parser, BinaryType);
         assert_result!(
-            Err(Error::RecordSpecNameRequired),
+            Err(Error::ParserFailure(_)),
             reader.read(&mut buf, &record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
