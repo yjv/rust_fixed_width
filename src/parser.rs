@@ -136,6 +136,7 @@ mod test {
     use super::*;
     use spec::*;
     use record::{BinaryType, StringType};
+    use formatter::FormatError;
 
     #[test]
     fn default_parser() {
@@ -204,11 +205,11 @@ mod test {
 
     #[test]
     fn error() {
-        let error = Error::new(ParseError::PaddingSplitNotOnCharBoundary(23));
-        assert_option!(Some(&ParseError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<ParseError>());
-        assert_option!(Some(&ParseError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<ParseError>());
-        match error.downcast::<ParseError>() {
-            Ok(ParseError::PaddingSplitNotOnCharBoundary(23)) => (),
+        let error = Error::new(FormatError::DataSplitNotOnCharBoundary(1));
+        assert_option!(Some(&FormatError::DataSplitNotOnCharBoundary(1)), error.downcast_ref::<FormatError>());
+        assert_option!(Some(&FormatError::DataSplitNotOnCharBoundary(1)), error.downcast_ref::<FormatError>());
+        match error.downcast::<FormatError>() {
+            Ok(FormatError::DataSplitNotOnCharBoundary(1)) => (),
             e => panic!("bad result returned {:?}", e)
         }
     }

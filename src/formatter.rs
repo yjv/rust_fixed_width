@@ -58,8 +58,6 @@ impl<'a, T, U: WriteType> FieldFormatter<U> for &'a T where T: 'a + FieldFormatt
     }
 }
 
-pub struct DefaultFormatter;
-
 #[derive(Debug)]
 pub enum FormatError {
     DataSplitNotOnCharBoundary(usize),
@@ -97,6 +95,8 @@ impl From<FormatError> for Error {
         Error::new(e)
     }
 }
+
+pub struct DefaultFormatter;
 
 impl FieldFormatter<BinaryType> for DefaultFormatter {
     fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinaryType) -> Result<()> {
