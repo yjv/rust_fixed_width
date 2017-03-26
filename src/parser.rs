@@ -1,6 +1,6 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use record::{ReadType, WriteType, BinaryType};
+use record::{ReadType, BinaryType};
 use spec::FieldSpec;
 
 #[derive(Debug)]

@@ -224,6 +224,19 @@ impl From<(Error, String, String)> for PositionalError {
     }
 }
 
+impl From<(FieldError, String)> for PositionalError {
+    fn from(data: (FieldError, String)) -> Self {
+        PositionalError {
+            error: data.0.error,
+            position: Some(if let Some(field) = data.0.field {
+                Position::new(data.1, field)
+            } else {
+                Position::new_from_record(data.1)
+            })
+        }
+    }
+}
+
 impl From<(PadderError, String, String)> for PositionalError {
     fn from(data: (PadderError, String, String)) -> Self {
         PositionalError {

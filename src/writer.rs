@@ -5,7 +5,7 @@ use std::io::Write;
 use std::borrow::Borrow;
 use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, FieldResult};
-use record::{Data, DataRanges, WriteDataHolder, WriteType, BinaryType, Length};
+use record::{Data, DataRanges, WriteType, BinaryType, Length};
 use formatter::FieldFormatter;
 
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {

@@ -2,7 +2,7 @@ use spec::{RecordSpec, FieldSpec};
 use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::{Read, BufRead, BufReader};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::ops::Range;
 use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, PositionalError, FieldResult};
@@ -116,14 +116,14 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
             Ok(())
         }
     }
-
-    pub fn iter<'a, X: 'a + Read, Y: BuildableDataRanges + 'a>(&'a mut self, reader: &'a mut X) -> Iter<'a, X, T, U, V, W, Y> {
-        Iter {
-            source: reader,
-            reader: self,
-            marker: ::std::marker::PhantomData
-        }
-    }
+//
+//    pub fn iter<'a, X: 'a + Read, Y: BuildableDataRanges + 'a>(&'a mut self, reader: &'a mut X) -> Iter<'a, X, T, U, V, W, Y> {
+//        Iter {
+//            source: reader,
+//            reader: self,
+//            marker: ::std::marker::PhantomData
+//        }
+//    }
 
     pub fn into_iter<X: Read, Y: BuildableDataRanges>(self, reader: X) -> IntoIter<X, T, U, V, W, Y> {
         IntoIter {
@@ -208,22 +208,6 @@ impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, R
     }
 }
 
-pub struct Iter<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: BuildableDataRanges + 'a> {
-    source: &'a mut T,
-    reader: &'a mut Reader<U, V, W, X>,
-    marker: ::std::marker::PhantomData<Y>
-}
-
-impl<'a, T: Read + 'a, U: UnPadder<X> + 'a, V: LineRecordSpecRecognizer<X> + 'a, W: Borrow<HashMap<String, RecordSpec>> + 'a, X: ReadType + 'a, Y: BuildableDataRanges + 'a> Iterator for Iter<'a, T, U, V, W, X, Y> {
-    type Item = PositionalResult<Record<Y, X::DataHolder>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.reader.read_record(self.source, None, None) {
-            Err(PositionalError { error: Error::CouldNotReadEnough(ref string), .. }) if string.len() == 0 => None,
-            r => Some(r)
-        }
-    }
-}
-
 pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: BuildableDataRanges> {
     source: T,
     reader: Reader<U, V, W, X>,
@@ -287,6 +271,29 @@ impl<T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
             field_reader: field_writer
         }
     }
+
+    pub fn iter<'a, R, V, W, X, Y, A, B>(&'a self, reader: Y, spec_source: V, specs: W, buffer: A, field_buffer_source: B) -> Iter<R, T, V, U, W, X, Y, &'a Self, A, B>
+        where R: BufRead + 'a,
+              V: SpecSource + 'a,
+              W: Borrow<HashMap<String, RecordSpec>> + 'a,
+              X: BuildableDataRanges + 'a,
+              Y: BorrowMut<R> + 'a,
+              A: BorrowMut<Vec<u8>> + 'a,
+              B: FieldBufferSource + 'a
+    {
+        Iter {
+            record_specs: specs,
+            buffer: buffer,
+            data_ranges: ::std::marker::PhantomData,
+            spec_source: spec_source,
+            reader: self,
+            source: reader,
+            field_buffer_source: field_buffer_source,
+            source_type: ::std::marker::PhantomData,
+            read_type: ::std::marker::PhantomData,
+            field_parser: ::std::marker::PhantomData
+        }
+    }
 }
 
 impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
@@ -325,7 +332,7 @@ pub struct RecordRecognizer<T: LineRecordSpecRecognizer<U>, U: ReadType> {
 }
 
 impl<T: LineRecordSpecRecognizer<U>, U: ReadType> RecordRecognizer<T, U> {
-    pub fn recognize<'a, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'a HashMap<String, RecordSpec>) -> Result<&'a str> {
+    pub fn recognize<'a, 'b, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
         Ok(self.recognizer.recognize_for_line(reader, record_specs, &self.read_type)?)
     }
 
@@ -338,6 +345,116 @@ impl<T: LineRecordSpecRecognizer<U>, U: ReadType> RecordRecognizer<T, U> {
 
     pub fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
         self.recognizer.get_suggested_buffer_size(record_specs, &self.read_type)
+    }
+}
+
+pub trait FieldBufferSource {
+    fn get(&mut self) -> Option<Vec<u8>>;
+}
+
+impl FieldBufferSource for Vec<u8> {
+    fn get(&mut self) -> Option<Vec<u8>> {
+        Some(self.clone())
+    }
+}
+
+impl FieldBufferSource for Option<Vec<u8>> {
+    fn get(&mut self) -> Option<Vec<u8>> {
+        self.take()
+    }
+}
+
+pub trait SpecSource {
+    fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str>;
+}
+
+pub struct RecognizerSource<T: Borrow<RecordRecognizer<U, V>>, U: LineRecordSpecRecognizer<V>, V: ReadType> {
+    recognizer: T,
+    line_recognizer: ::std::marker::PhantomData<U>,
+    read_type: ::std::marker::PhantomData<V>
+}
+
+impl <T, U, V> RecognizerSource<T, U, V>
+    where T: Borrow<RecordRecognizer<U, V>>,
+          U: LineRecordSpecRecognizer<V>,
+          V: ReadType {
+    pub fn new(recognizer: T) -> Self {
+        RecognizerSource {
+            recognizer: recognizer,
+            line_recognizer: ::std::marker::PhantomData,
+            read_type: ::std::marker::PhantomData
+        }
+    }
+}
+
+impl  <T, U, V> SpecSource for RecognizerSource<T, U, V>
+    where T: Borrow<RecordRecognizer<U, V>>,
+          U: LineRecordSpecRecognizer<V>,
+          V: ReadType {
+    fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
+        self.recognizer.borrow().recognize(reader, record_specs)
+    }
+}
+
+pub struct Iter<
+    'a,
+    R: BufRead + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource + 'a,
+    V: ReadType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    X: BuildableDataRanges + 'a,
+    Y: BorrowMut<R> + 'a,
+    Z: Borrow<RecordReader<T, V>> + 'a,
+    A: BorrowMut<Vec<u8>> + 'a,
+    B: FieldBufferSource + 'a
+> {
+    source: Y,
+    reader: Z,
+    spec_source: U,
+    record_specs: W,
+    buffer: A,
+    field_buffer_source: B,
+    data_ranges: ::std::marker::PhantomData<&'a X>,
+    source_type: ::std::marker::PhantomData<R>,
+    field_parser: ::std::marker::PhantomData<T>,
+    read_type: ::std::marker::PhantomData<V>,
+}
+
+impl<'a, R, T, U, V, W, X, Y, Z, A, B> Iterator for Iter<'a, R, T, U, V, W, X, Y, Z, A, B>
+    where R: BufRead + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource + 'a,
+          V: ReadType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BuildableDataRanges + 'a,
+          Y: BorrowMut<R> + 'a,
+          Z: Borrow<RecordReader<T, V>> + 'a,
+          A: BorrowMut<Vec<u8>> + 'a,
+          B: FieldBufferSource + 'a {
+    type Item = PositionalResult<Record<X, V::DataHolder>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let length = match self.source.borrow_mut().fill_buf() {
+            Ok(buf) => buf.len(),
+            Err(e) => return Some(Err(e.into()))
+        };
+        if length == 0 {
+            None
+        } else {
+            let spec_name = match self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow()) {
+                Ok(r) => r,
+                Err(e) => return Some(Err(e.into()))
+            };
+            Some(self.reader.borrow().read(
+                self.source.borrow_mut(),
+                self.record_specs.borrow().get(spec_name).unwrap(),
+                self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
+                self.buffer.borrow_mut()
+            )
+                .map(|data| Record { data: data, name: spec_name.to_string() })
+                .map_err(|e| (e, spec_name.to_string()).into())
+            )
+        }
     }
 }
 
@@ -498,84 +615,84 @@ mod test {
             reader.read(&mut buf, &record_spec.field_specs.get("field3").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
-
-    #[test]
-    fn iterator() {
-        let spec = test_spec();
-        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-        let mut buf = Cursor::new(string.as_bytes());
-        let mut un_padder = MockPadder::new();
-        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
-        un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-        un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
-        un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
-        let mut recognizer = MockRecognizer::new();
-        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1"));
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_recognizer(&recognizer)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-        let mut vec = Vec::new();
-        vec.push(Record {
-            data: Data { data: "hellohello2".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..5),
-                ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        vec.push(Record {
-            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..6),
-            ("field3".to_string(), 6..12)]
-            .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Range<usize>>, Vec<u8>>>>());
-        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-
-        let mut reader = ReaderBuilder::new()
-            .with_un_padder(&un_padder)
-            .with_recognizer(&recognizer)
-            .with_specs(&spec.record_specs)
-            .build()
-        ;
-
-        let mut vec = Vec::new();
-        vec.push(Record {
-            data: Data { data: "hellohello2".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..5),
-                ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        vec.push(Record {
-            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..6),
-                ("field3".to_string(), 6..12)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
-
-        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-
-        let mut vec = Vec::new();
-        vec.push(Record {
-            data: Data { data: "hellohello2".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..5),
-                ("field3".to_string(), 5..11)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        vec.push(Record {
-            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-            ranges: [("field2".to_string(), 0..6),
-                ("field3".to_string(), 6..12)]
-                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-            name: "record1".to_string()
-        });
-        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
-    }
+//
+//    #[test]
+//    fn iterator() {
+//        let spec = test_spec();
+//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+//        let mut buf = Cursor::new(string.as_bytes());
+//        let mut un_padder = MockPadder::new();
+//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
+//        un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
+//        un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
+//        un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
+//        let mut recognizer = MockRecognizer::new();
+//        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1"));
+//        let mut reader = ReaderBuilder::new()
+//            .with_un_padder(&un_padder)
+//            .with_recognizer(&recognizer)
+//            .with_specs(&spec.record_specs)
+//            .build()
+//        ;
+//        let mut vec = Vec::new();
+//        vec.push(Record {
+//            data: Data { data: "hellohello2".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..5),
+//                ("field3".to_string(), 5..11)]
+//                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        vec.push(Record {
+//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..6),
+//            ("field3".to_string(), 6..12)]
+//            .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Range<usize>>, Vec<u8>>>>());
+//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+//
+//        let mut reader = ReaderBuilder::new()
+//            .with_un_padder(&un_padder)
+//            .with_recognizer(&recognizer)
+//            .with_specs(&spec.record_specs)
+//            .build()
+//        ;
+//
+//        let mut vec = Vec::new();
+//        vec.push(Record {
+//            data: Data { data: "hellohello2".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..5),
+//                ("field3".to_string(), 5..11)]
+//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        vec.push(Record {
+//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..6),
+//                ("field3".to_string(), 6..12)]
+//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
+//
+//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
+//
+//        let mut vec = Vec::new();
+//        vec.push(Record {
+//            data: Data { data: "hellohello2".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..5),
+//                ("field3".to_string(), 5..11)]
+//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        vec.push(Record {
+//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
+//            ranges: [("field2".to_string(), 0..6),
+//                ("field3".to_string(), 6..12)]
+//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
+//            name: "record1".to_string()
+//        });
+//        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
+//    }
 }

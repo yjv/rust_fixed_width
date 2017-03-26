@@ -35,10 +35,6 @@ impl<'a, T> DataRanges for &'a T where T: 'a + DataRanges {
     }
 }
 
-pub trait ReadDataHolder {
-    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError>;
-}
-
 pub enum ShouldReadMore {
     More(usize),
     NoMore
@@ -480,30 +476,6 @@ impl BuildableDataRanges for () {
     }
 
     fn insert<'a>(&mut self, _: &'a str, _: Range<usize>) {}
-}
-
-impl ReadDataHolder for Vec<u8> {
-    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError> {
-        Ok(self.extend(data))
-    }
-}
-
-impl WriteDataHolder for Vec<u8> {
-    fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
-        &self[range]
-    }
-}
-
-impl ReadDataHolder for String {
-    fn push<'a>(&mut self, data: &'a [u8]) -> Result<(), DataHolderError> {
-        Ok(self.push_str(::std::str::from_utf8(data)?))
-    }
-}
-
-impl WriteDataHolder for String {
-    fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8] {
-        self[range].as_ref()
-    }
 }
 
 impl From<HashMap<String, Vec<u8>>> for Data<HashMap<String, Range<usize>>, Vec<u8>> {
