@@ -532,31 +532,6 @@ impl<'a, R, T, U, V, W, Y, Z, A, B> FileReader<'a, R, T, U, V, W, Y, Z, A, B>
     }
 }
 
-pub struct IterBuilder<
-    'a,
-    R: BufRead + 'a,
-    T: FieldParser<V> + 'a,
-    U: SpecSource + 'a,
-    V: ReadType + 'a,
-    W: Borrow<HashMap<String, RecordSpec>> + 'a,
-    X: BuildableDataRanges + 'a,
-    Y: BorrowMut<R> + 'a,
-    Z: Borrow<RecordReader<T, V>> + 'a,
-    A: BorrowMut<Vec<u8>> + 'a,
-    B: FieldBufferSource + 'a
-> {
-    source: Option<Y>,
-    reader: Z,
-    spec_source: Option<U>,
-    record_specs: Option<W>,
-    buffer: Option<A>,
-    field_buffer_source: Option<B>,
-    data_ranges: ::std::marker::PhantomData<&'a X>,
-    source_type: ::std::marker::PhantomData<R>,
-    field_parser: ::std::marker::PhantomData<T>,
-    read_type: ::std::marker::PhantomData<V>,
-}
-
 #[cfg(test)]
 mod test {
 
