@@ -519,17 +519,10 @@ impl<'a, R, T, U, V, W, Y, Z, A, B> FileReader<'a, R, T, U, V, W, Y, Z, A, B>
           A: BorrowMut<Vec<u8>> + 'a,
           B: FieldBufferSource + 'a {
     fn read<'b, X: BuildableDataRanges + 'a>(&mut self) -> PositionalResult<Record<X, V::DataHolder>> {
-        let spec_name = match self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow()) {
-            Ok(r) => r,
-            Err(e) => return Err(e.into())
-        };
-        let spec = match self.record_specs.borrow().get(spec_name) {
-            Some(spec) => spec,
-            None => return Err(Error::RecordSpecNotFound(spec_name.to_string()).into())
-        };
+        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow())?;
         self.reader.borrow().read(
             self.source.borrow_mut(),
-            spec,
+            self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
             self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
             self.buffer.borrow_mut()
         )
