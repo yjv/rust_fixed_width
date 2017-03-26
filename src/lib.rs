@@ -43,7 +43,7 @@ pub mod writer;
 
 pub use self::error::{Error, PositionalError, FieldError, Position};
 pub use self::reader::{Reader, ReaderBuilder};
-pub use self::writer::{Writer, WriterBuilder};
+pub use self::writer::{FieldWriter, RecordWriter};
 pub use self::record::{Record, Data};
 
 type Result<T> = ::std::result::Result<T, Error>;
