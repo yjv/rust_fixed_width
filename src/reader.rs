@@ -445,9 +445,13 @@ impl<'a, R, T, U, V, W, X, Y, Z, A, B> Iterator for Iter<'a, R, T, U, V, W, X, Y
                 Ok(r) => r,
                 Err(e) => return Some(Err(e.into()))
             };
+            let spec = match self.record_specs.borrow().get(spec_name) {
+                Some(spec) => spec,
+                None => return Some(Err(Error::RecordSpecNotFound(spec_name.to_string()).into()))
+            };
             Some(self.reader.borrow().read(
                 self.source.borrow_mut(),
-                self.record_specs.borrow().get(spec_name).unwrap(),
+                spec,
                 self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
                 self.buffer.borrow_mut()
             )
