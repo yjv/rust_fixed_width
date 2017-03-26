@@ -42,7 +42,7 @@ pub mod spec;
 pub mod writer;
 
 pub use self::error::{Error, PositionalError, FieldError, Position};
-pub use self::reader::{Reader, ReaderBuilder};
+pub use self::reader::{Reader};
 pub use self::writer::{FieldWriter, RecordWriter};
 pub use self::record::{Record, Data};
 

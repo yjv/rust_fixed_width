@@ -9,221 +9,6 @@ use super::{Error, Result, PositionalResult, Record, PositionalError, FieldResul
 use record::{Data, DataRanges, BuildableDataRanges, ReadType, BinaryType, ShouldReadMore};
 use parser::FieldParser;
 
-pub struct Reader<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
-    un_padder: T,
-    recognizer: U,
-    specs: V,
-    buffer: Vec<u8>,
-    read_type: W
-}
-
-impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> Reader<T, U, V, W> {
-    pub fn read_field<'a, X, Y>(&mut self, reader: &'a mut X, record_name: &'a str, name: &'a str, field: Y) -> Result<Vec<u8>>
-        where X: 'a + Read,
-              Y: Into<Option<Vec<u8>>>
-    {
-        let mut field = field.into().unwrap_or_else(|| Vec::new());
-        let record_spec = self.specs.borrow()
-            .get(record_name)
-            .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_string()))?
-        ;
-        let field_spec = record_spec
-            .field_specs.get(name)
-            .ok_or_else(|| Error::FieldSpecNotFound(record_name.to_string(), name.to_string()))?
-        ;
-        self.buffer.clear();
-        Self::_read_data(reader, field_spec.length, &mut self.buffer)?;
-        self.un_padder.unpad(
-            &self.buffer[..],
-            &field_spec.padding,
-            field_spec.padding_direction,
-            &mut field,
-            &self.read_type
-        )?;
-        Ok(field)
-    }
-
-    pub fn read_record<'a, X, Y, Z, A>(&mut self, reader: &'a mut X, record_name: Y, line: Z) -> PositionalResult<Record<A, W::DataHolder>>
-        where X: 'a + Read,
-              Y: Into<Option<&'a str>>,
-              Z: Into<Option<Vec<u8>>>,
-              A: BuildableDataRanges
-    {
-        let mut line = line.into().unwrap_or_else(|| Vec::new());
-        let mut reader = BufReader::new(reader);
-        let specs = self.specs.borrow();
-        let record_name = record_name
-            .into()
-            .map_or_else(
-                || self.recognizer.recognize_for_line(&mut reader, specs, &self.read_type),
-                |name| Ok(name)
-            )?
-        ;
-
-        let record_spec = specs
-            .get(record_name)
-            .ok_or_else(|| Error::RecordSpecNotFound(record_name.to_owned()))?
-        ;
-        let mut ranges = A::new();
-
-        self.buffer.clear();
-
-        for (name, field_spec) in &record_spec.field_specs {
-            Self::_read_data(&mut reader, field_spec.length, &mut self.buffer).map_err(|e| (e, record_name.to_owned(), name.clone()))?;
-            if !field_spec.write_only {
-                let old_length = line.len();
-                self.un_padder.unpad(
-                    &self.buffer[..],
-                    &field_spec.padding,
-                    field_spec.padding_direction,
-                    &mut line,
-                    &self.read_type
-                ).map_err(|e| (e, record_name.to_owned(), name.clone()))?;
-                ranges.insert(name, old_length..line.len());
-            }
-
-            self.buffer.clear();
-        }
-
-        Self::_absorb_line_ending(&mut reader, &record_spec.line_ending, &mut self.buffer).map_err(|e| (e, record_name))?;
-
-        Ok(Record { data: Data { data: self.read_type.upcast_data(line)?, ranges: ranges}, name: record_name.to_owned() })
-    }
-
-    pub fn absorb_line_ending<'a, Y: 'a + Read>(&mut self, reader: &'a mut Y, line_ending: &[u8]) -> Result<()> {
-        Self::_absorb_line_ending(reader, line_ending, &mut self.buffer)
-    }
-
-    fn _absorb_line_ending<'a, Y: 'a + Read>(reader: &'a mut Y, line_ending: &[u8], buffer: &mut Vec<u8>) -> Result<()> {
-        buffer.clear();
-        reader.by_ref().take(line_ending.len() as u64).read_to_end(buffer)?;
-        if buffer.len() != 0 && &buffer[..] != &line_ending[..] {
-            return Err(Error::DataDoesNotMatchLineEnding(
-                line_ending.to_owned(),
-                buffer.clone()
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn _read_data<'a, Y: 'a + Read>(reader: &'a mut Y, length: usize, data: &mut Vec<u8>) -> Result<()> {
-        let _ = reader.by_ref().take((length - data.len()) as u64).read_to_end(data)?;
-
-        if data.len() < length {
-            Err(Error::CouldNotReadEnough(data.clone()))
-        } else {
-            Ok(())
-        }
-    }
-//
-//    pub fn iter<'a, X: 'a + Read, Y: BuildableDataRanges + 'a>(&'a mut self, reader: &'a mut X) -> Iter<'a, X, T, U, V, W, Y> {
-//        Iter {
-//            source: reader,
-//            reader: self,
-//            marker: ::std::marker::PhantomData
-//        }
-//    }
-
-    pub fn into_iter<X: Read, Y: BuildableDataRanges>(self, reader: X) -> IntoIter<X, T, U, V, W, Y> {
-        IntoIter {
-            source: reader,
-            reader: self,
-            marker: ::std::marker::PhantomData
-        }
-    }
-}
-
-pub struct ReaderBuilder<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> {
-    un_padder: T,
-    recognizer: U,
-    specs: Option<V>,
-    read_type: W
-}
-
-impl<V: Borrow<HashMap<String, RecordSpec>>> ReaderBuilder<IdentityPadder, NoneRecognizer, V, BinaryType> {
-    pub fn new() -> ReaderBuilder<IdentityPadder, NoneRecognizer, V, BinaryType> {
-        ReaderBuilder {
-            un_padder: IdentityPadder,
-            recognizer: NoneRecognizer,
-            specs: None,
-            read_type: BinaryType
-        }
-    }
-}
-
-impl<T: UnPadder<W>, U: LineRecordSpecRecognizer<W>, V: Borrow<HashMap<String, RecordSpec>>, W: ReadType> ReaderBuilder<T, U, V, W> {
-    pub fn from_reader(reader: Reader<T, U, V, W>) -> Self {
-        ReaderBuilder {
-            un_padder: reader.un_padder,
-            recognizer: reader.recognizer,
-            read_type: reader.read_type,
-            specs: Some(reader.specs)
-        }
-    }
-
-    pub fn with_un_padder<X: UnPadder<W>>(self, un_padder: X) -> ReaderBuilder<X, U, V, W> {
-        ReaderBuilder {
-            un_padder: un_padder,
-            recognizer: self.recognizer,
-            specs: self.specs,
-            read_type: self.read_type
-        }
-    }
-
-    pub fn with_recognizer<X: LineRecordSpecRecognizer<W>>(self, recognizer: X) -> ReaderBuilder<T, X, V, W> {
-        ReaderBuilder {
-            un_padder: self.un_padder,
-            recognizer: recognizer,
-            specs: self.specs,
-            read_type: self.read_type
-        }
-    }
-
-    pub fn with_specs(mut self, specs: V) -> Self {
-        self.specs = Some(specs);
-        self
-    }
-
-    pub fn with_read_type<X: ReadType>(self, read_type: X) -> ReaderBuilder<T, U, V, X>
-        where T: UnPadder<X>,
-              U: LineRecordSpecRecognizer<X>
-    {
-        ReaderBuilder {
-            un_padder: self.un_padder,
-            recognizer: self.recognizer,
-            specs: self.specs,
-            read_type: read_type
-        }
-    }
-
-    pub fn build(self) -> Reader<T, U, V, W> {
-        Reader {
-            un_padder: self.un_padder,
-            recognizer: self.recognizer,
-            specs: self.specs.expect("specs is required to build a writer"),
-            buffer: Vec::new(),
-            read_type: self.read_type
-        }
-    }
-}
-
-pub struct IntoIter<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: BuildableDataRanges> {
-    source: T,
-    reader: Reader<U, V, W, X>,
-    marker: ::std::marker::PhantomData<Y>
-}
-
-impl<T: Read, U: UnPadder<X>, V: LineRecordSpecRecognizer<X>, W: Borrow<HashMap<String, RecordSpec>>, X: ReadType, Y: BuildableDataRanges> Iterator for IntoIter<T, U, V, W, X, Y> {
-    type Item = PositionalResult<Record<Y, X::DataHolder>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.reader.read_record(&mut self.source, None, None) {
-            Err(PositionalError { error: Error::CouldNotReadEnough(ref string), .. }) if string.len() == 0 => None,
-            r => Some(r)
-        }
-    }
-}
-
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
     parser: T,
     read_type: U
@@ -387,6 +172,12 @@ impl FieldBufferSource for Option<Vec<u8>> {
     }
 }
 
+impl FieldBufferSource for Vec<Vec<u8>> {
+    fn get(&mut self) -> Option<Vec<u8>> {
+        self.pop()
+    }
+}
+
 pub trait SpecSource {
     fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str>;
 }
@@ -485,7 +276,7 @@ impl<'a, R, T, U, V, W, X, Y, Z, A, B> Iterator for Iter<'a, R, T, U, V, W, X, Y
     }
 }
 
-pub struct FileReader<
+pub struct Reader<
     'a,
     R: BufRead + 'a,
     T: FieldParser<V> + 'a,
@@ -493,34 +284,42 @@ pub struct FileReader<
     V: ReadType + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     Y: BorrowMut<R> + 'a,
-    Z: Borrow<RecordReader<T, V>> + 'a,
     A: BorrowMut<Vec<u8>> + 'a,
     B: FieldBufferSource + 'a
 > {
     source: Y,
-    reader: Z,
+    reader: RecordReader<T, V>,
     spec_source: U,
     record_specs: W,
     buffer: A,
     field_buffer_source: B,
-    source_type: ::std::marker::PhantomData<&'a R>,
-    field_parser: ::std::marker::PhantomData<T>,
-    read_type: ::std::marker::PhantomData<V>,
+    source_type: ::std::marker::PhantomData<&'a R>
 }
 
-impl<'a, R, T, U, V, W, Y, Z, A, B> FileReader<'a, R, T, U, V, W, Y, Z, A, B>
+impl<'a, R, T, U, V, W, Y, A, B> Reader<'a, R, T, U, V, W, Y, A, B>
     where R: BufRead + 'a,
           T: FieldParser<V> + 'a,
           U: SpecSource + 'a,
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           Y: BorrowMut<R> + 'a,
-          Z: Borrow<RecordReader<T, V>> + 'a,
           A: BorrowMut<Vec<u8>> + 'a,
           B: FieldBufferSource + 'a {
-    fn read<'b, X: BuildableDataRanges + 'a>(&mut self) -> PositionalResult<Record<X, V::DataHolder>> {
+    pub fn new(source: Y, reader: RecordReader<T, V>, spec_source: U, record_specs: W, buffer: A, field_buffer_source: B) -> Self {
+        Reader {
+            source: source,
+            reader: reader,
+            spec_source: spec_source,
+            record_specs: record_specs,
+            buffer: buffer,
+            field_buffer_source: field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn read_record<'b, X: BuildableDataRanges + 'a>(&mut self) -> PositionalResult<Record<X, V::DataHolder>> {
         let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow())?;
-        self.reader.borrow().read(
+        self.reader.read(
             self.source.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
             self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
