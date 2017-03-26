@@ -294,6 +294,29 @@ impl<T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
             field_parser: ::std::marker::PhantomData
         }
     }
+
+    pub fn into_iter<'a, R, V, W, X, Y, A, B>(self, reader: Y, spec_source: V, specs: W, buffer: A, field_buffer_source: B) -> Iter<'a, R, T, V, U, W, X, Y, Self, A, B>
+        where R: BufRead + 'a,
+              V: SpecSource + 'a,
+              W: Borrow<HashMap<String, RecordSpec>> + 'a,
+              X: BuildableDataRanges + 'a,
+              Y: BorrowMut<R> + 'a,
+              A: BorrowMut<Vec<u8>> + 'a,
+              B: FieldBufferSource + 'a
+    {
+        Iter {
+            record_specs: specs,
+            buffer: buffer,
+            data_ranges: ::std::marker::PhantomData,
+            spec_source: spec_source,
+            reader: self,
+            source: reader,
+            field_buffer_source: field_buffer_source,
+            source_type: ::std::marker::PhantomData,
+            read_type: ::std::marker::PhantomData,
+            field_parser: ::std::marker::PhantomData
+        }
+    }
 }
 
 impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
@@ -460,6 +483,85 @@ impl<'a, R, T, U, V, W, X, Y, Z, A, B> Iterator for Iter<'a, R, T, U, V, W, X, Y
             )
         }
     }
+}
+
+pub struct FileReader<
+    'a,
+    R: BufRead + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource + 'a,
+    V: ReadType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    Y: BorrowMut<R> + 'a,
+    Z: Borrow<RecordReader<T, V>> + 'a,
+    A: BorrowMut<Vec<u8>> + 'a,
+    B: FieldBufferSource + 'a
+> {
+    source: Y,
+    reader: Z,
+    spec_source: U,
+    record_specs: W,
+    buffer: A,
+    field_buffer_source: B,
+    source_type: ::std::marker::PhantomData<&'a R>,
+    field_parser: ::std::marker::PhantomData<T>,
+    read_type: ::std::marker::PhantomData<V>,
+}
+
+impl<'a, R, T, U, V, W, Y, Z, A, B> FileReader<'a, R, T, U, V, W, Y, Z, A, B>
+    where R: BufRead + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource + 'a,
+          V: ReadType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          Y: BorrowMut<R> + 'a,
+          Z: Borrow<RecordReader<T, V>> + 'a,
+          A: BorrowMut<Vec<u8>> + 'a,
+          B: FieldBufferSource + 'a {
+    fn read<'b, X: BuildableDataRanges + 'a>(&mut self) -> PositionalResult<Record<X, V::DataHolder>> {
+        let spec_name = match self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow()) {
+            Ok(r) => r,
+            Err(e) => return Err(e.into())
+        };
+        let spec = match self.record_specs.borrow().get(spec_name) {
+            Some(spec) => spec,
+            None => return Err(Error::RecordSpecNotFound(spec_name.to_string()).into())
+        };
+        self.reader.borrow().read(
+            self.source.borrow_mut(),
+            spec,
+            self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
+            self.buffer.borrow_mut()
+        )
+            .map(|data| Record { data: data, name: spec_name.to_string() })
+            .map_err(|e| (e, spec_name.to_string()).into())
+
+    }
+}
+
+pub struct IterBuilder<
+    'a,
+    R: BufRead + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource + 'a,
+    V: ReadType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    X: BuildableDataRanges + 'a,
+    Y: BorrowMut<R> + 'a,
+    Z: Borrow<RecordReader<T, V>> + 'a,
+    A: BorrowMut<Vec<u8>> + 'a,
+    B: FieldBufferSource + 'a
+> {
+    source: Option<Y>,
+    reader: Z,
+    spec_source: Option<U>,
+    record_specs: Option<W>,
+    buffer: Option<A>,
+    field_buffer_source: Option<B>,
+    data_ranges: ::std::marker::PhantomData<&'a X>,
+    source_type: ::std::marker::PhantomData<R>,
+    field_parser: ::std::marker::PhantomData<T>,
+    read_type: ::std::marker::PhantomData<V>,
 }
 
 #[cfg(test)]
