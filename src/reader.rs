@@ -160,6 +160,12 @@ pub trait FieldBufferSource {
     fn get(&mut self) -> Option<Vec<u8>>;
 }
 
+impl<'a, T: FieldBufferSource + 'a> FieldBufferSource for &'a mut T {
+    fn get(&mut self) -> Option<Vec<u8>> {
+        FieldBufferSource::get(*self)
+    }
+}
+
 impl FieldBufferSource for Vec<u8> {
     fn get(&mut self) -> Option<Vec<u8>> {
         Some(self.clone())
@@ -180,6 +186,12 @@ impl FieldBufferSource for Vec<Vec<u8>> {
 
 pub trait SpecSource {
     fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str>;
+}
+
+impl<'c, U: SpecSource + 'c> SpecSource for &'c mut U {
+    fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
+        SpecSource::next(*self, reader, record_specs)
+    }
 }
 
 pub struct RecognizerSource<T: Borrow<RecordRecognizer<U, V>>, U: LineRecordSpecRecognizer<V>, V: ReadType> {
@@ -283,41 +295,29 @@ pub struct Reader<
     U: SpecSource + 'a,
     V: ReadType + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
-    Y: BorrowMut<R> + 'a,
-    A: BorrowMut<Vec<u8>> + 'a,
-    B: FieldBufferSource + 'a
+    X: BorrowMut<R> + 'a,
+    Y: BorrowMut<Vec<u8>> + 'a,
+    Z: FieldBufferSource + 'a
 > {
-    source: Y,
+    source: X,
     reader: RecordReader<T, V>,
     spec_source: U,
     record_specs: W,
-    buffer: A,
-    field_buffer_source: B,
+    buffer: Y,
+    field_buffer_source: Z,
     source_type: ::std::marker::PhantomData<&'a R>
 }
 
-impl<'a, R, T, U, V, W, Y, A, B> Reader<'a, R, T, U, V, W, Y, A, B>
+impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
           T: FieldParser<V> + 'a,
           U: SpecSource + 'a,
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          Y: BorrowMut<R> + 'a,
-          A: BorrowMut<Vec<u8>> + 'a,
-          B: FieldBufferSource + 'a {
-    pub fn new(source: Y, reader: RecordReader<T, V>, spec_source: U, record_specs: W, buffer: A, field_buffer_source: B) -> Self {
-        Reader {
-            source: source,
-            reader: reader,
-            spec_source: spec_source,
-            record_specs: record_specs,
-            buffer: buffer,
-            field_buffer_source: field_buffer_source,
-            source_type: ::std::marker::PhantomData
-        }
-    }
-
-    pub fn read_record<'b, X: BuildableDataRanges + 'a>(&mut self) -> PositionalResult<Record<X, V::DataHolder>> {
+          X: BorrowMut<R> + 'a,
+          Y: BorrowMut<Vec<u8>> + 'a,
+          Z: FieldBufferSource + 'a {
+    pub fn read_record<'b, A: BuildableDataRanges + 'b>(&mut self) -> PositionalResult<Record<A, V::DataHolder>> {
         let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow())?;
         self.reader.read(
             self.source.borrow_mut(),
@@ -328,6 +328,132 @@ impl<'a, R, T, U, V, W, Y, A, B> Reader<'a, R, T, U, V, W, Y, A, B>
             .map(|data| Record { data: data, name: spec_name.to_string() })
             .map_err(|e| (e, spec_name.to_string()).into())
 
+    }
+
+    pub fn into_inner(self) -> RecordReader<T, V> {
+        self.reader
+    }
+}
+
+pub struct ReaderBuilder<
+    'a,
+    R: BufRead + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource + 'a,
+    V: ReadType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    X: BorrowMut<R> + 'a,
+    Y: BorrowMut<Vec<u8>> + 'a,
+    Z: FieldBufferSource + 'a
+> {
+    source: Option<X>,
+    reader: RecordReader<T, V>,
+    spec_source: Option<U>,
+    record_specs: Option<W>,
+    buffer: Y,
+    field_buffer_source: Z,
+    source_type: ::std::marker::PhantomData<&'a R>
+}
+
+impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
+    where R: BufRead + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource + 'a,
+          V: ReadType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<R> + 'a {
+    pub fn new(record_reader: RecordReader<T, V>) -> Self {
+        ReaderBuilder {
+            source: None,
+            reader: record_reader,
+            spec_source: None,
+            record_specs: None,
+            buffer: Vec::new(),
+            field_buffer_source: None,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+}
+
+impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
+    where R: BufRead + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource + 'a,
+          V: ReadType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<R> + 'a,
+          Y: BorrowMut<Vec<u8>> + 'a,
+          Z: FieldBufferSource + 'a {
+    pub fn with_source<A: BufRead + 'a, B: BorrowMut<A> + 'a>(self, source: B) -> ReaderBuilder<'a, A, T, U, V, W, B, Y, Z> {
+        ReaderBuilder {
+            source: Some(source),
+            reader: self.reader,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_spec_source<A: SpecSource + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
+        ReaderBuilder {
+            source: self.source,
+            reader: self.reader,
+            spec_source: Some(spec_source),
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_record_specs<A: Borrow<HashMap<String, RecordSpec>> + 'a>(self, record_specs: A) -> ReaderBuilder<'a, R, T, U, V, A, X, Y, Z> {
+        ReaderBuilder {
+            source: self.source,
+            reader: self.reader,
+            spec_source: self.spec_source,
+            record_specs: Some(record_specs),
+            buffer: self.buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_buffer<A: BorrowMut<Vec<u8>> + 'a>(self, buffer: A) -> ReaderBuilder<'a, R, T, U, V, W, X, A, Z> {
+        ReaderBuilder {
+            source: self.source,
+            reader: self.reader,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_field_buffer_source<A: FieldBufferSource + 'a>(self, field_buffer_source: A) -> ReaderBuilder<'a, R, T, U, V, W, X, Y, A> {
+        ReaderBuilder {
+            source: self.source,
+            reader: self.reader,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            field_buffer_source: field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn build(self) -> Reader<'a, R, T, U, V, W, X, Y, Z> {
+        Reader {
+            source: self.source.expect("source needs to be defined in order to build"),
+            reader: self.reader,
+            spec_source: self.spec_source.expect("spec_source needs to be defined in order to build"),
+            record_specs: self.record_specs.expect("record_specs needs to be defined in order to build"),
+            buffer: self.buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
     }
 }
 
