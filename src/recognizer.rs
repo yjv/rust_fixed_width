@@ -110,7 +110,7 @@ impl<'a, T: Read + 'a> LineBuffer<'a, T> {
 
 pub trait LineRecordSpecRecognizer<T: ReadType> {
     fn recognize_for_line<'a, 'b, U: BufRead + 'a>(&self, buffer: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
-    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a T) -> Option<usize> {
+    fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Option<usize> {
         None
     }
 }

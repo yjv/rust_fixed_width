@@ -1,5 +1,4 @@
 use spec::{RecordSpec, FieldSpec};
-use padder::{Padder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;

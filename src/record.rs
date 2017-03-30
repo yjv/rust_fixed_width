@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::btree_map::{Iter as BTreeMapIter, IntoIter as BTreeMapIntoIter};
 use std::collections::hash_map::{Iter as HashMapIter, IntoIter as HashMapIntoIter};
 use std::ops::{Range, Index};
-use std::iter::{FromIterator, Enumerate};
+use std::iter::FromIterator;
 use std::error::Error;
 use std::fmt::{Formatter, Display, Error as FmtError};
 use std::string::FromUtf8Error;
@@ -46,7 +46,7 @@ pub trait DataType {
         Length { length: data.len(), remainder: 0 }
     }
 
-    fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
+    fn get_byte_range(&self, _: &[u8], range: Range<usize>) -> Option<Range<usize>> {
         Some(range)
     }
 

@@ -1,12 +1,10 @@
 use spec::{RecordSpec, FieldSpec};
-use padder::{UnPadder, IdentityPadder};
 use std::collections::{HashMap};
 use std::io::{Read, BufRead, BufReader};
 use std::borrow::{Borrow, BorrowMut};
-use std::ops::Range;
-use recognizer::{LineBuffer, LineRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record, PositionalError, FieldResult};
-use record::{Data, DataRanges, BuildableDataRanges, ReadType, BinaryType, ShouldReadMore};
+use recognizer::LineRecordSpecRecognizer;
+use super::{Error, Result, PositionalResult, Record, FieldResult};
+use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use parser::FieldParser;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
