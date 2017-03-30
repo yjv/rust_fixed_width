@@ -130,8 +130,7 @@ impl DataType for StringType {
     }
 
     fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
-        let string = self.get_string(data);
-        let mut iterator = string.char_indices().skip(range.start).take(range.end);
+        let mut iterator = self.get_string(data).char_indices();
 
         match (iterator.nth(range.start), iterator.nth(range.end - 1)) {
             (Some((start, _)), Some((end, _))) => Some(start..end + 1),
