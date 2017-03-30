@@ -45,6 +45,14 @@ pub trait DataType {
     fn get_length(&self, data: &[u8]) -> Length {
         Length { length: data.len(), remainder: 0 }
     }
+
+    fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
+        Some(range)
+    }
+
+    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
+        (length, None)
+    }
 }
 
 pub struct Length {
@@ -80,6 +88,10 @@ pub struct BinaryType;
 
 impl DataType for BinaryType  {
     type DataHolder = Vec<u8>;
+
+    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
+        (length, Some(length))
+    }
 }
 
 impl ReadType for BinaryType {
@@ -100,20 +112,40 @@ impl WriteType for BinaryType {
 
 pub struct StringType;
 
-impl DataType for StringType {
-    type DataHolder = String;
-    fn get_length(&self, data: &[u8]) -> Length {
-        let string = match ::std::str::from_utf8(data) {
+impl StringType {
+    fn get_string<'a>(&self, data: &'a [u8]) -> &'a str {
+        match ::std::str::from_utf8(data) {
             Ok(ref string) => string,
             Err(e) => unsafe {
                 ::std::str::from_utf8_unchecked(&data[..e.valid_up_to()])
             }
-        };
+        }
+    }
+}
+
+impl DataType for StringType {
+    type DataHolder = String;
+    fn get_length(&self, data: &[u8]) -> Length {
+        let string = self.get_string(data);
 
         Length {
             length: string.chars().count(),
             remainder: data.len() - string.len()
         }
+    }
+
+    fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
+        let string = self.get_string(data);
+        let mut iterator = string.char_indices().skip(range.start).take(range.end);
+
+        match (iterator.nth(range.start), iterator.nth(range.end - 1)) {
+            (Some((start, _)), Some((end, _))) => Some(start..end + 1),
+            _ => None
+        }
+    }
+
+    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
+        (length, Some(length * 4))
     }
 }
 

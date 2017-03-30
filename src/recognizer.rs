@@ -150,18 +150,21 @@ impl IdFieldRecognizer {
 }
 
 impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
-    fn recognize_for_line<'a, 'b, U: BufRead + 'a>(&self, mut buffer: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<&'b str> {
+    fn recognize_for_line<'a, 'b, U: BufRead + 'a>(&self, mut buffer: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(&self.id_field) {
                 if let Some(ref default) = field_spec.default {
-                    let field_range = record_spec.field_range(&self.id_field).expect("This should never be None");
+                    if let Some(field_range) = read_type.get_byte_range(
+                        buffer.fill_buf()?,
+                        record_spec.field_range(&self.id_field).expect("This should never be None")
+                    ) {
+                        if buffer.fill_buf()?.len() < field_range.end {
+                            continue;
+                        }
 
-                    if buffer.fill_buf()?.len() < field_range.end {
-                        continue;
-                    }
-
-                    if &buffer.fill_buf()?[field_range] == &default[..] {
-                        return Ok(name);
+                        if &buffer.fill_buf()?[field_range] == &default[..] {
+                            return Ok(name);
+                        }
                     }
                 }
             }
@@ -170,12 +173,12 @@ impl<T: ReadType> LineRecordSpecRecognizer<T> for IdFieldRecognizer {
         Err(Error::CouldNotRecognize)
     }
 
-    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, _: &'a T) -> Option<usize> {
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a T) -> Option<usize> {
         let min = record_specs.iter().map(|(_, spec)| spec.field_range(&self.id_field).map(|range| range.end).unwrap_or(0)).min().unwrap_or(0);
         if min == 0 {
             None
         } else {
-            Some(min)
+            read_type.get_size_hint(min).1
         }
     }
 }
