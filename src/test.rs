@@ -1,6 +1,5 @@
 use spec::*;
 use super::Error;
-use padder::{Padder, UnPadder, Error as PaddingError};
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::BufRead;
@@ -78,72 +77,6 @@ impl<'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a> {
         }
 
         panic!("Method recognize_for_data was not expected to be called with {:?}", (record_specs))
-    }
-}
-
-#[derive(Debug)]
-pub struct MockPadder {
-    pad_calls: Vec<(Vec<u8>, usize, Vec<u8>, PaddingDirection, Result<Vec<u8>, PaddingError>)>,
-    unpad_calls: Vec<(Vec<u8>, Vec<u8>, PaddingDirection, Result<Vec<u8>, PaddingError>)>
-}
-
-impl MockPadder {
-    pub fn new() -> Self {
-        MockPadder {
-            pad_calls: Vec::new(),
-            unpad_calls: Vec::new()
-        }
-    }
-
-    pub fn add_pad_call(&mut self, data: Vec<u8>, length: usize, padding: Vec<u8>, direction: PaddingDirection, return_value: Result<Vec<u8>, PaddingError>) -> &mut Self {
-        self.pad_calls.push((data, length, padding, direction, return_value));
-        self
-    }
-
-    pub fn add_unpad_call(&mut self, data: Vec<u8>, padding: Vec<u8>, direction: PaddingDirection, return_value: Result<Vec<u8>, PaddingError>) -> &mut Self {
-        self.unpad_calls.push((data, padding, direction, return_value));
-        self
-    }
-}
-
-impl<T: WriteType> Padder<T> for MockPadder {
-    fn pad<'a>(&self, data: &[u8], length: usize, padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), PaddingError> {
-        for &(ref expected_data, expected_length, ref expected_padding, expected_direction, ref return_value) in &self.pad_calls {
-            if *expected_data == data
-                && expected_length == length
-                && &expected_padding[..] == padding
-                && expected_direction == direction {
-                return match return_value.clone() {
-                    Ok(value) =>  {
-                        destination.extend(value.iter());
-                        Ok(())
-                    },
-                    Err(e) => Err(e)
-                };
-            }
-        }
-
-        panic!("Method pad was not expected to be called with {:?}", (data, length, padding, direction))
-    }
-}
-
-impl<T: ReadType> UnPadder<T> for MockPadder {
-    fn unpad<'a>(&self, data: &[u8], padding: &[u8], direction: PaddingDirection, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), PaddingError> {
-        for &(ref expected_data, ref expected_padding, expected_direction, ref return_value) in &self.unpad_calls {
-            if *expected_data == data
-                && &expected_padding[..] == padding
-                && expected_direction == direction {
-                return match return_value.clone() {
-                    Ok(value) =>  {
-                        destination.extend(value.iter());
-                        Ok(())
-                    },
-                    Err(e) => Err(e)
-                };
-            }
-        }
-
-        panic!("Method unpad was not expected to be called with {:?}", (data, padding, direction))
     }
 }
 

@@ -223,8 +223,8 @@ mod test {
     use spec::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::{empty, BufReader};
-    use padder::PaddingError;
     use record::{BinaryType, StringType};
+    use super::super::formatter::FormatError;
 
     #[test]
     fn none_recognizer() {
@@ -396,11 +396,11 @@ mod test {
 
     #[test]
     fn error() {
-        let error = Error::new(PaddingError::PaddingSplitNotOnCharBoundary(23));
-        assert_option!(Some(&PaddingError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<PaddingError>());
-        assert_option!(Some(&PaddingError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<PaddingError>());
-        match error.downcast::<PaddingError>() {
-            Ok(PaddingError::PaddingSplitNotOnCharBoundary(23)) => (),
+        let error = Error::new(FormatError::PaddingSplitNotOnCharBoundary(23));
+        assert_option!(Some(&FormatError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<FormatError>());
+        assert_option!(Some(&FormatError::PaddingSplitNotOnCharBoundary(23)), error.downcast_ref::<FormatError>());
+        match error.downcast::<FormatError>() {
+            Ok(FormatError::PaddingSplitNotOnCharBoundary(23)) => (),
             e => panic!("bad result returned {:?}", e)
         }
     }

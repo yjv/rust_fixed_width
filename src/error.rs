@@ -1,6 +1,5 @@
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use padder::Error as PadderError;
 use formatter::Error as FormatterError;
 use parser::Error as ParserError;
 use std::io::Error as IoError;
@@ -13,7 +12,6 @@ pub enum Error {
     RecordSpecRecognizerError(RecognizerError),
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
-    PadderFailure(PadderError),
     ParserFailure(ParserError),
     FormatterFailure(FormatterError),
     IoError(IoError),
@@ -31,7 +29,6 @@ impl ErrorTrait for Error {
             Error::RecordSpecRecognizerError(_) => "record spec recognizer encountered an error",
             Error::RecordSpecNotFound(_) => "record spec could not be found",
             Error::FieldSpecNotFound(_, _) => "field spec could not be found",
-            Error::PadderFailure(_) => "The un-padder encountered an error",
             Error::ParserFailure(_) => "The field parser encountered an error",
             Error::FormatterFailure(_) => "The field formatter encountered an error",
             Error::IoError(_) => "An IO error occurred while trying to read",
@@ -46,7 +43,6 @@ impl ErrorTrait for Error {
     fn cause(&self) -> Option<&ErrorTrait> {
         match *self {
             Error::RecordSpecRecognizerError(ref e) => Some(e),
-            Error::PadderFailure(ref e) => Some(e),
             Error::IoError(ref e) => Some(e),
             Error::DataHolderError(ref e) => Some(e),
             _ => None
@@ -72,7 +68,6 @@ impl Display for Error {
             Error::RecordSpecRecognizerError(ref e) => write!(f, "record spec recognizer encountered an error: {}", e),
             Error::RecordSpecNotFound(ref name) => write!(f, "record spec named {} could not be found", name),
             Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
-            Error::PadderFailure(ref e) => write!(f, "The un-padder encountered an error: {}", e),
             Error::ParserFailure(ref e) => write!(f, "The field parser encountered an error: {}", e),
             Error::FormatterFailure(ref e) => write!(f, "The field formatter encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),
@@ -129,12 +124,6 @@ impl From<RecognizerError> for Error {
 impl From<DataHolderError> for Error {
     fn from(e: DataHolderError) -> Self {
         Error::DataHolderError(e)
-    }
-}
-
-impl From<PadderError> for Error {
-    fn from(e: PadderError) -> Self {
-        Error::PadderFailure(e)
     }
 }
 
@@ -233,15 +222,6 @@ impl From<(FieldError, String)> for PositionalError {
             } else {
                 Position::new_from_record(data.1)
             })
-        }
-    }
-}
-
-impl From<(PadderError, String, String)> for PositionalError {
-    fn from(data: (PadderError, String, String)) -> Self {
-        PositionalError {
-            error: Error::from(data.0),
-            position: Some(Position::new(data.1, data.2))
         }
     }
 }
