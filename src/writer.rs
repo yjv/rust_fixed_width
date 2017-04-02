@@ -36,7 +36,7 @@ impl <T: FieldFormatter<U>, U: WriteType> FieldWriter<T, U> {
         let length = self.write_type.get_length(&buffer[..]);
 
         if length.length != spec.length || length.remainder > 0 {
-            return Err(Error::PaddedValueWrongLength(spec.length, buffer.clone()).into());
+            return Err(Error::FormattedValueWrongLength(spec.length, buffer.clone()).into());
         }
 
         writer.write_all(&buffer[..])?;
@@ -206,7 +206,7 @@ mod test {
         let writer = RecordWriter::new(FieldWriter::new(&formatter, BinaryType));
         assert_result!(
             Err(FieldError {
-                error: Error::PaddedValueWrongLength(4, ref value),
+                error: Error::FormattedValueWrongLength(4, ref value),
                 field: Some(ref field)
             }) if *value == "hello2".as_bytes().to_owned() && field == "field1",
             writer.write(&mut buf, record_spec, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned())]
@@ -278,7 +278,7 @@ mod test {
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
         let writer = FieldWriter::new(&formatter, BinaryType);
         assert_result!(
-            Err(Error::PaddedValueWrongLength(4, ref value)) if *value == "hello2".as_bytes().to_owned(),
+            Err(Error::FormattedValueWrongLength(4, ref value)) if *value == "hello2".as_bytes().to_owned(),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
         );
     }

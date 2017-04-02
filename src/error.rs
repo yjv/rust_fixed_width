@@ -17,7 +17,7 @@ pub enum Error {
     IoError(IoError),
     DataDoesNotMatchLineEnding(Vec<u8>, Vec<u8>),
     CouldNotReadEnough(Vec<u8>),
-    PaddedValueWrongLength(usize, Vec<u8>),
+    FormattedValueWrongLength(usize, Vec<u8>),
     FieldValueRequired,
     DataHolderError(DataHolderError)
 }
@@ -34,7 +34,7 @@ impl ErrorTrait for Error {
             Error::IoError(_) => "An IO error occurred while trying to read",
             Error::CouldNotReadEnough(_) => "Could not read enough data",
             Error::DataDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
-            Error::PaddedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
+            Error::FormattedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
             Error::FieldValueRequired => "The value for the given field is required since it has no default",
             Error::DataHolderError(_) => "There was an error creating the records data holder"
         }
@@ -82,7 +82,7 @@ impl Display for Error {
                 DataDisplayer(actual),
                 DataDisplayer(expected)
             ),
-            Error::PaddedValueWrongLength(ref expected_length, ref actual_value) => write!(
+            Error::FormattedValueWrongLength(ref expected_length, ref actual_value) => write!(
                 f,
                 "The value {} returned after padding is {} long and is required to be {} long for the given field",
                 DataDisplayer(actual_value),
