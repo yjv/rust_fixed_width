@@ -55,52 +55,6 @@ impl<T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
             field_reader: field_writer
         }
     }
-
-    pub fn iter<'a, R, V, W, X, Y, A, B>(&'a self, reader: Y, spec_source: V, specs: W, buffer: A, field_buffer_source: B) -> Iter<R, T, V, U, W, X, Y, &'a Self, A, B>
-        where R: BufRead + 'a,
-              V: SpecSource + 'a,
-              W: Borrow<HashMap<String, RecordSpec>> + 'a,
-              X: BuildableDataRanges + 'a,
-              Y: BorrowMut<R> + 'a,
-              A: BorrowMut<Vec<u8>> + 'a,
-              B: FieldBufferSource + 'a
-    {
-        Iter {
-            record_specs: specs,
-            buffer: buffer,
-            data_ranges: ::std::marker::PhantomData,
-            spec_source: spec_source,
-            reader: self,
-            source: reader,
-            field_buffer_source: field_buffer_source,
-            source_type: ::std::marker::PhantomData,
-            read_type: ::std::marker::PhantomData,
-            field_parser: ::std::marker::PhantomData
-        }
-    }
-
-    pub fn into_iter<'a, R, V, W, X, Y, A, B>(self, reader: Y, spec_source: V, specs: W, buffer: A, field_buffer_source: B) -> Iter<'a, R, T, V, U, W, X, Y, Self, A, B>
-        where R: BufRead + 'a,
-              V: SpecSource + 'a,
-              W: Borrow<HashMap<String, RecordSpec>> + 'a,
-              X: BuildableDataRanges + 'a,
-              Y: BorrowMut<R> + 'a,
-              A: BorrowMut<Vec<u8>> + 'a,
-              B: FieldBufferSource + 'a
-    {
-        Iter {
-            record_specs: specs,
-            buffer: buffer,
-            data_ranges: ::std::marker::PhantomData,
-            spec_source: spec_source,
-            reader: self,
-            source: reader,
-            field_buffer_source: field_buffer_source,
-            source_type: ::std::marker::PhantomData,
-            read_type: ::std::marker::PhantomData,
-            field_parser: ::std::marker::PhantomData
-        }
-    }
 }
 
 impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
@@ -231,72 +185,6 @@ impl  <T, U, V> SpecSource for RecognizerSource<T, U, V>
 
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
         self.recognizer.borrow().get_suggested_buffer_size(record_specs)
-    }
-}
-
-pub struct Iter<
-    'a,
-    R: BufRead + 'a,
-    T: FieldParser<V> + 'a,
-    U: SpecSource + 'a,
-    V: ReadType + 'a,
-    W: Borrow<HashMap<String, RecordSpec>> + 'a,
-    X: BuildableDataRanges + 'a,
-    Y: BorrowMut<R> + 'a,
-    Z: Borrow<RecordReader<T, V>> + 'a,
-    A: BorrowMut<Vec<u8>> + 'a,
-    B: FieldBufferSource + 'a
-> {
-    source: Y,
-    reader: Z,
-    spec_source: U,
-    record_specs: W,
-    buffer: A,
-    field_buffer_source: B,
-    data_ranges: ::std::marker::PhantomData<&'a X>,
-    source_type: ::std::marker::PhantomData<R>,
-    field_parser: ::std::marker::PhantomData<T>,
-    read_type: ::std::marker::PhantomData<V>,
-}
-
-impl<'a, R, T, U, V, W, X, Y, Z, A, B> Iterator for Iter<'a, R, T, U, V, W, X, Y, Z, A, B>
-    where R: BufRead + 'a,
-          T: FieldParser<V> + 'a,
-          U: SpecSource + 'a,
-          V: ReadType + 'a,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BuildableDataRanges + 'a,
-          Y: BorrowMut<R> + 'a,
-          Z: Borrow<RecordReader<T, V>> + 'a,
-          A: BorrowMut<Vec<u8>> + 'a,
-          B: FieldBufferSource + 'a {
-    type Item = PositionalResult<Record<X, V::DataHolder>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let length = match self.source.borrow_mut().fill_buf() {
-            Ok(buf) => buf.len(),
-            Err(e) => return Some(Err(e.into()))
-        };
-        if length == 0 {
-            None
-        } else {
-            let spec_name = match self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow()) {
-                Ok(r) => r,
-                Err(e) => return Some(Err(e.into()))
-            };
-            let spec = match self.record_specs.borrow().get(spec_name) {
-                Some(spec) => spec,
-                None => return Some(Err(Error::RecordSpecNotFound(spec_name.to_string()).into()))
-            };
-            Some(self.reader.borrow().read(
-                self.source.borrow_mut(),
-                spec,
-                self.field_buffer_source.get().unwrap_or_else(|| Vec::new()),
-                self.buffer.borrow_mut()
-            )
-                .map(|data| Record { data: data, name: spec_name.to_string() })
-                .map_err(|e| (e, spec_name.to_string()).into())
-            )
-        }
     }
 }
 
