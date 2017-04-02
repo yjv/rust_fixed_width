@@ -165,10 +165,6 @@ impl WriteType for StringType {
     }
 }
 
-pub trait WriteDataHolder {
-    fn get<'a>(&'a self, range: Range<usize>) -> &'a [u8];
-}
-
 #[derive(Debug)]
 pub struct DataHolderError {
     repr: Box<::std::error::Error + Send + Sync>
