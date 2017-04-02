@@ -6,6 +6,7 @@ use recognizer::LineRecordSpecRecognizer;
 use super::{Error, Result, PositionalResult, Record, FieldResult};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use parser::FieldParser;
+use std::collections::VecDeque;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
     parser: T,
@@ -182,8 +183,17 @@ impl FieldBufferSource for Vec<Vec<u8>> {
     }
 }
 
+impl FieldBufferSource for VecDeque<Vec<u8>> {
+    fn get(&mut self) -> Option<Vec<u8>> {
+        self.pop_front()
+    }
+}
+
 pub trait SpecSource {
     fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str>;
+    fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>) -> Option<usize> {
+        None
+    }
 }
 
 impl<'c, U: SpecSource + 'c> SpecSource for &'c mut U {
@@ -217,6 +227,10 @@ impl  <T, U, V> SpecSource for RecognizerSource<T, U, V>
           V: ReadType {
     fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
         self.recognizer.borrow().recognize(reader, record_specs)
+    }
+
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
+        self.recognizer.borrow().get_suggested_buffer_size(record_specs)
     }
 }
 
