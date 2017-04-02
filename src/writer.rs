@@ -55,6 +55,10 @@ impl<T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
             field_writer: field_writer
         }
     }
+
+    pub fn write_type(&self) -> &U {
+        self.field_writer.write_type()
+    }
 }
 
 impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
@@ -120,7 +124,7 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
     pub fn write_record<'b, A: DataRanges + 'b>(&mut self, data: &'b Data<A, V::DataHolder>) -> PositionalResult<usize> {
-        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), &self.writer.field_writer.write_type())?;
+        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type())?;
         self.writer.write(
             self.destination.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
