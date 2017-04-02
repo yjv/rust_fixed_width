@@ -1,10 +1,10 @@
 use spec::*;
 use super::Error;
 use padder::{Padder, UnPadder, Error as PaddingError};
-use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer, LineBuffer};
+use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer};
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Read, BufRead};
-use record::{Data, DataRanges, WriteDataHolder, ReadType, WriteType};
+use std::io::BufRead;
+use record::{Data, DataRanges, ReadType, WriteType};
 use formatter::{FieldFormatter, Error as FormatterError};
 use parser::{FieldParser, Error as ParserError};
 
@@ -211,7 +211,7 @@ impl<T: ReadType> FieldParser<T> for MockParser {
                         destination.extend(value.iter());
                         Ok(())
                     },
-                    Err(ref e) => Err(ParserError::new(""))
+                    Err(_) => Err(ParserError::new(""))
                 };
             }
         }

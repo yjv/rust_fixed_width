@@ -2,9 +2,9 @@ use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;
-use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
-use super::{Error, Result, PositionalResult, Record, FieldResult};
-use record::{Data, DataRanges, WriteType, BinaryType, Length};
+use recognizer::DataRecordSpecRecognizer;
+use super::{Error, Result, PositionalResult, FieldResult};
+use record::{Data, DataRanges, WriteType};
 use formatter::FieldFormatter;
 use std::borrow::BorrowMut;
 
@@ -139,14 +139,11 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
 #[cfg(test)]
 mod test {
     use super::*;
-    use super::super::{Error, PositionalError, Position, Record, Data, FieldError};
+    use super::super::{Error, Data, FieldError};
     use test::*;
     use std::collections::{HashMap, BTreeMap};
-    use std::io::{Cursor, Write};
-    use spec::PaddingDirection;
-    use padder::Error as PaddingError;
-    use std::ops::Range;
-    use record::{BinaryType, WriteType};
+    use std::io::Cursor;
+    use record::BinaryType;
 
     #[test]
     fn write_record() {

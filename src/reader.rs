@@ -357,15 +357,12 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 mod test {
 
     use super::*;
-    use super::super::{Error, PositionalError, Position, Record, Data, FieldError};
+    use super::super::{Error, Data, FieldError};
     use test::*;
     use std::io::Cursor;
-    use spec::PaddingDirection;
-    use padder::Error as PaddingError;
     use std::collections::{HashMap, BTreeMap};
-    use std::io::{Seek, SeekFrom, Read};
     use std::ops::Range;
-    use record::{BinaryType, ReadType};
+    use record::BinaryType;
 
     #[test]
     fn read_record() {
@@ -380,7 +377,7 @@ mod test {
         parser.add_parse_call(string[46..50].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello4".as_bytes().to_owned()));
         parser.add_parse_call(string[50..55].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello5".as_bytes().to_owned()));
         parser.add_parse_call(string[55..91].as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok("hello6".as_bytes().to_owned()));
-        let mut reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
+        let reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
         Ok(Data {
                 data: "hellohello2hello3".as_bytes().to_owned(),
@@ -412,7 +409,7 @@ mod test {
         parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
         parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
         parser.add_parse_call(string[9..45].as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok("hello3".as_bytes().to_owned()));
-        let mut reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
+        let reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
             Err(FieldError {
                 error: Error::DataDoesNotMatchLineEnding(_, _),
@@ -430,7 +427,7 @@ mod test {
         let mut parser = MockParser::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
-        let mut reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
+        let reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
             Err(FieldError {
                 error: Error::ParserFailure(_),
@@ -449,7 +446,7 @@ mod test {
         let record_spec = &spec.record_specs.get("record1").unwrap();
         parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
         parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
-        let mut reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
+        let reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
             Err(FieldError {
                 error: Error::CouldNotReadEnough(_),
@@ -469,7 +466,7 @@ mod test {
         let record_spec = &spec.record_specs.get("record1").unwrap();
         parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
         parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
-        let mut reader = FieldReader::new(&parser, BinaryType);
+        let reader = FieldReader::new(&parser, BinaryType);
         assert_result!(Ok(()), reader.read(&mut buf,&record_spec.field_specs.get("field1").unwrap(), &mut buffer, &mut Vec::new()));
         assert_eq!("hello".as_bytes().to_owned(), buffer);
         assert_result!(Ok(()), reader.read(&mut buf,&record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new()));
@@ -485,7 +482,7 @@ mod test {
         let mut parser = MockParser::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         parser.add_parse_call(string[..5].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
-        let mut reader = FieldReader::new(&parser, BinaryType);
+        let reader = FieldReader::new(&parser, BinaryType);
         assert_result!(
             Err(Error::ParserFailure(_)),
             reader.read(&mut buf, &record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new())
@@ -502,7 +499,7 @@ mod test {
         let record_spec = &spec.record_specs.get("record1").unwrap();
         parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
         parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
-        let mut reader = FieldReader::new(&parser, BinaryType);
+        let reader = FieldReader::new(&parser, BinaryType);
         assert_result!(Ok(()), reader.read(&mut buf, &record_spec.field_specs.get("field1").unwrap(), &mut buffer, &mut Vec::new()));
         assert_result!(Ok(()), reader.read(&mut buf, &record_spec.field_specs.get("field2").unwrap(), &mut buffer, &mut Vec::new()));
         assert_result!(
@@ -510,84 +507,4 @@ mod test {
             reader.read(&mut buf, &record_spec.field_specs.get("field3").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
-//
-//    #[test]
-//    fn iterator() {
-//        let spec = test_spec();
-//        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
-//        let mut buf = Cursor::new(string.as_bytes());
-//        let mut un_padder = MockPadder::new();
-//        un_padder.add_unpad_call(string[4..9].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[9..45].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello2".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[50..55].as_bytes().to_owned(), " ".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello3".as_bytes().to_owned()));
-//        un_padder.add_unpad_call(string[55..91].as_bytes().to_owned(), "xcvcxv".as_bytes().to_owned(), PaddingDirection::Right, Ok("hello4".as_bytes().to_owned()));
-//        let mut recognizer = MockRecognizer::new();
-//        recognizer.add_line_recognize_call(&spec.record_specs, Ok("record1"));
-//        let mut reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_recognizer(&recognizer)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//        let mut vec = Vec::new();
-//        vec.push(Record {
-//            data: Data { data: "hellohello2".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..5),
-//                ("field3".to_string(), 5..11)]
-//                .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        vec.push(Record {
-//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..6),
-//            ("field3".to_string(), 6..12)]
-//            .iter().cloned().collect::<HashMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<HashMap<String, Range<usize>>, Vec<u8>>>>());
-//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-//
-//        let mut reader = ReaderBuilder::new()
-//            .with_un_padder(&un_padder)
-//            .with_recognizer(&recognizer)
-//            .with_specs(&spec.record_specs)
-//            .build()
-//        ;
-//
-//        let mut vec = Vec::new();
-//        vec.push(Record {
-//            data: Data { data: "hellohello2".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..5),
-//                ("field3".to_string(), 5..11)]
-//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        vec.push(Record {
-//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..6),
-//                ("field3".to_string(), 6..12)]
-//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        assert_eq!(vec, reader.iter(&mut buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
-//
-//        let _ = buf.seek(SeekFrom::Start(0)).unwrap();
-//
-//        let mut vec = Vec::new();
-//        vec.push(Record {
-//            data: Data { data: "hellohello2".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..5),
-//                ("field3".to_string(), 5..11)]
-//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        vec.push(Record {
-//            data: Data { data: "hello3hello4".as_bytes().to_owned(),
-//            ranges: [("field2".to_string(), 0..6),
-//                ("field3".to_string(), 6..12)]
-//                .iter().cloned().collect::<BTreeMap<String, Range<usize>>>() },
-//            name: "record1".to_string()
-//        });
-//        assert_eq!(vec, reader.into_iter(buf).map(|r| r.unwrap()).collect::<Vec<Record<BTreeMap<String, Range<usize>>, Vec<u8>>>>());
-//    }
 }

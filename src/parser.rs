@@ -141,7 +141,6 @@ mod test {
     #[test]
     fn default_parser() {
         let padder = DefaultParser;
-        let data = "qwer".as_bytes();
         let mut destination = Vec::new();
         let data_type = BinaryType;
         let field_spec_builder = FieldSpecBuilder::new()
