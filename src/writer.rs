@@ -6,6 +6,7 @@ use recognizer::{DataRecordSpecRecognizer, NoneRecognizer};
 use super::{Error, Result, PositionalResult, Record, FieldResult};
 use record::{Data, DataRanges, WriteType, BinaryType, Length};
 use formatter::FieldFormatter;
+use std::borrow::BorrowMut;
 
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {
     formatter: T,
@@ -85,6 +86,53 @@ pub struct RecordRecognizer<T: DataRecordSpecRecognizer<U>, U: WriteType> {
 impl<T: DataRecordSpecRecognizer<U>, U: WriteType> RecordRecognizer<T, U> {
     pub fn recognize<'a, V: DataRanges + 'a>(&self, data: &'a Data<V, U::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<&'a str> {
         Ok(self.recognizer.recognize_for_data(data, record_specs, &self.write_type)?)
+    }
+}
+
+pub trait SpecSource<T: WriteType> {
+    fn next<'a, 'b, U: DataRanges + 'a>(&mut self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<&'b str>;
+}
+
+pub struct Writer<
+    'a,
+    R: Write + 'a,
+    T: FieldFormatter<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: WriteType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    X: BorrowMut<R> + 'a,
+    Y: BorrowMut<Vec<u8>> + 'a
+> {
+    destination: X,
+    writer: RecordWriter<T, V>,
+    spec_source: U,
+    record_specs: W,
+    buffer: Y,
+    destination_type: ::std::marker::PhantomData<&'a R>
+}
+
+impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
+    where R: Write + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<R> + 'a,
+          Y: BorrowMut<Vec<u8>> + 'a {
+    pub fn write_record<'b, A: DataRanges + 'b>(&mut self, data: &'b Data<A, V::DataHolder>) -> PositionalResult<usize> {
+        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), &self.writer.field_writer.write_type())?;
+        self.writer.write(
+            self.destination.borrow_mut(),
+            self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
+            data,
+            self.buffer.borrow_mut()
+        )
+            .map_err(|e| (e, spec_name.to_string()).into())
+
+    }
+
+    pub fn into_inner(self) -> RecordWriter<T, V> {
+        self.writer
     }
 }
 

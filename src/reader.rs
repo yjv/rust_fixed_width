@@ -143,48 +143,44 @@ impl FieldBufferSource for VecDeque<Vec<u8>> {
     }
 }
 
-pub trait SpecSource {
-    fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str>;
+pub trait SpecSource<T: ReadType> {
+    fn next<'a, 'b, U: BufRead + 'a>(&mut self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
     fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>) -> Option<usize> {
         None
     }
 }
 
-impl<'c, U: SpecSource + 'c> SpecSource for &'c mut U {
-    fn next<'a, 'b, T: BufRead + 'a>(&mut self, reader: &'a mut T, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
-        SpecSource::next(*self, reader, record_specs)
+impl<'c, T: SpecSource<U> + 'c, U: ReadType + 'c> SpecSource<U> for &'c mut T {
+    fn next<'a, 'b, V: BufRead + 'a>(&mut self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<&'b str> {
+        SpecSource::next(*self, reader, record_specs, read_type)
     }
 }
 
-pub struct RecognizerSource<T: Borrow<RecordRecognizer<U, V>>, U: LineRecordSpecRecognizer<V>, V: ReadType> {
+pub struct RecognizerSource<T: LineRecordSpecRecognizer<U>, U: ReadType> {
     recognizer: T,
-    line_recognizer: ::std::marker::PhantomData<U>,
-    read_type: ::std::marker::PhantomData<V>
+    read_type: U
 }
 
-impl <T, U, V> RecognizerSource<T, U, V>
-    where T: Borrow<RecordRecognizer<U, V>>,
-          U: LineRecordSpecRecognizer<V>,
-          V: ReadType {
-    pub fn new(recognizer: T) -> Self {
+impl <T, U> RecognizerSource<T, U>
+    where T: LineRecordSpecRecognizer<U>,
+          U: ReadType {
+    pub fn new(recognizer: T, read_type: U) -> Self {
         RecognizerSource {
             recognizer: recognizer,
-            line_recognizer: ::std::marker::PhantomData,
-            read_type: ::std::marker::PhantomData
+            read_type: read_type
         }
     }
 }
 
-impl  <T, U, V> SpecSource for RecognizerSource<T, U, V>
-    where T: Borrow<RecordRecognizer<U, V>>,
-          U: LineRecordSpecRecognizer<V>,
-          V: ReadType {
-    fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
-        self.recognizer.borrow().recognize(reader, record_specs)
+impl  <T, U> SpecSource<U> for RecognizerSource<T, U>
+    where T: LineRecordSpecRecognizer<U>,
+          U: ReadType {
+    fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<&'b str> {
+        Ok(self.recognizer.recognize_for_line(reader, record_specs, read_type)?)
     }
 
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
-        self.recognizer.borrow().get_suggested_buffer_size(record_specs)
+        self.recognizer.get_suggested_buffer_size(record_specs, &self.read_type)
     }
 }
 
@@ -192,7 +188,7 @@ pub struct Reader<
     'a,
     R: BufRead + 'a,
     T: FieldParser<V> + 'a,
-    U: SpecSource + 'a,
+    U: SpecSource<V> + 'a,
     V: ReadType + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
@@ -211,14 +207,14 @@ pub struct Reader<
 impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
           T: FieldParser<V> + 'a,
-          U: SpecSource + 'a,
+          U: SpecSource<V> + 'a,
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a,
           Z: FieldBufferSource + 'a {
     pub fn read_record<'b, A: BuildableDataRanges + 'b>(&mut self) -> PositionalResult<Record<A, V::DataHolder>> {
-        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow())?;
+        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow(), &self.reader.field_reader.read_type())?;
         self.reader.read(
             self.source.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
@@ -239,7 +235,7 @@ pub struct ReaderBuilder<
     'a,
     R: BufRead + 'a,
     T: FieldParser<V> + 'a,
-    U: SpecSource + 'a,
+    U: SpecSource<V> + 'a,
     V: ReadType + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
@@ -258,7 +254,7 @@ pub struct ReaderBuilder<
 impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
     where R: BufRead + 'a,
           T: FieldParser<V> + 'a,
-          U: SpecSource + 'a,
+          U: SpecSource<V> + 'a,
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a {
@@ -278,7 +274,7 @@ impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<V
 impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
           T: FieldParser<V> + 'a,
-          U: SpecSource + 'a,
+          U: SpecSource<V> + 'a,
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
@@ -296,7 +292,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
         }
     }
 
-    pub fn with_spec_source<A: SpecSource + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
+    pub fn with_spec_source<A: SpecSource<V> + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
         ReaderBuilder {
             source: self.source,
             reader: self.reader,
