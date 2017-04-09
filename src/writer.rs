@@ -2,7 +2,6 @@ use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;
-use recognizer::DataRecordSpecRecognizer;
 use super::{Error, Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges, WriteType};
 use formatter::FieldFormatter;
@@ -84,6 +83,22 @@ impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
 
 pub trait SpecSource<T: WriteType> {
     fn next<'a, 'b, U: DataRanges + 'a>(&mut self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<&'b str>;
+}
+
+impl<'c, T: SpecSource<U> + 'c, U: WriteType + 'c> SpecSource<U> for &'c mut T {
+    fn next<'a, 'b, V: DataRanges + 'a>(&mut self, data: &'a Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a U) -> Result<&'b str> {
+        SpecSource::next(*self, data, record_specs, write_type)
+    }
+}
+
+pub trait SpecResolver<T: WriteType> {
+    fn resolve<'a, 'b, U: DataRanges + 'a>(&self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<&'b str>;
+}
+
+impl<'c, T: SpecResolver<U> + 'c, U: WriteType + 'c> SpecResolver<U> for &'c mut T {
+    fn resolve<'a, 'b, V: DataRanges + 'a>(&self, data: &'a Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a U) -> Result<&'b str> {
+        SpecResolver::resolve(*self, data, record_specs, write_type)
+    }
 }
 
 pub struct Writer<
