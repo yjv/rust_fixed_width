@@ -44,5 +44,5 @@ pub use self::writer::Writer;
 pub use self::record::{Record, Data};
 
 type Result<T> = ::std::result::Result<T, error::Error>;
-type PositionalResult<T> = ::std::result::Result<T, error::PositionalError>;
 type FieldResult<T> = ::std::result::Result<T, error::FieldError>;
+type PositionalResult<T> = ::std::result::Result<T, error::PositionalError>;
