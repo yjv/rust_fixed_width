@@ -4,8 +4,8 @@ use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::BufRead;
 use record::{Data, DataRanges, ReadType, WriteType};
-use formatter::{FieldFormatter, Error as FormatterError};
-use parser::{FieldParser, Error as ParserError};
+use writer::formatter::{FieldFormatter, Error as FormatterError};
+use reader::parser::{FieldParser, Error as ParserError};
 
 #[derive(Debug)]
 pub struct MockRecognizer<'a> {

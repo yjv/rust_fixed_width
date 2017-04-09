@@ -1,10 +1,12 @@
+pub mod formatter;
+
 use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;
 use super::{Error, Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges, WriteType};
-use formatter::FieldFormatter;
+use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
 
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {

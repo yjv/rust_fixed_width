@@ -224,7 +224,7 @@ mod test {
     use std::collections::{HashMap, BTreeMap};
     use std::io::{empty, BufReader};
     use record::{BinaryType, StringType};
-    use super::super::formatter::FormatError;
+    use writer::formatter::FormatError;
 
     #[test]
     fn none_recognizer() {

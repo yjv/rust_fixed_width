@@ -1,10 +1,12 @@
+pub mod parser;
+
 use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::{Read, BufRead};
 use std::borrow::{Borrow, BorrowMut};
 use super::{Error, Result, PositionalResult, Record, FieldResult};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
-use parser::FieldParser;
+use reader::parser::FieldParser;
 use std::collections::VecDeque;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {

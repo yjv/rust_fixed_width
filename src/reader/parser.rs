@@ -136,7 +136,7 @@ mod test {
     use super::*;
     use spec::*;
     use record::{BinaryType, StringType};
-    use formatter::FormatError;
+    use writer::formatter::FormatError;
 
     #[test]
     fn default_parser() {

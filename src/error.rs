@@ -1,7 +1,7 @@
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use formatter::Error as FormatterError;
-use parser::Error as ParserError;
+use writer::formatter::Error as FormatterError;
+use reader::parser::Error as ParserError;
 use std::io::Error as IoError;
 use recognizer::Error as RecognizerError;
 use record::DataHolderError;

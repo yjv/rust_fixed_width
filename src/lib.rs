@@ -32,8 +32,6 @@
 #[macro_use]
 pub mod test;
 pub mod error;
-pub mod parser;
-pub mod formatter;
 pub mod reader;
 pub mod recognizer;
 pub mod record;
