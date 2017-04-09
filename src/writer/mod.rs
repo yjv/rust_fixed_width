@@ -271,7 +271,6 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
