@@ -1,5 +1,6 @@
 pub mod parser;
 pub mod spec;
+pub mod field_buffer;
 
 use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
@@ -9,8 +10,8 @@ use error::Error;
 use super::{Result, PositionalResult, FieldResult, Record};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use reader::parser::FieldParser;
-use std::collections::VecDeque;
 use self::spec::Source as SpecSource;
+use self::field_buffer::Source as FieldBufferSource;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
     parser: T,
@@ -92,40 +93,6 @@ impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
         }
 
         Ok(Data { ranges: ranges, data: self.field_reader.read_type().upcast_data(field_buffer)? })
-    }
-}
-
-pub trait FieldBufferSource {
-    fn get(&mut self) -> Option<Vec<u8>>;
-}
-
-impl<'a, T: FieldBufferSource + 'a> FieldBufferSource for &'a mut T {
-    fn get(&mut self) -> Option<Vec<u8>> {
-        FieldBufferSource::get(*self)
-    }
-}
-
-impl FieldBufferSource for Vec<u8> {
-    fn get(&mut self) -> Option<Vec<u8>> {
-        Some(self.clone())
-    }
-}
-
-impl FieldBufferSource for Option<Vec<u8>> {
-    fn get(&mut self) -> Option<Vec<u8>> {
-        self.take()
-    }
-}
-
-impl FieldBufferSource for Vec<Vec<u8>> {
-    fn get(&mut self) -> Option<Vec<u8>> {
-        self.pop()
-    }
-}
-
-impl FieldBufferSource for VecDeque<Vec<u8>> {
-    fn get(&mut self) -> Option<Vec<u8>> {
-        self.pop_front()
     }
 }
 
