@@ -167,6 +167,108 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
     }
 }
 
+pub struct WriterBuilder<
+    'a,
+    WR: Write + 'a,
+    T: FieldFormatter<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: WriteType + 'a,
+    W: Borrow<HashMap<String, RecordSpec>> + 'a,
+    X: BorrowMut<WR> + 'a,
+    Y: BorrowMut<Vec<u8>> + 'a
+> {
+    destination: Option<X>,
+    writer: RecordWriter<T, V>,
+    spec_source: Option<U>,
+    record_specs: Option<W>,
+    buffer: Y,
+    destination_type: ::std::marker::PhantomData<&'a WR>
+}
+
+impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
+    where WR: Write + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<WR> + 'a {
+    pub fn new(record_writer: RecordWriter<T, V>) -> Self {
+        WriterBuilder {
+            destination: None,
+            writer: record_writer,
+            spec_source: None,
+            record_specs: None,
+            buffer: Vec::new(),
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+}
+
+impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
+    where WR: Write + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteType + 'a,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<WR> + 'a,
+          Y: BorrowMut<Vec<u8>> + 'a {
+    pub fn with_source<Z: Write + 'a, A: BorrowMut<Z> + 'a>(self, destination: A) -> WriterBuilder<'a, Z, T, U, V, W, A, Y> {
+        WriterBuilder {
+            destination: Some(destination),
+            writer: self.writer,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_spec_source<Z: SpecSource<V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
+        WriterBuilder {
+            destination: self.destination,
+            writer: self.writer,
+            spec_source: Some(spec_source),
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_record_specs<Z: Borrow<HashMap<String, RecordSpec>> + 'a>(self, record_specs: Z) -> WriterBuilder<'a, WR, T, U, V, Z, X, Y> {
+        WriterBuilder {
+            destination: self.destination,
+            writer: self.writer,
+            spec_source: self.spec_source,
+            record_specs: Some(record_specs),
+            buffer: self.buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_buffer<Z: BorrowMut<Vec<u8>> + 'a>(self, buffer: Z) -> WriterBuilder<'a, WR, T, U, V, W, X, Z> {
+        WriterBuilder {
+            destination: self.destination,
+            writer: self.writer,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn build(self) -> Writer<'a, WR, T, U, V, W, X, Y> {
+        Writer {
+            destination: self.destination.expect("source needs to be defined in order to build"),
+            writer: self.writer,
+            spec_source: self.spec_source.expect("spec_source needs to be defined in order to build"),
+            record_specs: self.record_specs.expect("record_specs needs to be defined in order to build"),
+            buffer: self.buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
