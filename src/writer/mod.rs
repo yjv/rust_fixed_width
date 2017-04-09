@@ -4,7 +4,8 @@ use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::Write;
 use std::borrow::Borrow;
-use super::{Error, Result, PositionalResult, FieldResult};
+use error::Error;
+use super::{Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges, WriteType};
 use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
@@ -274,7 +275,8 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
 #[cfg(test)]
 mod test {
     use super::*;
-    use super::super::{Error, Data, FieldError};
+    use super::super::Data;
+    use error::{Error, FieldError};
     use test::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::Cursor;

@@ -38,11 +38,11 @@ pub mod record;
 pub mod spec;
 pub mod writer;
 
-pub use self::error::{Error, PositionalError, FieldError, Position};
-pub use self::reader::{Reader};
-pub use self::writer::{FieldWriter, RecordWriter};
+pub use self::error::{PositionalError, Position};
+pub use self::reader::Reader;
+pub use self::writer::Writer;
 pub use self::record::{Record, Data};
 
-type Result<T> = ::std::result::Result<T, Error>;
-type PositionalResult<T> = ::std::result::Result<T, PositionalError>;
-type FieldResult<T> = ::std::result::Result<T, FieldError>;
+type Result<T> = ::std::result::Result<T, error::Error>;
+type PositionalResult<T> = ::std::result::Result<T, error::PositionalError>;
+type FieldResult<T> = ::std::result::Result<T, error::FieldError>;

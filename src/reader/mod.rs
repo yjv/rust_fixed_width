@@ -4,7 +4,8 @@ use spec::{RecordSpec, FieldSpec};
 use std::collections::{HashMap};
 use std::io::{Read, BufRead};
 use std::borrow::{Borrow, BorrowMut};
-use super::{Error, Result, PositionalResult, Record, FieldResult};
+use error::Error;
+use super::{Result, PositionalResult, FieldResult, Record};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use reader::parser::FieldParser;
 use std::collections::VecDeque;
@@ -363,7 +364,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 mod test {
 
     use super::*;
-    use super::super::{Error, Data, FieldError};
+    use error::{Error, FieldError};
     use test::*;
     use std::io::Cursor;
     use std::collections::{HashMap, BTreeMap};

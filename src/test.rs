@@ -1,5 +1,5 @@
 use spec::*;
-use super::Error;
+use error::Error;
 use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::BufRead;
