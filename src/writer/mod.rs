@@ -10,7 +10,7 @@ use super::{Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges, WriteType};
 use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
-use self::spec::SpecSource;
+use self::spec::Source as SpecSource;
 
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {
     formatter: T,

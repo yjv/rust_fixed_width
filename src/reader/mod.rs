@@ -10,7 +10,7 @@ use super::{Result, PositionalResult, FieldResult, Record};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use reader::parser::FieldParser;
 use std::collections::VecDeque;
-use self::spec::SpecSource;
+use self::spec::Source as SpecSource;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
     parser: T,
