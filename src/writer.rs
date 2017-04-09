@@ -160,7 +160,6 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
             self.buffer.borrow_mut()
         )
             .map_err(|e| (e, spec_name).into())
-
     }
 
     pub fn into_inner(self) -> RecordWriter<T, V> {
