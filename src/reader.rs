@@ -195,7 +195,7 @@ impl <T, U> ResolverSource<T, U>
     }
 }
 
-impl  <T, U> RequiresBufRead<U> for ResolverSource<T, U>
+impl <T, U> RequiresBufRead<U> for ResolverSource<T, U>
     where T: SpecResolver<U>,
           U: ReadType {
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
@@ -203,7 +203,7 @@ impl  <T, U> RequiresBufRead<U> for ResolverSource<T, U>
     }
 }
 
-impl  <T, U> SpecSource<U> for ResolverSource<T, U>
+impl <T, U> SpecSource<U> for ResolverSource<T, U>
     where T: SpecResolver<U>,
           U: ReadType {
     fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<&'b str> {
