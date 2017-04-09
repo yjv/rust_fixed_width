@@ -161,22 +161,22 @@ pub struct ResolverSource<T: SpecResolver<U>, U: ReadType> {
     read_type: ::std::marker::PhantomData<U>
 }
 
-impl <T, U> ResolverSource<T, U>
-    where T: SpecResolver<U>,
-          U: ReadType {
-    pub fn new(recognizer: T) -> Self {
-        ResolverSource {
-            resolver: recognizer,
-            read_type: ::std::marker::PhantomData
-        }
-    }
-}
-
 impl <T, U> RequiresBufRead<U> for ResolverSource<T, U>
     where T: SpecResolver<U>,
           U: ReadType {
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
         self.resolver.get_suggested_buffer_size(record_specs, read_type)
+    }
+}
+
+impl <T, U> ResolverSource<T, U>
+    where T: SpecResolver<U>,
+          U: ReadType {
+    pub fn new(resolver: T) -> Self {
+        ResolverSource {
+            resolver: resolver,
+            read_type: ::std::marker::PhantomData
+        }
     }
 }
 
