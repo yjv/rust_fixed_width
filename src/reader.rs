@@ -147,10 +147,19 @@ impl FieldBufferSource for VecDeque<Vec<u8>> {
     }
 }
 
-pub trait SpecSource<T: ReadType> {
-    fn next<'a, 'b, U: BufRead + 'a>(&mut self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
-    fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>) -> Option<usize> {
+pub trait RequiresBufRead<T: ReadType> {
+    fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Option<usize> {
         None
+    }
+}
+
+pub trait SpecSource<T: ReadType>: RequiresBufRead<T> {
+    fn next<'a, 'b, U: BufRead + 'a>(&mut self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
+}
+
+impl<'b, T: RequiresBufRead<U> + 'b, U: ReadType + 'b> RequiresBufRead<U> for &'b mut T {
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
+        RequiresBufRead::get_suggested_buffer_size(*self, record_specs, read_type)
     }
 }
 
@@ -160,31 +169,45 @@ impl<'c, T: SpecSource<U> + 'c, U: ReadType + 'c> SpecSource<U> for &'c mut T {
     }
 }
 
-pub struct RecognizerSource<T: LineRecordSpecRecognizer<U>, U: ReadType> {
-    recognizer: T,
-    read_type: U
+pub trait SpecResolver<T: ReadType>: RequiresBufRead<T> {
+    fn resolve<'a, 'b, U: BufRead + 'a>(&self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<&'b str>;
 }
 
-impl <T, U> RecognizerSource<T, U>
-    where T: LineRecordSpecRecognizer<U>,
+impl<'c, T: SpecResolver<U> + 'c, U: ReadType + 'c> SpecResolver<U> for &'c mut T {
+    fn resolve<'a, 'b, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<&'b str> {
+        SpecResolver::resolve(*self, reader, record_specs, read_type)
+    }
+}
+
+pub struct ResolverSource<T: SpecResolver<U>, U: ReadType> {
+    resolver: T,
+    read_type: ::std::marker::PhantomData<U>
+}
+
+impl <T, U> ResolverSource<T, U>
+    where T: SpecResolver<U>,
           U: ReadType {
-    pub fn new(recognizer: T, read_type: U) -> Self {
-        RecognizerSource {
-            recognizer: recognizer,
-            read_type: read_type
+    pub fn new(recognizer: T) -> Self {
+        ResolverSource {
+            resolver: recognizer,
+            read_type: ::std::marker::PhantomData
         }
     }
 }
 
-impl  <T, U> SpecSource<U> for RecognizerSource<T, U>
-    where T: LineRecordSpecRecognizer<U>,
+impl  <T, U> RequiresBufRead<U> for ResolverSource<T, U>
+    where T: SpecResolver<U>,
+          U: ReadType {
+    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
+        self.resolver.get_suggested_buffer_size(record_specs, read_type)
+    }
+}
+
+impl  <T, U> SpecSource<U> for ResolverSource<T, U>
+    where T: SpecResolver<U>,
           U: ReadType {
     fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<&'b str> {
-        Ok(self.recognizer.recognize_for_line(reader, record_specs, read_type)?)
-    }
-
-    fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
-        self.recognizer.get_suggested_buffer_size(record_specs, &self.read_type)
+        self.resolver.resolve(reader, record_specs, read_type)
     }
 }
 
