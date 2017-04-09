@@ -6,7 +6,6 @@ use std::iter::FromIterator;
 use std::error::Error;
 use std::fmt::{Formatter, Display, Error as FmtError};
 use std::string::FromUtf8Error;
-use std::str::Utf8Error;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Data<T: DataRanges, U> {
@@ -210,12 +209,6 @@ impl Display for DataHolderError {
 
 impl From<FromUtf8Error> for DataHolderError {
     fn from(e: FromUtf8Error) -> Self {
-        DataHolderError::new(e)
-    }
-}
-
-impl From<Utf8Error> for DataHolderError {
-    fn from(e: Utf8Error) -> Self {
         DataHolderError::new(e)
     }
 }
