@@ -213,7 +213,7 @@ impl Builder<FieldSpec> for FieldSpecBuilder {
 mod test {
     use super::*;
     use std::collections::{HashMap, BTreeMap};
-    use super::super::test::test_spec;
+    use test::test_spec;
 
     #[test]
     fn build() {

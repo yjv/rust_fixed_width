@@ -219,7 +219,7 @@ impl<T: WriteType> DataRecordSpecRecognizer<T> for NoneRecognizer {
 #[macro_use]
 mod test {
     use super::*;
-    use super::super::Data;
+    use record::Data;
     use spec::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::{empty, BufReader};

@@ -38,7 +38,7 @@ pub mod record;
 pub mod spec;
 pub mod writer;
 
-pub use self::error::{PositionalError, Position};
+pub use self::error::{Error, FieldError, PositionalError, Position};
 pub use self::reader::Reader;
 pub use self::writer::Writer;
 pub use self::record::{Record, Data};
