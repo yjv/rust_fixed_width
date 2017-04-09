@@ -4,7 +4,7 @@
 //!
 //! #Example
 //!```
-//! use record::RecordBuilder;
+//! use spec::RecordSpecBuilder;
 //! use spec::*;
 //!
 //! let spec = SpecBuilder::new()

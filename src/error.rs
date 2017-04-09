@@ -111,15 +111,15 @@ impl From<IoError> for Error {
         Error::IoError(e)
     }
 }
-
-impl From<RecognizerError> for Error {
-    fn from(e: RecognizerError) -> Self {
-        match e {
-            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
-            _ => Error::RecordSpecRecognizerError(e)
-        }
-    }
-}
+//
+//impl From<RecognizerError> for Error {
+//    fn from(e: RecognizerError) -> Self {
+//        match e {
+//            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
+//            _ => Error::RecordSpecRecognizerError(e)
+//        }
+//    }
+//}
 
 impl From<DataHolderError> for Error {
     fn from(e: DataHolderError) -> Self {
@@ -159,24 +159,6 @@ impl PositionalError {
     }
 }
 
-impl From<RecognizerError> for PositionalError {
-    fn from(error: RecognizerError) -> Self {
-        PositionalError::from(Error::from(error))
-    }
-}
-
-impl From<DataHolderError> for PositionalError {
-    fn from(e: DataHolderError) -> Self {
-        PositionalError::from(Error::from(e))
-    }
-}
-
-impl From<IoError> for PositionalError {
-    fn from(error: IoError) -> Self {
-        PositionalError::from(Error::from(error))
-    }
-}
-
 impl From<Error> for PositionalError {
     fn from(error: Error) -> Self {
         PositionalError {
@@ -186,41 +168,14 @@ impl From<Error> for PositionalError {
     }
 }
 
-impl<'a> From<(Error, &'a String)> for PositionalError {
-    fn from(data: (Error, &'a String)) -> Self {
-        PositionalError {
-            error: data.0,
-            position: Some(Position::new_from_record(data.1.clone()))
-        }
-    }
-}
-
-impl<'a> From<(Error, &'a str)> for PositionalError {
-    fn from(data: (Error, &'a str)) -> Self {
-        PositionalError {
-            error: data.0,
-            position: Some(Position::new_from_record(data.1.to_string()))
-        }
-    }
-}
-
-impl From<(Error, String, String)> for PositionalError {
-    fn from(data: (Error, String, String)) -> Self {
-        PositionalError {
-            error: data.0,
-            position: Some(Position::new(data.1, data.2))
-        }
-    }
-}
-
-impl From<(FieldError, String)> for PositionalError {
-    fn from(data: (FieldError, String)) -> Self {
+impl<'a> From<(FieldError, &'a str)> for PositionalError {
+    fn from(data: (FieldError, &'a str)) -> Self {
         PositionalError {
             error: data.0.error,
             position: Some(if let Some(field) = data.0.field {
-                Position::new(data.1, field)
+                Position::new(data.1.to_string(), field)
             } else {
-                Position::new_from_record(data.1)
+                Position::new_from_record(data.1.to_string())
             })
         }
     }
@@ -260,12 +215,12 @@ impl FieldError {
         }
     }
 }
-
-impl From<RecognizerError> for FieldError {
-    fn from(error: RecognizerError) -> Self {
-        FieldError::from(Error::from(error))
-    }
-}
+//
+//impl From<RecognizerError> for FieldError {
+//    fn from(error: RecognizerError) -> Self {
+//        FieldError::from(Error::from(error))
+//    }
+//}
 
 impl From<DataHolderError> for FieldError {
     fn from(e: DataHolderError) -> Self {

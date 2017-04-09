@@ -82,17 +82,6 @@ impl <T: FieldFormatter<U>, U: WriteType> RecordWriter<T, U> {
     }
 }
 
-pub struct RecordRecognizer<T: DataRecordSpecRecognizer<U>, U: WriteType> {
-    recognizer: T,
-    write_type: U
-}
-
-impl<T: DataRecordSpecRecognizer<U>, U: WriteType> RecordRecognizer<T, U> {
-    pub fn recognize<'a, V: DataRanges + 'a>(&self, data: &'a Data<V, U::DataHolder>, record_specs: &'a HashMap<String, RecordSpec>) -> Result<&'a str> {
-        Ok(self.recognizer.recognize_for_data(data, record_specs, &self.write_type)?)
-    }
-}
-
 pub trait SpecSource<T: WriteType> {
     fn next<'a, 'b, U: DataRanges + 'a>(&mut self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<&'b str>;
 }
@@ -131,7 +120,7 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
             data,
             self.buffer.borrow_mut()
         )
-            .map_err(|e| (e, spec_name.to_string()).into())
+            .map_err(|e| (e, spec_name).into())
 
     }
 

@@ -91,28 +91,6 @@ impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
     }
 }
 
-pub struct RecordRecognizer<T: LineRecordSpecRecognizer<U>, U: ReadType> {
-    recognizer: T,
-    read_type: U
-}
-
-impl<T: LineRecordSpecRecognizer<U>, U: ReadType> RecordRecognizer<T, U> {
-    pub fn recognize<'a, 'b, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>) -> Result<&'b str> {
-        Ok(self.recognizer.recognize_for_line(reader, record_specs, &self.read_type)?)
-    }
-
-    pub fn buffer<'a, V: Read + 'a>(&self, reader: V, record_specs: &'a HashMap<String, RecordSpec>) -> BufReader<V> {
-        match self.get_suggested_buffer_size(record_specs) {
-            Some(size) => BufReader::with_capacity(size, reader),
-            None => BufReader::new(reader)
-        }
-    }
-
-    pub fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>) -> Option<usize> {
-        self.recognizer.get_suggested_buffer_size(record_specs, &self.read_type)
-    }
-}
-
 pub trait FieldBufferSource {
     fn get(&mut self) -> Option<Vec<u8>>;
 }
@@ -249,7 +227,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
             self.buffer.borrow_mut()
         )
             .map(|data| Record { data: data, name: spec_name.to_string() })
-            .map_err(|e| (e, spec_name.to_string()).into())
+            .map_err(|e| (e, spec_name).into())
 
     }
 
