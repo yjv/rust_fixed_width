@@ -10,7 +10,7 @@ use super::{Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges, WriteType};
 use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
-use self::spec::Source as SpecSource;
+use self::spec::Stream as SpecSource;
 
 pub struct FieldWriter<T: FieldFormatter<U>, U: WriteType> {
     formatter: T,
@@ -35,7 +35,7 @@ impl <T: FieldFormatter<U>, U: WriteType> FieldWriter<T, U> {
         where V: Write + 'a
     {
         buffer.clear();
-        self.formatter.format(data, spec, buffer, &self.write_type)?;
+        self.formatter.format(data, spec, buffer, &self.write_type).map_err(Error::FormatterFailure)?;
 
         let length = self.write_type.get_length(&buffer[..]);
 
@@ -113,7 +113,7 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
     pub fn write_record<'b, A: DataRanges + 'b>(&mut self, data: &'b Data<A, V::DataHolder>) -> PositionalResult<usize> {
-        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type())?;
+        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type()).map_err(Error::SpecStreamError)?.ok_or(Error::RecordSpecNameRequired)?;
         self.writer.write(
             self.destination.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
@@ -262,7 +262,7 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
-        formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
+        formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err("".into()));
         let writer = RecordWriter::new(FieldWriter::new(&formatter, BinaryType));
         assert_result!(
             Err(FieldError {
@@ -355,7 +355,7 @@ mod test {
         let mut buf = Cursor::new(Vec::new());
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
-        formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
+        formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err("".into()));
         let writer = FieldWriter::new(&formatter, BinaryType);
         assert_result!(
             Err(Error::FormatterFailure(_)),

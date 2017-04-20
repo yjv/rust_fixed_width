@@ -1,32 +1,29 @@
-use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use writer::formatter::Error as FormatterError;
-use reader::parser::Error as ParserError;
 use std::io::Error as IoError;
-use recognizer::Error as RecognizerError;
-use record::DataHolderError;
 
 #[derive(Debug)]
 pub enum Error {
     RecordSpecNameRequired,
-    RecordSpecRecognizerError(RecognizerError),
+    SpecStreamError(BoxedError),
+    SpecResolverError(BoxedError),
     RecordSpecNotFound(String),
     FieldSpecNotFound(String, String),
-    ParserFailure(ParserError),
-    FormatterFailure(FormatterError),
+    ParserFailure(BoxedError),
+    FormatterFailure(BoxedError),
     IoError(IoError),
     DataDoesNotMatchLineEnding(Vec<u8>, Vec<u8>),
     CouldNotReadEnough(Vec<u8>),
     FormattedValueWrongLength(usize, Vec<u8>),
     FieldValueRequired,
-    DataHolderError(DataHolderError)
+    DataHolderError(BoxedError)
 }
 
-impl ErrorTrait for Error {
+impl ::std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
             Error::RecordSpecNameRequired => "spec name is required since it cannot be recognized",
-            Error::RecordSpecRecognizerError(_) => "record spec recognizer encountered an error",
+            Error::SpecStreamError(_) => "record spec stream encountered an error",
+            Error::SpecResolverError(_) => "record spec resolver encountered an error",
             Error::RecordSpecNotFound(_) => "record spec could not be found",
             Error::FieldSpecNotFound(_, _) => "field spec could not be found",
             Error::ParserFailure(_) => "The field parser encountered an error",
@@ -40,11 +37,12 @@ impl ErrorTrait for Error {
         }
     }
 
-    fn cause(&self) -> Option<&ErrorTrait> {
+    fn cause(&self) -> Option<&::std::error::Error> {
         match *self {
-            Error::RecordSpecRecognizerError(ref e) => Some(e),
+            Error::SpecStreamError(ref e) => Some(&**e),
+            Error::SpecResolverError(ref e) => Some(&**e),
             Error::IoError(ref e) => Some(e),
-            Error::DataHolderError(ref e) => Some(e),
+            Error::DataHolderError(ref e) => Some(&**e),
             _ => None
         }
     }
@@ -65,7 +63,8 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
             Error::RecordSpecNameRequired => write!(f, "spec name is required since it cannot be recognized"),
-            Error::RecordSpecRecognizerError(ref e) => write!(f, "record spec recognizer encountered an error: {}", e),
+            Error::SpecStreamError(ref e) => write!(f, "record spec stream encountered an error: {}", e),
+            Error::SpecResolverError(ref e) => write!(f, "record spec stream encountered an error: {}", e),
             Error::RecordSpecNotFound(ref name) => write!(f, "record spec named {} could not be found", name),
             Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
             Error::ParserFailure(ref e) => write!(f, "The field parser encountered an error: {}", e),
@@ -111,32 +110,8 @@ impl From<IoError> for Error {
         Error::IoError(e)
     }
 }
-//
-//impl From<RecognizerError> for Error {
-//    fn from(e: RecognizerError) -> Self {
-//        match e {
-//            RecognizerError::CouldNotRecognize => Error::RecordSpecNameRequired,
-//            _ => Error::RecordSpecRecognizerError(e)
-//        }
-//    }
-//}
 
-impl From<DataHolderError> for Error {
-    fn from(e: DataHolderError) -> Self {
-        Error::DataHolderError(e)
-    }
-}
-
-impl From<FormatterError> for Error {
-    fn from(e: FormatterError) -> Self {
-        Error::FormatterFailure(e)
-    }
-}
-impl From<ParserError> for Error {
-    fn from(e: ParserError) -> Self {
-        Error::ParserFailure(e)
-    }
-}
+pub type BoxedError = Box<::std::error::Error + Send + Sync>;
 
 impl From<PositionalError> for Error {
     fn from(error: PositionalError) -> Self {
@@ -181,12 +156,12 @@ impl<'a> From<(FieldError, &'a str)> for PositionalError {
     }
 }
 
-impl ErrorTrait for PositionalError {
+impl ::std::error::Error for PositionalError {
     fn description(&self) -> &str {
         self.error.description()
     }
 
-    fn cause(&self) -> Option<&ErrorTrait> {
+    fn cause(&self) -> Option<&::std::error::Error> {
         self.error.cause()
     }
 }
@@ -213,18 +188,6 @@ impl FieldError {
             error: error,
             field: Some(field)
         }
-    }
-}
-//
-//impl From<RecognizerError> for FieldError {
-//    fn from(error: RecognizerError) -> Self {
-//        FieldError::from(Error::from(error))
-//    }
-//}
-
-impl From<DataHolderError> for FieldError {
-    fn from(e: DataHolderError) -> Self {
-        FieldError::from(Error::from(e))
     }
 }
 
@@ -261,12 +224,12 @@ impl<'a> From<(Error, &'a str)> for FieldError {
     }
 }
 
-impl ErrorTrait for FieldError {
+impl ::std::error::Error for FieldError {
     fn description(&self) -> &str {
         self.error.description()
     }
 
-    fn cause(&self) -> Option<&ErrorTrait> {
+    fn cause(&self) -> Option<&::std::error::Error> {
         self.error.cause()
     }
 }

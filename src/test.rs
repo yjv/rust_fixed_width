@@ -1,53 +1,58 @@
 use spec::*;
-use error::Error;
-use recognizer::{DataRecordSpecRecognizer, LineRecordSpecRecognizer};
 use std::collections::{HashMap, BTreeMap};
 use std::io::BufRead;
 use record::{Data, DataRanges, ReadType, WriteType};
-use writer::formatter::{FieldFormatter, Error as FormatterError};
-use reader::parser::{FieldParser, Error as ParserError};
+use writer::formatter::FieldFormatter;
+use reader::parser::FieldParser;
+use reader::spec::{Resolver as ReaderResolver, RequiresBufRead};
+use writer::spec::Resolver as WriterResolver;
+use super::BoxedErrorResult as Result;
 
 #[derive(Debug)]
-pub struct MockRecognizer<'a> {
-    line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>,
-    data_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<&'a str, ::recognizer::Error>)>
+pub struct MockResolver<'a> {
+    line_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<Option<&'a str>>)>,
+    data_recognize_calls: Vec<(&'a HashMap<String, RecordSpec>, Result<Option<&'a str>>)>
 }
 
-impl<'a> MockRecognizer<'a> {
+impl<'a> MockResolver<'a> {
     pub fn new() -> Self {
-        MockRecognizer {
+        MockResolver {
             data_recognize_calls: Vec::new(),
             line_recognize_calls: Vec::new()
         }
     }
 
-    pub fn add_line_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
+    pub fn add_line_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<Option<&'a str>>) -> &mut Self {
         self.line_recognize_calls.push((record_specs, return_value));
         self
     }
 
-    pub fn add_data_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<&'a str, ::recognizer::Error>) -> &mut Self {
+    pub fn add_data_recognize_call(&mut self, record_specs: &'a HashMap<String, RecordSpec>, return_value: Result<Option<&'a str>>) -> &mut Self {
         self.data_recognize_calls.push((record_specs, return_value));
         self
     }
 }
 
-impl<'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a> {
-    fn recognize_for_line<'b, 'c, V: BufRead + 'b>(&self, _: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<&'c str, ::recognizer::Error> {
+impl<'a, T: ReadType> RequiresBufRead<T> for MockResolver<'a> {
+}
+
+impl<'a, U: ReadType> ReaderResolver<U> for MockResolver<'a> {
+    fn resolve<'b, 'c, V: BufRead + 'b>(&self, _: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<Option<&'c str>> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
             {
                 return match *return_value {
-                    Ok(ref v) => {
+                    Ok(Some(ref v)) => {
                         for (key, _) in record_specs {
                             if key == v {
-                                return Ok(key as &str);
+                                return Ok(Some(key as &str));
                             }
                         }
 
                         panic!("key {:?} not found in {:?}");
                     },
-                    Err(ref e) => Err(e.clone())
+                    Ok(None) => Ok(None),
+                    Err(_) => Err("".into())
                 }
             }
         }
@@ -56,22 +61,23 @@ impl<'a, U: ReadType> LineRecordSpecRecognizer<U> for MockRecognizer<'a> {
     }
 }
 
-impl<'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a> {
-    fn recognize_for_data<'b, 'c, W: DataRanges + 'b>(&self, _: &'b Data<W, V::DataHolder>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<&'c str, ::recognizer::Error> {
+impl<'a, V: WriteType> WriterResolver<V> for MockResolver<'a> {
+    fn resolve<'b, 'c, W: DataRanges + 'b>(&self, _: &'b Data<W, V::DataHolder>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<Option<&'c str>> {
         for &(ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
                 {
                     return match *return_value {
-                        Ok(ref v) => {
+                        Ok(Some(ref v)) => {
                             for (key, _) in record_specs {
                                 if key == v {
-                                    return Ok(key as &str);
+                                    return Ok(Some(key as &str));
                                 }
                             }
 
                             panic!("key {:?} not found in {:?}");
                         },
-                        Err(ref e) => Err(e.clone())
+                        Ok(None) => Ok(None),
+                        Err(_) => Err("".into())
                     }
                 }
         }
@@ -82,7 +88,7 @@ impl<'a, V: WriteType> DataRecordSpecRecognizer<V> for MockRecognizer<'a> {
 
 #[derive(Debug)]
 pub struct MockFormatter {
-    format_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>, Error>)>
+    format_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>>)>
 }
 
 impl MockFormatter {
@@ -92,14 +98,14 @@ impl MockFormatter {
         }
     }
 
-    pub fn add_format_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>, Error>) -> &mut Self {
+    pub fn add_format_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>>) -> &mut Self {
         self.format_calls.push((data, field_spec, return_value));
         self
     }
 }
 
 impl<T: WriteType> FieldFormatter<T> for MockFormatter {
-    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), FormatterError> {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.format_calls {
             if *expected_data == data && expected_field_spec == field_spec {
                 return match *return_value {
@@ -107,7 +113,7 @@ impl<T: WriteType> FieldFormatter<T> for MockFormatter {
                         destination.extend(value.iter());
                         Ok(())
                     },
-                    Err(_) => Err(FormatterError::new(""))
+                    Err(_) => Err("".into())
                 };
             }
         }
@@ -118,7 +124,7 @@ impl<T: WriteType> FieldFormatter<T> for MockFormatter {
 
 #[derive(Debug)]
 pub struct MockParser {
-    parse_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>, Error>)>
+    parse_calls: Vec<(Vec<u8>, FieldSpec, Result<Vec<u8>>)>
 }
 
 impl MockParser {
@@ -128,14 +134,14 @@ impl MockParser {
         }
     }
 
-    pub fn add_parse_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>, Error>) -> &mut Self {
+    pub fn add_parse_call(&mut self, data: Vec<u8>, field_spec: FieldSpec, return_value: Result<Vec<u8>>) -> &mut Self {
         self.parse_calls.push((data, field_spec, return_value));
         self
     }
 }
 
 impl<T: ReadType> FieldParser<T> for MockParser {
-    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<(), ParserError> {
+    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.parse_calls {
             if *expected_data == data
                 && expected_field_spec == field_spec {
@@ -144,7 +150,7 @@ impl<T: ReadType> FieldParser<T> for MockParser {
                         destination.extend(value.iter());
                         Ok(())
                     },
-                    Err(_) => Err(ParserError::new(""))
+                    Err(_) => Err("".into())
                 };
             }
         }

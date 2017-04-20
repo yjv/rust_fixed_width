@@ -3,9 +3,7 @@ use std::collections::btree_map::{Iter as BTreeMapIter, IntoIter as BTreeMapInto
 use std::collections::hash_map::{Iter as HashMapIter, IntoIter as HashMapIntoIter};
 use std::ops::{Range, Index};
 use std::iter::FromIterator;
-use std::error::Error;
-use std::fmt::{Formatter, Display, Error as FmtError};
-use std::string::FromUtf8Error;
+use super::BoxedErrorResult as Result;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Data<T: DataRanges, U> {
@@ -60,7 +58,7 @@ pub struct Length {
 }
 
 pub trait ReadType: DataType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError>;
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder>;
     fn get_range(&self, old_length: usize, data: &[u8]) -> Range<usize> {
         old_length..data.len()
     }
@@ -93,7 +91,7 @@ impl DataType for BinaryType  {
 }
 
 impl ReadType for BinaryType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
         Ok(data)
     }
 }
@@ -131,7 +129,7 @@ impl DataType for StringType {
     fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
         let mut iterator = self.get_string(data).char_indices();
 
-        match (iterator.nth(range.start), iterator.nth(range.end - 1)) {
+        match (iterator.nth(range.start), iterator.nth(range.end - 1 - range.start)) {
             (Some((start, _)), Some((end, _))) => Some(start..end + 1),
             _ => None
         }
@@ -143,7 +141,7 @@ impl DataType for StringType {
 }
 
 impl ReadType for StringType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder, DataHolderError> {
+    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
         Ok(String::from_utf8(data)?)
     }
 
@@ -161,55 +159,6 @@ impl ReadType for StringType {
 impl WriteType for StringType {
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
         Some(data[range].as_bytes())
-    }
-}
-
-#[derive(Debug)]
-pub struct DataHolderError {
-    repr: Box<::std::error::Error + Send + Sync>
-}
-
-impl Clone for DataHolderError {
-    fn clone(&self) -> Self {
-        DataHolderError::new("")
-    }
-}
-
-impl DataHolderError {
-    pub fn new<E>(error: E) -> Self
-        where E: Into<Box<Error + Send + Sync>>
-    {
-        DataHolderError { repr: error.into() }
-    }
-
-    pub fn downcast<E: Error + Send + Sync + 'static>(self) -> Result<E, Self> {
-        Ok(*(self.repr.downcast::<E>().map_err(|e| DataHolderError { repr: e })?))
-    }
-
-    pub fn downcast_ref<E: Error + Send + Sync + 'static>(&self) -> Option<&E> {
-        self.repr.downcast_ref::<E>()
-    }
-}
-
-impl Error for DataHolderError {
-    fn description(&self) -> &str {
-        self.repr.description()
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        self.repr.cause()
-    }
-}
-
-impl Display for DataHolderError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
-        Display::fmt(&*self.repr, f)
-    }
-}
-
-impl From<FromUtf8Error> for DataHolderError {
-    fn from(e: FromUtf8Error) -> Self {
-        DataHolderError::new(e)
     }
 }
 

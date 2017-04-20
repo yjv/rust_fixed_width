@@ -10,7 +10,7 @@ use error::Error;
 use super::{Result, PositionalResult, FieldResult, Record};
 use record::{Data, BuildableDataRanges, ReadType, ShouldReadMore};
 use reader::parser::FieldParser;
-use self::spec::Source as SpecSource;
+use self::spec::Stream as SpecSource;
 use self::field_buffer::Source as FieldBufferSource;
 
 pub struct FieldReader<T: FieldParser<U>, U: ReadType> {
@@ -44,7 +44,7 @@ impl <T: FieldParser<U>, U: ReadType> FieldReader<T, U> {
             }
         }
 
-        self.parser.parse(&buffer[..], field_spec, field_buffer, &self.read_type)?;
+        self.parser.parse(&buffer[..], field_spec, field_buffer, &self.read_type).map_err(Error::ParserFailure)?;
 
         Ok(())
     }
@@ -92,7 +92,7 @@ impl <T: FieldParser<U>, U: ReadType> RecordReader<T, U> {
             ))?;
         }
 
-        Ok(Data { ranges: ranges, data: self.field_reader.read_type().upcast_data(field_buffer)? })
+        Ok(Data { ranges: ranges, data: self.field_reader.read_type().upcast_data(field_buffer).map_err(Error::DataHolderError)? })
     }
 }
 
@@ -126,7 +126,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
           Y: BorrowMut<Vec<u8>> + 'a,
           Z: FieldBufferSource + 'a {
     pub fn read_record<'b, A: BuildableDataRanges + 'b>(&mut self) -> PositionalResult<Record<A, V::DataHolder>> {
-        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow(), self.reader.read_type())?;
+        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow(), self.reader.read_type()).map_err(Error::SpecStreamError)?.ok_or(Error::RecordSpecNameRequired)?;
         self.reader.read(
             self.source.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
@@ -338,7 +338,7 @@ mod test {
         let mut buf = Cursor::new(string.as_bytes());
         let mut parser = MockParser::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
-        parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
+        parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err("".into()));
         let reader = RecordReader::new(FieldReader::new(&parser, BinaryType));
         assert_result!(
             Err(FieldError {
@@ -393,7 +393,7 @@ mod test {
         let mut buffer = Vec::new();
         let mut parser = MockParser::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
-        parser.add_parse_call(string[..5].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Err(Error::CouldNotReadEnough(Vec::new())));
+        parser.add_parse_call(string[..5].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Err("".into()));
         let reader = FieldReader::new(&parser, BinaryType);
         assert_result!(
             Err(Error::ParserFailure(_)),

@@ -2,51 +2,7 @@ use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
 use record::{ReadType, BinaryType};
 use spec::FieldSpec;
-
-#[derive(Debug)]
-pub struct Error {
-    repr: Box<::std::error::Error + Send + Sync>
-}
-
-impl Clone for Error {
-    fn clone(&self) -> Self {
-        Error::new("")
-    }
-}
-
-impl Error {
-    pub fn new<E>(error: E) -> Self
-        where E: Into<Box<::std::error::Error + Send + Sync>>
-    {
-        Error { repr: error.into() }
-    }
-
-    pub fn downcast<E: ::std::error::Error + Send + Sync + 'static>(self) -> ::std::result::Result<E, Self> {
-        Ok(*(self.repr.downcast::<E>().map_err(|e| Error { repr: e })?))
-    }
-
-    pub fn downcast_ref<E: ::std::error::Error + Send + Sync + 'static>(&self) -> Option<&E> {
-        self.repr.downcast_ref::<E>()
-    }
-}
-
-impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        self.repr.description()
-    }
-
-    fn cause(&self) -> Option<&::std::error::Error> {
-        self.repr.cause()
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
-        Display::fmt(&*self.repr, f)
-    }
-}
-
-type Result<T> = ::std::result::Result<T, Error>;
+use super::super::BoxedErrorResult as Result;
 
 pub trait FieldParser<T: ReadType> {
     fn parse<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, read_type: &'a T) -> Result<()>;
@@ -90,12 +46,6 @@ impl Display for ParseError {
     }
 }
 
-impl From<ParseError> for Error {
-    fn from(e: ParseError) -> Self {
-        Error::new(e)
-    }
-}
-
 pub struct DefaultParser;
 
 impl FieldParser<BinaryType> for DefaultParser {
@@ -136,7 +86,6 @@ mod test {
     use super::*;
     use spec::*;
     use record::{BinaryType, StringType};
-    use writer::formatter::FormatError;
 
     #[test]
     fn default_parser() {
@@ -200,16 +149,5 @@ mod test {
         assert_result!(Ok(()), FieldParser::parse(&&padder, data, &field_spec, &mut destination, &data_type));
         let data_type = StringType;
         assert_result!(Ok(()), FieldParser::parse(&&padder, data, &field_spec, &mut destination, &data_type));
-    }
-
-    #[test]
-    fn error() {
-        let error = Error::new(FormatError::DataSplitNotOnCharBoundary(1));
-        assert_option!(Some(&FormatError::DataSplitNotOnCharBoundary(1)), error.downcast_ref::<FormatError>());
-        assert_option!(Some(&FormatError::DataSplitNotOnCharBoundary(1)), error.downcast_ref::<FormatError>());
-        match error.downcast::<FormatError>() {
-            Ok(FormatError::DataSplitNotOnCharBoundary(1)) => (),
-            e => panic!("bad result returned {:?}", e)
-        }
     }
 }

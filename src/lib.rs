@@ -33,12 +33,12 @@
 pub mod test;
 pub mod error;
 pub mod reader;
-pub mod recognizer;
+//pub mod recognizer;
 pub mod record;
 pub mod spec;
 pub mod writer;
 
-pub use self::error::{Error, FieldError, PositionalError, Position};
+pub use self::error::{Error, FieldError, PositionalError, Position, BoxedError};
 pub use self::reader::Reader;
 pub use self::writer::Writer;
 pub use self::record::{Record, Data};
@@ -46,3 +46,5 @@ pub use self::record::{Record, Data};
 type Result<T> = ::std::result::Result<T, error::Error>;
 type FieldResult<T> = ::std::result::Result<T, error::FieldError>;
 type PositionalResult<T> = ::std::result::Result<T, error::PositionalError>;
+type BoxedErrorResult<T> = ::std::result::Result<T, BoxedError>;
+
