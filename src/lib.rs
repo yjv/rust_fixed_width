@@ -33,7 +33,6 @@
 pub mod test;
 pub mod error;
 pub mod reader;
-//pub mod recognizer;
 pub mod record;
 pub mod spec;
 pub mod writer;
