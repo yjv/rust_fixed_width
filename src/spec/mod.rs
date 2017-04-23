@@ -1,3 +1,5 @@
+pub mod resolver;
+
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
 use std::iter::repeat;

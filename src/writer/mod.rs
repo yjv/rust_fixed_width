@@ -113,7 +113,10 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
     pub fn write_record<'b, A: DataRanges + 'b>(&mut self, data: &'b Data<A, V::DataHolder>) -> PositionalResult<usize> {
-        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type()).map_err(Error::SpecStreamError)?.ok_or(Error::RecordSpecNameRequired)?;
+        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type())
+            .map_err(Error::SpecStreamError)?
+            .ok_or(Error::RecordSpecNameRequired)?
+        ;
         self.writer.write(
             self.destination.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,

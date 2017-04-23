@@ -126,7 +126,10 @@ impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
           Y: BorrowMut<Vec<u8>> + 'a,
           Z: FieldBufferSource + 'a {
     pub fn read_record<'b, A: BuildableDataRanges + 'b>(&mut self) -> PositionalResult<Record<A, V::DataHolder>> {
-        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow(), self.reader.read_type()).map_err(Error::SpecStreamError)?.ok_or(Error::RecordSpecNameRequired)?;
+        let spec_name = self.spec_source.next(self.source.borrow_mut(), self.record_specs.borrow(), self.reader.read_type())
+            .map_err(Error::SpecStreamError)?
+            .ok_or(Error::RecordSpecNameRequired)?
+        ;
         self.reader.read(
             self.source.borrow_mut(),
             self.record_specs.borrow().get(spec_name).ok_or_else(|| Error::RecordSpecNotFound(spec_name.to_string()))?,
