@@ -95,10 +95,12 @@ mod test {
             .clone()
             .with_padding_direction(PaddingDirection::Left)
             .build()
+            .unwrap()
         ;
         let right_field_spec = field_spec_builder
             .with_padding_direction(PaddingDirection::Right)
             .build()
+            .unwrap()
         ;
         assert_result!(Ok(()), padder.format(data, &right_field_spec, &mut destination, &data_type));
         assert_eq!("qwer333333".as_bytes().to_owned(), destination);
@@ -120,6 +122,7 @@ mod test {
             .with_padding("33".to_owned())
             .with_length(0)
             .build()
+            .unwrap()
         ;
         assert_result!(Ok(()), padder.format(data, &field_spec, &mut destination, &data_type));
         assert_eq!(data.to_owned(), destination);
@@ -139,6 +142,7 @@ mod test {
             .with_padding("33".to_owned())
             .with_length(0)
             .build()
+            .unwrap()
         ;
         assert_result!(Ok(()), FieldFormatter::format(&&padder, data, &field_spec, &mut destination, &data_type));
         let data_type = StringType;

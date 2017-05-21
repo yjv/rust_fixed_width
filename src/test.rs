@@ -229,6 +229,7 @@ pub fn test_spec() -> Spec {
             field_specs: BTreeMap::new()
         })
         .build()
+        .unwrap()
 }
 
 #[macro_export]

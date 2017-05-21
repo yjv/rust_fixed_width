@@ -3,9 +3,10 @@ pub mod resolver;
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
 use std::iter::repeat;
+use super::{Result, Error};
 
 pub trait Builder<T> {
-    fn build(self) -> T;
+    fn build(self) -> Result<T>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,33 +15,44 @@ pub struct Spec {
 }
 
 impl Builder<Spec> for Spec {
-    fn build(self) -> Self {
-        self
+    fn build(self) -> Result<Self> {
+        Ok(self)
     }
 }
 
-#[derive(Clone)]
 pub struct SpecBuilder {
-    record_specs: HashMap<String, RecordSpec>
+    record_specs: HashMap<String, Result<RecordSpec>>,
+    sub_builder_error: bool
 }
 
 impl SpecBuilder {
     pub fn new() -> Self {
         SpecBuilder {
-            record_specs: HashMap::new()
+            record_specs: HashMap::new(),
+            sub_builder_error: false
         }
     }
 
     pub fn with_record<T: Into<String>, U: Builder<RecordSpec>>(mut self, name: T, record: U) -> Self {
-        self.record_specs.insert(name.into(), record.build());
+        let record = record.build();
+        self.sub_builder_error = self.sub_builder_error || record.is_err();
+        self.record_specs.insert(name.into(), record);
         self
     }
 }
 
 impl Builder<Spec> for SpecBuilder {
-    fn build(self) -> Spec {
-        Spec {
-            record_specs: self.record_specs
+    fn build(self) -> Result<Spec> {
+        if self.sub_builder_error {
+            Err(Error::SubBuilderErrors(self.record_specs.into_iter()
+                .filter(|&(_, ref result)| result.is_err())
+                .map(|(name, result)| (name, result.unwrap_err()))
+                .collect()
+            ))
+        } else {
+            Ok(Spec {
+                record_specs: self.record_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect()
+            })
         }
     }
 }
@@ -70,27 +82,30 @@ impl RecordSpec {
 }
 
 impl Builder<RecordSpec> for RecordSpec {
-    fn build(self) -> Self {
-        self
+    fn build(self) -> Result<Self> {
+        Ok(self)
     }
 }
 
-#[derive(Clone)]
 pub struct RecordSpecBuilder {
     line_ending: Vec<u8>,
-    field_specs: BTreeMap<String, FieldSpec>,
+    field_specs: BTreeMap<String, Result<FieldSpec>>,
+    sub_builder_error: bool
 }
 
 impl RecordSpecBuilder {
     pub fn new() -> Self {
         RecordSpecBuilder {
             line_ending: Vec::new(),
-            field_specs: BTreeMap::new()
+            field_specs: BTreeMap::new(),
+            sub_builder_error: false
         }
     }
 
     pub fn with_field<T: Into<String>, U: Builder<FieldSpec>>(mut self, name: T, field: U) -> Self {
-        self.field_specs.insert(name.into(), field.build());
+        let field = field.build();
+        self.sub_builder_error = self.sub_builder_error || field.is_err();
+        self.field_specs.insert(name.into(), field);
         self
     }
 
@@ -101,10 +116,18 @@ impl RecordSpecBuilder {
 }
 
 impl Builder<RecordSpec> for RecordSpecBuilder {
-    fn build(self) -> RecordSpec {
-        RecordSpec {
-            line_ending: self.line_ending,
-            field_specs: self.field_specs
+    fn build(self) -> Result<RecordSpec> {
+        if self.sub_builder_error {
+            Err(Error::SubBuilderErrors(self.field_specs.into_iter()
+                .filter(|&(_, ref result)| result.is_err())
+                .map(|(name, result)| (name, result.unwrap_err()))
+                .collect()
+            ))
+        } else {
+            Ok(RecordSpec {
+                line_ending: self.line_ending,
+                field_specs: self.field_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect()
+            })
         }
     }
 }
@@ -125,8 +148,8 @@ pub struct FieldSpec {
 }
 
 impl Builder<FieldSpec> for FieldSpec {
-    fn build(self) -> Self {
-        self
+    fn build(self) -> Result<Self> {
+        Ok(self)
     }
 }
 
@@ -200,14 +223,14 @@ impl FieldSpecBuilder {
 }
 
 impl Builder<FieldSpec> for FieldSpecBuilder {
-    fn build(self) -> FieldSpec {
-        FieldSpec {
-            length: self.length.expect("length must be set in order to build"),
-            padding_direction: self.padding_direction.expect("padding direction must be set in order to build"),
-            padding: self.padding.expect("padding must be set in order to build"),
+    fn build(self) -> Result<FieldSpec> {
+        Ok(FieldSpec {
+            length: self.length.ok_or(Error::BuildError("length must be set in order to build"))?,
+            padding_direction: self.padding_direction.ok_or(Error::BuildError("padding direction must be set in order to build"))?,
+            padding: self.padding.ok_or(Error::BuildError("padding must be set in order to build"))?,
             default: self.default,
             write_only: self.write_only
-        }
+        })
     }
 }
 
@@ -292,13 +315,15 @@ mod test {
             .with_padding_direction(PaddingDirection::Left)
             .with_length(0)
             .build()
-        , FieldSpecBuilder::new_number().with_length(0).build());
+            .unwrap()
+        , FieldSpecBuilder::new_number().with_length(0).build().unwrap());
         assert_eq!(FieldSpecBuilder::new()
             .with_padding(" ".as_bytes().to_owned())
             .with_padding_direction(PaddingDirection::Right)
             .with_length(0)
             .build()
-        , FieldSpecBuilder::new_string().with_length(0).build());
+            .unwrap()
+        , FieldSpecBuilder::new_string().with_length(0).build().unwrap());
     }
 
     #[test]

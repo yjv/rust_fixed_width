@@ -255,16 +255,16 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
         }
     }
 
-    pub fn build(self) -> Reader<'a, R, T, U, V, W, X, Y, Z> {
-        Reader {
-            source: self.source.expect("source needs to be defined in order to build"),
+    pub fn build(self) -> Result<Reader<'a, R, T, U, V, W, X, Y, Z>> {
+        Ok(Reader {
+            source: self.source.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
             reader: self.reader,
-            spec_source: self.spec_source.expect("spec_source needs to be defined in order to build"),
-            record_specs: self.record_specs.expect("record_specs needs to be defined in order to build"),
+            spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
+            record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
             buffer: self.buffer,
             field_buffer_source: self.field_buffer_source,
             source_type: ::std::marker::PhantomData
-        }
+        })
     }
 }
 

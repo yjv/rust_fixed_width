@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter, Error as FmtError};
 use std::io::Error as IoError;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,7 +16,9 @@ pub enum Error {
     CouldNotReadEnough(Vec<u8>),
     FormattedValueWrongLength(usize, Vec<u8>),
     FieldValueRequired,
-    DataHolderError(BoxedError)
+    DataHolderError(BoxedError),
+    BuildError(&'static str),
+    SubBuilderErrors(HashMap<String, Error>)
 }
 
 impl ::std::error::Error for Error {
@@ -33,7 +36,9 @@ impl ::std::error::Error for Error {
             Error::DataDoesNotMatchLineEnding(_, _) => "The encountered line ending doesn't match the expected one",
             Error::FormattedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
             Error::FieldValueRequired => "The value for the given field is required since it has no default",
-            Error::DataHolderError(_) => "There was an error creating the records data holder"
+            Error::DataHolderError(_) => "There was an error creating the records data holder",
+            Error::BuildError(_) => "There was an error while building",
+            Error::SubBuilderErrors(_) => "Some sub builders had errors"
         }
     }
 
@@ -89,7 +94,16 @@ impl Display for Error {
                 expected_length
             ),
             Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default"),
-            Error::DataHolderError(ref e) => write!(f, "An error occurred while trying to create the record data holder: {}", e)
+            Error::DataHolderError(ref e) => write!(f, "An error occurred while trying to create the record data holder: {}", e),
+            Error::BuildError(ref e) => write!(f, "There was an error while building: {}", e),
+            Error::SubBuilderErrors(ref errors) => {
+                write!(f, "Some sub builders had errors: ")?;
+                for (name, error) in errors {
+                    write!(f, "\n {}: {}", name, error)?;
+                }
+
+                Ok(())
+            }
         }
     }
 }

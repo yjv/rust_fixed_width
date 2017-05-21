@@ -100,10 +100,12 @@ mod test {
             .clone()
             .with_padding_direction(PaddingDirection::Left)
             .build()
+            .unwrap()
         ;
         let right_field_spec = field_spec_builder
             .with_padding_direction(PaddingDirection::Right)
             .build()
+            .unwrap()
         ;
         let data = "qwer333333".as_bytes();
         assert_result!(Ok(()), padder.parse(data, &right_field_spec, &mut destination, &data_type));
@@ -125,6 +127,7 @@ mod test {
             .with_padding("33".to_owned())
             .with_length(0)
             .build()
+            .unwrap()
         ;
         destination.clear();
         assert_result!(Ok(()), padder.parse(data, &field_spec, &mut destination, &data_type));
@@ -144,6 +147,7 @@ mod test {
             .with_padding("33".to_owned())
             .with_length(0)
             .build()
+            .unwrap()
         ;
         let data_type = BinaryType;
         assert_result!(Ok(()), FieldParser::parse(&&padder, data, &field_spec, &mut destination, &data_type));

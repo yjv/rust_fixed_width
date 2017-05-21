@@ -220,15 +220,15 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
         }
     }
 
-    pub fn build(self) -> Writer<'a, WR, T, U, V, W, X, Y> {
-        Writer {
-            destination: self.destination.expect("source needs to be defined in order to build"),
+    pub fn build(self) -> Result<Writer<'a, WR, T, U, V, W, X, Y>> {
+        Ok(Writer {
+            destination: self.destination.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
             writer: self.writer,
-            spec_source: self.spec_source.expect("spec_source needs to be defined in order to build"),
-            record_specs: self.record_specs.expect("record_specs needs to be defined in order to build"),
+            spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
+            record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
             buffer: self.buffer,
             destination_type: ::std::marker::PhantomData
-        }
+        })
     }
 }
 
