@@ -1,0 +1,34 @@
+records:
+  record1:
+    line_ending: \n
+    fields:
+      $id:
+        length: 2
+        padding_direction: right
+        default: 34
+      field1:
+        length: 10
+        padding_direction: left
+        padding: ' '
+        default: hello
+      field2:
+        length: 23
+        padding_direction: right
+        default: goodbye
+  record2:
+    line_ending: \n
+    fields:
+      $id:
+        length: 5
+        padding_direction: right
+        default: 34
+      field1:
+        length: 12
+        padding_direction: left
+        padding: ' '
+        default: hello
+      field2:
+        length: 67
+        padding_direction: right
+        default: goodbye
+
