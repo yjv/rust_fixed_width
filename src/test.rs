@@ -171,7 +171,6 @@ pub fn test_spec() -> Spec {
                         .with_length(4)
                         .with_padding("dsasd")
                         .with_padding_direction(PaddingDirection::Left)
-                        .write_only()
                 )
                 .with_field(
                     "field2",
@@ -219,8 +218,7 @@ pub fn test_spec() -> Spec {
                         length: 8,
                         padding: "sdfsd".as_bytes().to_owned(),
                         padding_direction: PaddingDirection::Left,
-                        default: None,
-                        write_only: false
+                        default: None
                     }
                 )
         )
