@@ -70,6 +70,7 @@ impl YamlLoader {
                 field_spec
             );
         }
+
         Ok(RecordSpec {
             line_ending: record_spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
             field_specs: field_specs
