@@ -18,7 +18,8 @@ pub enum Error {
     FieldValueRequired,
     DataHolderError(BoxedError),
     BuildError(&'static str),
-    SubBuilderErrors(HashMap<String, Error>)
+    SubBuilderErrors(HashMap<String, Error>),
+    SpecLoaderError(BoxedError)
 }
 
 impl ::std::error::Error for Error {
@@ -38,7 +39,8 @@ impl ::std::error::Error for Error {
             Error::FieldValueRequired => "The value for the given field is required since it has no default",
             Error::DataHolderError(_) => "There was an error creating the records data holder",
             Error::BuildError(_) => "There was an error while building",
-            Error::SubBuilderErrors(_) => "Some sub builders had errors"
+            Error::SubBuilderErrors(_) => "Some sub builders had errors",
+            Error::SpecLoaderError(_) => "The spec loader encountered an error"
         }
     }
 
@@ -48,6 +50,7 @@ impl ::std::error::Error for Error {
             Error::SpecResolverError(ref e) => Some(&**e),
             Error::IoError(ref e) => Some(e),
             Error::DataHolderError(ref e) => Some(&**e),
+            Error::SpecLoaderError(ref e) => Some(&**e),
             _ => None
         }
     }
@@ -103,7 +106,8 @@ impl Display for Error {
                 }
 
                 Ok(())
-            }
+            },
+            Error::SpecLoaderError(ref e) => write!(f, "The spec loader encountered an error: {}", e)
         }
     }
 }

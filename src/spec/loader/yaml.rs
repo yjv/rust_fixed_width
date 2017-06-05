@@ -1,88 +1,164 @@
 extern crate yaml_rust;
-use self::yaml_rust::YamlLoader;
+use self::yaml_rust::{Yaml};
+use std::fs::File;
+use std::io::prelude::*;
+use std::collections::{BTreeMap, HashMap};
+use spec::{FieldSpec, RecordSpec, Spec, PaddingDirection};
+use error::BoxedError;
+use std::fmt::{Display, Formatter, Error as FmtError};
 
+pub struct YamlLoader;
 
-#[cfg(test)]
-mod test {
-    extern crate yaml_rust;
-    use self::yaml_rust::{YamlLoader, Yaml};
-    use std::fs::File;
-    use std::io::prelude::*;
-    use std::collections::BTreeMap;
-    use spec::{FieldSpec, RecordSpec, PaddingDirection};
-
-    #[test]
-    fn read_record() {
+impl super::Loader for YamlLoader {
+    fn load(&self) -> ::Result<Spec> {
         let mut file = File::open("src/spec/loader/spec.yml").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
-        let docs = YamlLoader::load_from_str(&contents).unwrap();
+        let docs = yaml_rust::YamlLoader::load_from_str(&contents).unwrap();
+        self.read_spec(docs).map_err(::error::Error::SpecLoaderError)
+    }
+}
 
-        for doc in docs {
-            let mut doc = get_hash(doc);
+impl YamlLoader {
+    fn read_spec(&self, docs: Vec<Yaml>) -> Result<Spec, BoxedError> {
 
-            let mut records = get_hash(doc.remove(&Yaml::String("records".to_string())).unwrap());
+        let mut record_specs = HashMap::new();
 
-            for (name, spec) in records {
-                let name = get_string(name);
-                let mut spec = get_hash(spec);
+        for mut doc in docs {
+            let mut records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
 
-                let mut fields = get_hash(spec.remove(&Yaml::String("fields".to_string())).unwrap());
-                println!("{:?}", fields);
+            for (name, spec_data) in records {
+                let path = &["records"];
+                let name = Self::get_string(name, Some(path))?;
+                let path = &["records", &name];
+                let mut spec_data = Self::get_hash(spec_data, Some(path))?;
+                let mut field_specs = BTreeMap::new();
+                let path = &["records", &name, "fields"];
+                let mut fields = Self::get_hash(spec_data.remove(&Yaml::String("fields".to_string())).ok_or(Error::missing_key("records", Some(path)))?, Some(path))?;
 
-                for (field_name, field_spec) in fields {
-                    let field_name = get_string(field_name);
-                    let mut field_spec = get_hash(field_spec);
+                for (field_name, field_spec_data) in fields {
+                    let field_name = Self::get_string(field_name, Some(path))?;
+                    let path = &["records", &name, "fields", &field_name];
+                    let mut field_spec = Self::get_hash(field_spec_data, Some(path))?;
 
-                    let field = FieldSpec {
-                        default: field_spec.remove(&Yaml::String("default".to_string())).map(get_u8_vec),
-                        length: field_spec.remove(&Yaml::String("length".to_string())).map(get_usize).unwrap(),
-                        padding: field_spec.remove(&Yaml::String("padding".to_string())).map(get_u8_vec).unwrap_or_else(|| Vec::new()),
-                        padding_direction: field_spec.remove(&Yaml::String("padding_direction".to_string())).map(get_padding_direction).unwrap()
-                    };
-                    println!("{:?}", field);
+                    field_specs.insert(field_name.clone(), FieldSpec {
+                        default: match field_spec.remove(&Yaml::String("default".to_string())) {
+                            Some(v) => Some(Self::get_bytes(v, Some(path))?),
+                            None => None
+                        },
+                        length: field_spec.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?,
+                        padding: field_spec.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
+                        padding_direction: field_spec.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?
+                    });
                 }
 
+                record_specs.insert(name.clone(), RecordSpec {
+                    line_ending: spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
+                    field_specs: field_specs
+                });
             }
         }
 
+        Ok(Spec { record_specs: record_specs })
     }
 
-    fn get_hash(value: Yaml) -> BTreeMap<Yaml, Yaml> {
+    fn get_hash<'a, 'b>(value: Yaml, path: Option<&'a [&'b str]>) -> Result<BTreeMap<Yaml, Yaml>, Error> {
         match value {
-            Yaml::Hash(v) => v,
-            _ => panic!()
+            Yaml::Hash(v) => Ok(v),
+            _ => Err(Error::invalid_type(value, "Hash", path))
         }
     }
 
-    fn get_string(value: Yaml) -> String {
+    fn get_string<'a, 'b>(value: Yaml, path: Option<&'a [&'b str]>) -> Result<String, Error> {
         match value {
-            Yaml::String(v) => v,
-            _ => panic!()
+            Yaml::String(v) => Ok(v),
+            Yaml::Integer(v) => Ok(v.to_string()),
+            _ => Err(Error::invalid_type(value, "String", path))
         }
     }
 
-    fn get_u8_vec(value: Yaml) -> Vec<u8> {
-        println!("{:?}", value);
+    fn get_bytes<'a, 'b>(value: Yaml, path: Option<&'a [&'b str]>) -> Result<Vec<u8>, Error> {
+        Self::get_string(value, path).map(String::into_bytes)
+    }
+
+    fn get_usize<'a, 'b>(value: Yaml, path: Option<&'a [&'a str]>) -> Result<usize, Error> {
         match value {
-            Yaml::String(v) => v.into_bytes(),
-            Yaml::Integer(v) => v.to_string().into_bytes(),
-            _ => panic!()
+            Yaml::Integer(v) => Ok(v as usize),
+            _ => Err(Error::invalid_type(value, "Integer", path))
         }
     }
 
-    fn get_usize(value: Yaml) -> usize {
+    fn get_padding_direction<'a, 'b>(value: Yaml, path: Option<&'a [&'b str]>) -> Result<PaddingDirection, Error> {
         match value {
-            Yaml::Integer(v) => v as usize,
-            _ => panic!()
+            Yaml::String(ref v) if v == "right" => Ok(PaddingDirection::Right),
+            Yaml::String(ref v) if v == "Right" => Ok(PaddingDirection::Right),
+            Yaml::String(ref v) if v == "left" => Ok(PaddingDirection::Left),
+            Yaml::String(ref v) if v == "Left" => Ok(PaddingDirection::Left),
+            _ => Err(Error::invalid_type(value, "String: right, Right, left, Left", path))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    MissingKey { key: &'static str, path: Option<String> },
+    InvalidType { value: Yaml, expected_type: &'static str, path: Option<String> }
+}
+
+impl Error {
+    fn missing_key<'a, 'b>(key: &'static str, path: Option<&'a [&'b str]>) -> Self {
+        Error::MissingKey {
+            key: key,
+            path: path.map(Self::normalize_path)
         }
     }
 
-    fn get_padding_direction(value: Yaml) -> PaddingDirection {
-        match value {
-            Yaml::String(ref v) if v == "right" => PaddingDirection::Right,
-            Yaml::String(ref v) if v == "left" => PaddingDirection::Left,
-            _ => panic!()
+    fn invalid_type<'a, 'b>(value: Yaml, expected_type: &'static str, path: Option<&'a [&'b str]>) -> Self {
+        Error::InvalidType {
+            value: value,
+            expected_type: expected_type,
+            path: path.map(Self::normalize_path)
         }
+    }
+
+    fn normalize_path<'a, 'b>(path: &'a [&'b str]) -> String {
+        let mut string = String::new();
+        for element in path {
+            string.push_str(element);
+        }
+
+        string
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::MissingKey { .. } => "There is a key missing",
+            Error::InvalidType { .. } => "The type is wrong"
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
+        match *self {
+            Error::MissingKey { key: ref key, path: Some(ref path) } => write!(f, "There is a key {} missing under key {}", key, path),
+            Error::MissingKey { key: ref key, path: None } => write!(f, "There is a key {} missing", key),
+            Error::InvalidType { value: ref value, expected_type: ref expected_type, path: Some(ref path) } => write!(f, "The value {:?} at path {} has the wrong type. The expected type was {}", value, path, expected_type),
+            Error::InvalidType { value: ref value, expected_type: ref expected_type, path: None } => write!(f, "The value {:?} has the wrong type. The expected type was {}", value, expected_type)
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::YamlLoader;
+    use spec::loader::Loader;
+
+    #[test]
+    fn read_record() {
+        let loader = YamlLoader;
+        println!("{:?}", loader.load());
     }
 }
