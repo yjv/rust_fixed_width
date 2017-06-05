@@ -28,33 +28,41 @@ impl YamlLoader {
         for mut doc in docs {
             let mut records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
 
-            for (name, spec_data) in records {
+            for (name, record_spec_data) in records {
                 let path = &["records"];
                 let name = Self::get_string(name, Some(path))?;
-                let path = &["records", &name];
-                let mut spec_data = Self::get_hash(spec_data, Some(path))?;
-                let mut field_specs = BTreeMap::new();
-                let path = &["records", &name, "fields"];
-                let mut fields = Self::get_hash(spec_data.remove(&Yaml::String("fields".to_string())).ok_or(Error::missing_key("records", Some(path)))?, Some(path))?;
+                let (line_ending, field_specs) = {
+                    let path = &["records", &name];
+                    let mut record_spec_data = Self::get_hash(record_spec_data, Some(path))?;
+                    let mut field_specs = BTreeMap::new();
+                    let path = &["records", &name, "fields"];
+                    let mut fields = Self::get_hash(record_spec_data.remove(&Yaml::String("fields".to_string())).ok_or(Error::missing_key("records", Some(path)))?, Some(path))?;
 
-                for (field_name, field_spec_data) in fields {
-                    let field_name = Self::get_string(field_name, Some(path))?;
-                    let path = &["records", &name, "fields", &field_name];
-                    let mut field_spec = Self::get_hash(field_spec_data, Some(path))?;
+                    for (field_name, field_spec_data) in fields {
+                        let field_name = Self::get_string(field_name, Some(path))?;
+                        let field_spec = {
+                            let path = &["records", &name, "fields", &field_name];
+                            let mut field_spec_map = Self::get_hash(field_spec_data, Some(path))?;
+                            FieldSpec {
+                                default: match field_spec_map.remove(&Yaml::String("default".to_string())) {
+                                    Some(v) => Some(Self::get_bytes(v, Some(path))?),
+                                    None => None
+                                },
+                                length: field_spec_map.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?,
+                                padding: field_spec_map.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
+                                padding_direction: field_spec_map.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?
+                            }
+                        };
+                        field_specs.insert(field_name, field_spec);
+                    }
+                    (
+                        record_spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
+                        field_specs
+                    )
+                };
 
-                    field_specs.insert(field_name.clone(), FieldSpec {
-                        default: match field_spec.remove(&Yaml::String("default".to_string())) {
-                            Some(v) => Some(Self::get_bytes(v, Some(path))?),
-                            None => None
-                        },
-                        length: field_spec.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?,
-                        padding: field_spec.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
-                        padding_direction: field_spec.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?
-                    });
-                }
-
-                record_specs.insert(name.clone(), RecordSpec {
-                    line_ending: spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
+                record_specs.insert(name, RecordSpec {
+                    line_ending: line_ending,
                     field_specs: field_specs
                 });
             }
