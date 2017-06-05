@@ -6,15 +6,16 @@ use std::collections::{BTreeMap, HashMap};
 use spec::{FieldSpec, RecordSpec, Spec, PaddingDirection};
 use error::BoxedError;
 use std::fmt::{Display, Formatter, Error as FmtError};
+use std::path::Path;
 
 pub struct YamlLoader;
 
-impl super::Loader for YamlLoader {
-    fn load(&self) -> ::Result<Spec> {
-        let mut file = File::open("src/spec/loader/spec.yml").unwrap();
+impl<T: AsRef<Path>> super::Loader<T> for YamlLoader {
+    fn load(&self, resource: T) -> ::Result<Spec> {
+        let mut file = File::open(resource.as_ref()).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
         let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        let docs = yaml_rust::YamlLoader::load_from_str(&contents).unwrap();
+        file.read_to_string(&mut contents).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
+        let docs = yaml_rust::YamlLoader::load_from_str(&contents).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
         self.read_spec(docs).map_err(::error::Error::SpecLoaderError)
     }
 }
@@ -159,6 +160,6 @@ mod test {
     #[test]
     fn read_record() {
         let loader = YamlLoader;
-        println!("{:?}", loader.load());
+        println!("{:?}", loader.load("src/spec/loader/spec.yml"));
     }
 }
