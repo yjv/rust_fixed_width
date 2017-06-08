@@ -1,22 +1,28 @@
 sudo: false
 language: rust
+
 rust:
   - stable
   - beta
   - nightly
-before_script: |
-  PKGNAME="rust_fixed_width" # must match with cargo.toml
-  LOCAL="~/.local" # install here to avoid `sudo`
-  KCOV_VERSION=33
-  export PATH=$LOCAL/bin:$PATH
-script: cargo test --verbose
+
+matrix:
+  allow_failures:
+    - rust: nightly
+
+before_install:
+  - sudo apt-get update
+
 addons:
   apt:
     packages:
-    - libcurl4-openssl-dev
-    - libelf-dev
-    - libdw-dev
-    - libbfd-dev # required for `--verify`
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - cmake
+      - gcc
+      - binutils-dev
+
 after_success: |
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
   tar xzf master.tar.gz &&
