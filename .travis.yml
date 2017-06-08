@@ -26,10 +26,10 @@ after_success: |
   make &&
   make install &&
   cd ../.. &&
+  for f in target/debug/rust_fixed_width-*;do test -x $f && mv $f target/debug/rust_fixed_width; done &&
   kcov --verify \
        --coveralls-id=$TRAVIS_JOB_ID \
        --exclude-pattern=/.cargo,/usr/lib \
-       target/kcov target/debug/rust_fixed_width-*
+       target/kcov target/debug/rust_fixed_width
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
-  ls -l target/debug
