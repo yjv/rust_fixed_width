@@ -11,6 +11,9 @@ matrix:
     - rust: nightly
 before_script: |
   PKGNAME="rust_fixed_width" # must match with cargo.toml
+  LOCAL="~/.local" # install here to avoid `sudo`
+  KCOV_VERSION=33
+  export PATH=$LOCAL/bin:$PATH
 
 addons:
   apt:
@@ -23,16 +26,14 @@ addons:
       - binutils-dev
 
 after_success: |
-  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-  tar xzf master.tar.gz &&
-  cd kcov-master &&
-  mkdir build &&
-  cd build &&
-  cmake .. &&
+  wget https://github.com/SimonKagstrom/kcov/archive/v$KCOV_VERSION.tar.gz &&
+  tar xzf v$KCOV_VERSION.tar.gz &&
+  mkdir kcov-$KCOV_VERSION/build &&
+  cd kcov-$KCOV_VERSION/build &&
+  cmake -DCMAKE_INSTALL_PREFIX:PATH=$LOCAL .. &&
   make &&
   make install &&
   cd ../.. &&
-  rm -rf kcov-master &&
   for file in target/debug/$PKGNAME-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
