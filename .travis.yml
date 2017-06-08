@@ -11,7 +11,7 @@ matrix:
     - rust: nightly
 
 before_install:
-  - sudo apt-get update
+  - apt-get update
 
 addons:
   apt:
