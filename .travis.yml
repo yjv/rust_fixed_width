@@ -18,18 +18,16 @@ addons:
     - libdw-dev
     - libbfd-dev # required for `--verify`
 after_success: |
-  wget https://github.com/SimonKagstrom/kcov/archive/v$KCOV_VERSION.tar.gz &&
-  tar xzf v$KCOV_VERSION.tar.gz &&
-  mkdir kcov-$KCOV_VERSION/build &&
-  cd kcov-$KCOV_VERSION/build &&
-  cmake -DCMAKE_INSTALL_PREFIX:PATH=$LOCAL .. &&
+  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+  tar xzf master.tar.gz &&
+  cd kcov-master &&
+  mkdir build &&
+  cd build &&
+  cmake .. &&
   make &&
-  make install &&
+  sudo make install &&
   cd ../.. &&
-  for f in target/debug/rust_fixed_width-*;do test -x $f && cp $f target/debug/rust_fixed_width; done &&
-  kcov --verify \
-       --coveralls-id=$TRAVIS_JOB_ID \
-       --exclude-pattern=/.cargo,/usr/lib \
-       target/kcov target/debug/rust_fixed_width
+  rm -rf kcov-master &&
+  for file in target/debug/<PROJECT-NAME>-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
