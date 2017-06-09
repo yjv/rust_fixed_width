@@ -253,7 +253,8 @@ mod test {
                     )
             )
             .build()
-            .unwrap();
+            .unwrap()
+        ;
         assert_eq!(spec, loader.load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
         assert_eq!(vec![spec], loader.multi_load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
     }
