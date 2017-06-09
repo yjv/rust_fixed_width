@@ -1,44 +1,62 @@
 extern crate yaml_rust;
 use self::yaml_rust::{Yaml};
-use std::fs::File;
 use std::io::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use spec::{FieldSpec, RecordSpec, Spec, PaddingDirection};
 use error::BoxedError;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use std::path::Path;
 
 pub struct YamlLoader;
 
-impl<T: AsRef<Path>> super::Loader<T> for YamlLoader {
-    fn load(&self, resource: T) -> ::Result<Spec> {
-        let mut file = File::open(resource.as_ref()).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
-        let docs = yaml_rust::YamlLoader::load_from_str(&contents).map_err(|e| ::error::Error::SpecLoaderError(Box::new(e)))?;
-        self.read_spec(docs).map_err(::error::Error::SpecLoaderError)
+impl<'a, T: 'a + Read> super::Loader<&'a mut T> for YamlLoader {
+    fn load(&self, resource: &'a mut T) -> ::Result<Spec> {
+        let mut docs = Self::read_reader(resource).map_err(|e| ::error::Error::SpecLoaderError(e))?;
+
+        if docs.len() == 0 {
+            return Err(::error::Error::SpecLoaderError(Box::new(Error::NoDocumentsFound)));
+        }
+
+        self.read_spec(docs.remove(0)).map_err(::error::Error::SpecLoaderError)
+    }
+}
+
+impl<'a, T: 'a + Read> super::MultiLoader<&'a mut T> for YamlLoader {
+    fn multi_load(&self, resource: &'a mut T) -> ::Result<Vec<Spec>> {
+        let docs = Self::read_reader(resource).map_err(|e| ::error::Error::SpecLoaderError(e))?;
+
+        let mut specs = Vec::new();
+
+        for doc in docs {
+            specs.push(self.read_spec(doc).map_err(::error::Error::SpecLoaderError)?);
+        }
+
+        Ok(specs)
     }
 }
 
 impl YamlLoader {
-    fn read_spec(&self, docs: Vec<Yaml>) -> Result<Spec, BoxedError> {
+    fn read_spec(&self, doc: Yaml) -> Result<Spec, BoxedError> {
         let mut record_specs = HashMap::new();
 
-        for doc in docs {
-            let records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
+        let records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
 
-            for (name, record_spec_data) in records {
-                let path = &["records"];
-                let name = Self::get_string(name, Some(path))?;
-                let record_spec = Self::get_record_spec(record_spec_data, &name)?;
-                record_specs.insert(
-                    name,
-                    record_spec
-                );
-            }
+        for (name, record_spec_data) in records {
+            let path = &["records"];
+            let name = Self::get_string(name, Some(path))?;
+            let record_spec = Self::get_record_spec(record_spec_data, &name)?;
+            record_specs.insert(
+                name,
+                record_spec
+            );
         }
 
         Ok(Spec { record_specs: record_specs })
+    }
+
+    fn read_reader<'a, T: 'a + Read>(resource: &'a mut T) -> Result<Vec<Yaml>, BoxedError> {
+        let mut contents = String::new();
+        resource.read_to_string(&mut contents)?;
+        Ok(yaml_rust::YamlLoader::load_from_str(&contents)?)
     }
 
     fn get_field_spec<'a>(field_spec_data: Yaml, name: &'a str, field_name: &'a str) -> Result<FieldSpec, Error> {
@@ -116,6 +134,7 @@ impl YamlLoader {
 
 #[derive(Debug)]
 pub enum Error {
+    NoDocumentsFound,
     MissingKey { key: &'static str, path: Option<String> },
     InvalidType { value: Yaml, expected_type: &'static str, path: Option<String> }
 }
@@ -149,6 +168,7 @@ impl Error {
 impl ::std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
+            Error::NoDocumentsFound => "The resource at the given path has no documents in it",
             Error::MissingKey { .. } => "There is a key missing",
             Error::InvalidType { .. } => "The type is wrong"
         }
@@ -158,6 +178,7 @@ impl ::std::error::Error for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
+            Error::NoDocumentsFound => write!(f, "The resource at the given path has no documents in it"),
             Error::MissingKey { ref key, path: Some(ref path) } => write!(f, "There is a key {} missing under key {}", key, path),
             Error::MissingKey { ref key, path: None } => write!(f, "There is a key {} missing", key),
             Error::InvalidType { ref value, ref expected_type, path: Some(ref path) } => write!(f, "The value {:?} at path {} has the wrong type. The expected type was {}", value, path, expected_type),
@@ -169,72 +190,71 @@ impl Display for Error {
 #[cfg(test)]
 mod test {
     use super::YamlLoader;
-    use spec::loader::Loader;
+    use spec::loader::{Loader, MultiLoader};
     use spec::{RecordSpecBuilder, SpecBuilder, FieldSpecBuilder, PaddingDirection, Builder};
+    use std::fs::File;
 
     #[test]
     fn read_record() {
         let loader = YamlLoader;
-        assert_eq!(
-            SpecBuilder::new()
-                .with_record(
-                    "record1",
-                    RecordSpecBuilder::new()
-                        .with_line_ending([92, 110].as_ref())
-                        .with_field(
-                            "$id",
-                            FieldSpecBuilder::new()
-                                .with_length(2)
-                                .with_padding_direction(PaddingDirection::Right)
-                                .with_default([51, 52].as_ref())
-                        )
-                        .with_field(
-                            "field1",
-                            FieldSpecBuilder::new()
-                                .with_length(10)
-                                .with_padding_direction(PaddingDirection::Left)
-                                .with_padding([32].as_ref())
-                                .with_default([104, 101, 108, 108, 111].as_ref())
-                        )
-                        .with_field(
-                            "field2",
-                            FieldSpecBuilder::new()
-                                .with_length(23)
-                                .with_padding_direction(PaddingDirection::Right)
-                                .with_default([103, 111, 111, 100, 98, 121, 101].as_ref())
-                        )
-                )
-                .with_record(
-                    "record2",
-                    RecordSpecBuilder::new()
-                        .with_line_ending([92, 110].as_ref())
-                        .with_field(
-                            "$id",
-                            FieldSpecBuilder::new()
-                                .with_length(5)
-                                .with_padding_direction(PaddingDirection::Right)
-                                .with_default([51, 52].as_ref())
-                        )
-                        .with_field(
-                            "field1",
-                            FieldSpecBuilder::new()
-                                .with_length(12)
-                                .with_padding_direction(PaddingDirection::Left)
-                                .with_padding([32].as_ref())
-                                .with_default([104, 101, 108, 108, 111].as_ref())
-                        )
-                        .with_field(
-                            "field2",
-                            FieldSpecBuilder::new()
-                                .with_length(67)
-                                .with_padding_direction(PaddingDirection::Right)
-                                .with_default([103, 111, 111, 100, 98, 121, 101].as_ref())
-                        )
-                )
-                .build()
-                .unwrap()
-            ,
-            loader.load("src/spec/loader/spec.yml").unwrap()
-        );
+        let spec = SpecBuilder::new()
+            .with_record(
+                "record1",
+                RecordSpecBuilder::new()
+                    .with_line_ending([92, 110].as_ref())
+                    .with_field(
+                        "$id",
+                        FieldSpecBuilder::new()
+                            .with_length(2)
+                            .with_padding_direction(PaddingDirection::Right)
+                            .with_default([51, 52].as_ref())
+                    )
+                    .with_field(
+                        "field1",
+                        FieldSpecBuilder::new()
+                            .with_length(10)
+                            .with_padding_direction(PaddingDirection::Left)
+                            .with_padding([32].as_ref())
+                            .with_default([104, 101, 108, 108, 111].as_ref())
+                    )
+                    .with_field(
+                        "field2",
+                        FieldSpecBuilder::new()
+                            .with_length(23)
+                            .with_padding_direction(PaddingDirection::Right)
+                            .with_default([103, 111, 111, 100, 98, 121, 101].as_ref())
+                    )
+            )
+            .with_record(
+                "record2",
+                RecordSpecBuilder::new()
+                    .with_line_ending([92, 110].as_ref())
+                    .with_field(
+                        "$id",
+                        FieldSpecBuilder::new()
+                            .with_length(5)
+                            .with_padding_direction(PaddingDirection::Right)
+                            .with_default([51, 52].as_ref())
+                    )
+                    .with_field(
+                        "field1",
+                        FieldSpecBuilder::new()
+                            .with_length(12)
+                            .with_padding_direction(PaddingDirection::Left)
+                            .with_padding([32].as_ref())
+                            .with_default([104, 101, 108, 108, 111].as_ref())
+                    )
+                    .with_field(
+                        "field2",
+                        FieldSpecBuilder::new()
+                            .with_length(67)
+                            .with_padding_direction(PaddingDirection::Right)
+                            .with_default([103, 111, 111, 100, 98, 121, 101].as_ref())
+                    )
+            )
+            .build()
+            .unwrap();
+        assert_eq!(spec, loader.load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
+        assert_eq!(vec![spec], loader.multi_load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
     }
 }
