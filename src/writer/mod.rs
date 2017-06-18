@@ -142,7 +142,8 @@ pub struct WriterBuilder<
     Y: BorrowMut<Vec<u8>> + 'a
 > {
     destination: Option<X>,
-    writer: RecordWriter<T, V>,
+    field_formatter: Option<T>,
+    write_type: V,
     spec_source: Option<U>,
     record_specs: Option<W>,
     buffer: Y,
@@ -156,10 +157,11 @@ impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
           V: WriteType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<WR> + 'a {
-    pub fn new(record_writer: RecordWriter<T, V>) -> Self {
+    pub fn new(write_type: V) -> Self {
         WriterBuilder {
             destination: None,
-            writer: record_writer,
+            field_formatter: None,
+            write_type: write_type,
             spec_source: None,
             record_specs: None,
             buffer: Vec::new(),
@@ -179,7 +181,20 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_source<Z: Write + 'a, A: BorrowMut<Z> + 'a>(self, destination: A) -> WriterBuilder<'a, Z, T, U, V, W, A, Y> {
         WriterBuilder {
             destination: Some(destination),
-            writer: self.writer,
+            write_type: self.write_type,
+            field_formatter: self.field_formatter,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            destination_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_field_formatter<Z: FieldFormatter<V> + 'a>(self, field_formatter: Z) -> WriterBuilder<'a, WR, Z, U, V, W, X, Y> {
+        WriterBuilder {
+            destination: self.destination,
+            write_type: self.write_type,
+            field_formatter: Some(field_formatter),
             spec_source: self.spec_source,
             record_specs: self.record_specs,
             buffer: self.buffer,
@@ -190,7 +205,8 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_spec_source<Z: SpecSource<V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
         WriterBuilder {
             destination: self.destination,
-            writer: self.writer,
+            write_type: self.write_type,
+            field_formatter: self.field_formatter,
             spec_source: Some(spec_source),
             record_specs: self.record_specs,
             buffer: self.buffer,
@@ -201,7 +217,8 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_record_specs<Z: Borrow<HashMap<String, RecordSpec>> + 'a>(self, record_specs: Z) -> WriterBuilder<'a, WR, T, U, V, Z, X, Y> {
         WriterBuilder {
             destination: self.destination,
-            writer: self.writer,
+            write_type: self.write_type,
+            field_formatter: self.field_formatter,
             spec_source: self.spec_source,
             record_specs: Some(record_specs),
             buffer: self.buffer,
@@ -212,7 +229,8 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_buffer<Z: BorrowMut<Vec<u8>> + 'a>(self, buffer: Z) -> WriterBuilder<'a, WR, T, U, V, W, X, Z> {
         WriterBuilder {
             destination: self.destination,
-            writer: self.writer,
+            write_type: self.write_type,
+            field_formatter: self.field_formatter,
             spec_source: self.spec_source,
             record_specs: self.record_specs,
             buffer: buffer,
@@ -223,7 +241,10 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn build(self) -> Result<Writer<'a, WR, T, U, V, W, X, Y>> {
         Ok(Writer {
             destination: self.destination.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
-            writer: self.writer,
+            writer: RecordWriter::new(FieldWriter::new(
+                self.field_formatter.ok_or(Error::BuildError("field_formatter needs to be defined in order to build"))?,
+                self.write_type
+            )),
             spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
             record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
             buffer: self.buffer,

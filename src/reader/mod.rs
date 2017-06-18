@@ -157,8 +157,9 @@ pub struct ReaderBuilder<
     Y: BorrowMut<Vec<u8>> + 'a,
     Z: FieldBufferSource + 'a
 > {
+    read_type: V,
     source: Option<X>,
-    reader: RecordReader<T, V>,
+    field_parser: Option<T>,
     spec_source: Option<U>,
     record_specs: Option<W>,
     buffer: Y,
@@ -173,10 +174,11 @@ impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<V
           V: ReadType + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a {
-    pub fn new(record_reader: RecordReader<T, V>) -> Self {
+    pub fn new(read_type: V) -> Self {
         ReaderBuilder {
+            read_type: read_type,
             source: None,
-            reader: record_reader,
+            field_parser: None,
             spec_source: None,
             record_specs: None,
             buffer: Vec::new(),
@@ -197,8 +199,22 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
           Z: FieldBufferSource + 'a {
     pub fn with_source<A: BufRead + 'a, B: BorrowMut<A> + 'a>(self, source: B) -> ReaderBuilder<'a, A, T, U, V, W, B, Y, Z> {
         ReaderBuilder {
+            read_type: self.read_type,
             source: Some(source),
-            reader: self.reader,
+            field_parser: self.field_parser,
+            spec_source: self.spec_source,
+            record_specs: self.record_specs,
+            buffer: self.buffer,
+            field_buffer_source: self.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
+    }
+
+    pub fn with_field_parser<A: FieldParser<V> + 'a>(self, field_parser: A) -> ReaderBuilder<'a, R, A, U, V, W, X, Y, Z> {
+        ReaderBuilder {
+            read_type: self.read_type,
+            source: self.source,
+            field_parser: Some(field_parser),
             spec_source: self.spec_source,
             record_specs: self.record_specs,
             buffer: self.buffer,
@@ -209,8 +225,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 
     pub fn with_spec_source<A: SpecSource<V> + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
         ReaderBuilder {
+            read_type: self.read_type,
             source: self.source,
-            reader: self.reader,
+            field_parser: self.field_parser,
             spec_source: Some(spec_source),
             record_specs: self.record_specs,
             buffer: self.buffer,
@@ -221,8 +238,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 
     pub fn with_record_specs<A: Borrow<HashMap<String, RecordSpec>> + 'a>(self, record_specs: A) -> ReaderBuilder<'a, R, T, U, V, A, X, Y, Z> {
         ReaderBuilder {
+            read_type: self.read_type,
             source: self.source,
-            reader: self.reader,
+            field_parser: self.field_parser,
             spec_source: self.spec_source,
             record_specs: Some(record_specs),
             buffer: self.buffer,
@@ -233,8 +251,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 
     pub fn with_buffer<A: BorrowMut<Vec<u8>> + 'a>(self, buffer: A) -> ReaderBuilder<'a, R, T, U, V, W, X, A, Z> {
         ReaderBuilder {
+            read_type: self.read_type,
             source: self.source,
-            reader: self.reader,
+            field_parser: self.field_parser,
             spec_source: self.spec_source,
             record_specs: self.record_specs,
             buffer: buffer,
@@ -245,8 +264,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 
     pub fn with_field_buffer_source<A: FieldBufferSource + 'a>(self, field_buffer_source: A) -> ReaderBuilder<'a, R, T, U, V, W, X, Y, A> {
         ReaderBuilder {
+            read_type: self.read_type,
             source: self.source,
-            reader: self.reader,
+            field_parser: self.field_parser,
             spec_source: self.spec_source,
             record_specs: self.record_specs,
             buffer: self.buffer,
@@ -258,7 +278,10 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
     pub fn build(self) -> Result<Reader<'a, R, T, U, V, W, X, Y, Z>> {
         Ok(Reader {
             source: self.source.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
-            reader: self.reader,
+            reader: RecordReader::new(FieldReader::new(
+                self.field_parser.ok_or(Error::BuildError("field_parser needs to be defined in order to build"))?,
+                self.read_type
+            )),
             spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
             record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
             buffer: self.buffer,
