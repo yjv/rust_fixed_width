@@ -10,24 +10,24 @@ pub struct YamlLoader;
 
 impl<'a, T: 'a + Read> super::Loader<&'a mut T> for YamlLoader {
     fn load(&self, resource: &'a mut T) -> ::Result<Spec> {
-        let mut docs = Self::read_reader(resource).map_err(|e| ::error::Error::SpecLoaderError(e))?;
+        let mut docs = Self::read_reader(resource).map_err(::error::Error::SpecLoaderError)?;
 
         if docs.len() == 0 {
             return Err(::error::Error::SpecLoaderError(Box::new(Error::NoDocumentsFound)));
         }
 
-        self.read_spec(docs.remove(0)).map_err(::error::Error::SpecLoaderError)
+        Self::read_spec(docs.remove(0)).map_err(::error::Error::SpecLoaderError)
     }
 }
 
 impl<'a, T: 'a + Read> super::MultiLoader<&'a mut T> for YamlLoader {
     fn multi_load(&self, resource: &'a mut T) -> ::Result<Vec<Spec>> {
-        let docs = Self::read_reader(resource).map_err(|e| ::error::Error::SpecLoaderError(e))?;
+        let docs = Self::read_reader(resource).map_err(::error::Error::SpecLoaderError)?;
 
         let mut specs = Vec::new();
 
         for doc in docs {
-            specs.push(self.read_spec(doc).map_err(::error::Error::SpecLoaderError)?);
+            specs.push(Self::read_spec(doc).map_err(::error::Error::SpecLoaderError)?);
         }
 
         Ok(specs)
@@ -35,7 +35,7 @@ impl<'a, T: 'a + Read> super::MultiLoader<&'a mut T> for YamlLoader {
 }
 
 impl YamlLoader {
-    fn read_spec(&self, doc: Yaml) -> Result<Spec, BoxedError> {
+    fn read_spec(doc: Yaml) -> Result<Spec, BoxedError> {
         let mut record_specs = HashMap::new();
 
         let records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
