@@ -12,7 +12,8 @@ pub trait Builder<T> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Spec {
-    pub record_specs: HashMap<String, RecordSpec>
+    pub record_specs: HashMap<String, RecordSpec>,
+    __no_construct: ()
 }
 
 impl Builder<Spec> for Spec {
@@ -34,11 +35,15 @@ impl SpecBuilder {
         }
     }
 
-    pub fn with_record<T: Into<String>, U: Builder<RecordSpec>>(mut self, name: T, record: U) -> Self {
+    pub fn add_record<T: Into<String>, U: Builder<RecordSpec>>(mut self, name: T, record: U) -> Self {
         let record = record.build();
         self.sub_builder_error = self.sub_builder_error || record.is_err();
         self.record_specs.insert(name.into(), record);
         self
+    }
+
+    pub fn with_record<T: Into<String>>(self, name: T) -> RecordSpecBuilder {
+        RecordSpecBuilder::new_with_spec_builder(name, self)
     }
 }
 
@@ -52,7 +57,8 @@ impl Builder<Spec> for SpecBuilder {
             ))
         } else {
             Ok(Spec {
-                record_specs: self.record_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect()
+                record_specs: self.record_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect(),
+                __no_construct: ()
             })
         }
     }
@@ -61,7 +67,8 @@ impl Builder<Spec> for SpecBuilder {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSpec {
     pub line_ending: Vec<u8>,
-    pub field_specs: BTreeMap<String, FieldSpec>
+    pub field_specs: BTreeMap<String, FieldSpec>,
+    __no_construct: ()
 }
 
 impl RecordSpec {
@@ -91,7 +98,9 @@ impl Builder<RecordSpec> for RecordSpec {
 pub struct RecordSpecBuilder {
     line_ending: Vec<u8>,
     field_specs: BTreeMap<String, Result<FieldSpec>>,
-    sub_builder_error: bool
+    sub_builder_error: bool,
+    spec_builder: Option<SpecBuilder>,
+    name: Option<String>
 }
 
 impl RecordSpecBuilder {
@@ -99,20 +108,43 @@ impl RecordSpecBuilder {
         RecordSpecBuilder {
             line_ending: Vec::new(),
             field_specs: BTreeMap::new(),
-            sub_builder_error: false
+            sub_builder_error: false,
+            spec_builder: None,
+            name: None,
         }
     }
 
-    pub fn with_field<T: Into<String>, U: Builder<FieldSpec>>(mut self, name: T, field: U) -> Self {
+    pub fn new_with_spec_builder<T: Into<String>>(name: T, spec_builder: SpecBuilder) -> Self {
+        RecordSpecBuilder {
+            line_ending: Vec::new(),
+            field_specs: BTreeMap::new(),
+            sub_builder_error: false,
+            spec_builder: Some(spec_builder),
+            name: Some(name.into())
+        }
+    }
+
+    pub fn add_field<T: Into<String>, U: Builder<FieldSpec>>(mut self, name: T, field: U) -> Self {
         let field = field.build();
         self.sub_builder_error = self.sub_builder_error || field.is_err();
         self.field_specs.insert(name.into(), field);
         self
     }
 
+    pub fn with_field<T: Into<String>>(self, name: T) -> FieldSpecBuilder {
+        FieldSpecBuilder::new_with_record_spec_builder(name, self)
+    }
+
     pub fn with_line_ending<T: Into<Vec<u8>>>(mut self, line_ending: T) -> Self {
         self.line_ending = line_ending.into();
         self
+    }
+
+    pub fn end(mut self) -> SpecBuilder {
+        let name = self.name.take().expect("calling end infers that this was created with the name connected");
+        self.spec_builder.take()
+            .expect("calling end infers that this was created with the parent spec builder connected")
+            .add_record(name, self)
     }
 }
 
@@ -127,7 +159,8 @@ impl Builder<RecordSpec> for RecordSpecBuilder {
         } else {
             Ok(RecordSpec {
                 line_ending: self.line_ending,
-                field_specs: self.field_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect()
+                field_specs: self.field_specs.into_iter().map(|(name, result)| (name, result.expect("no errors should be in here"))).collect(),
+                __no_construct: ()
             })
         }
     }
@@ -144,7 +177,8 @@ pub struct FieldSpec {
     pub length: usize,
     pub padding_direction: PaddingDirection,
     pub padding: Vec<u8>,
-    pub default: Option<Vec<u8>>
+    pub default: Option<Vec<u8>>,
+    __no_construct: ()
 }
 
 impl Builder<FieldSpec> for FieldSpec {
@@ -153,12 +187,26 @@ impl Builder<FieldSpec> for FieldSpec {
     }
 }
 
-#[derive(Clone)]
 pub struct FieldSpecBuilder {
     length: Option<usize>,
     padding_direction: Option<PaddingDirection>,
     padding: Option<Vec<u8>>,
-    default: Option<Vec<u8>>
+    default: Option<Vec<u8>>,
+    record_spec_builder: Option<RecordSpecBuilder>,
+    name: Option<String>
+}
+
+impl Clone for FieldSpecBuilder {
+    fn clone(&self) -> Self {
+        FieldSpecBuilder {
+            length: self.length.clone(),
+            padding_direction: self.padding_direction.clone(),
+            padding: self.padding.clone(),
+            default: self.default.clone(),
+            record_spec_builder: None,
+            name: None
+        }
+    }
 }
 
 impl FieldSpecBuilder {
@@ -167,28 +215,41 @@ impl FieldSpecBuilder {
             length: None,
             padding_direction: None,
             padding: None,
-            default: None
+            default: None,
+            record_spec_builder: None,
+            name: None,
         }
     }
 
-    pub fn new_number() -> Self {
-        Self::new().with_padding("0").with_padding_direction(PaddingDirection::Left)
+    pub fn new_with_record_spec_builder<T: Into<String>>(name: T, record_spec_builder: RecordSpecBuilder) -> Self {
+        FieldSpecBuilder {
+            length: None,
+            padding_direction: None,
+            padding: None,
+            default: None,
+            record_spec_builder: Some(record_spec_builder),
+            name: Some(name.into()),
+        }
     }
 
-    pub fn new_empty_number() -> Self {
-        Self::new_number().with_default("0")
+    pub fn number(self) -> Self {
+        self.with_padding("0").with_padding_direction(PaddingDirection::Left)
     }
 
-    pub fn new_string() -> Self {
-        Self::new().with_padding(" ").with_padding_direction(PaddingDirection::Right)
+    pub fn empty_number(self) -> Self {
+        self.with_default("0")
     }
 
-    pub fn new_empty_string() -> Self {
-        Self::new_string().with_default("")
+    pub fn string(self) -> Self {
+        self.with_padding(" ").with_padding_direction(PaddingDirection::Right)
     }
 
-    pub fn new_filler(length: usize) -> Self {
-        Self::new_string()
+    pub fn empty_string(self) -> Self {
+        self.string().with_default("")
+    }
+
+    pub fn filler(self, length: usize) -> Self {
+        self.string()
             .with_default(repeat(" ").take(length).collect::<String>())
             .with_length(length)
     }
@@ -212,6 +273,13 @@ impl FieldSpecBuilder {
         self.default = Some(default.into());
         self
     }
+
+    pub fn end(mut self) -> RecordSpecBuilder {
+        let name = self.name.take().expect("calling end infers that this was created with the name connected");
+        self.record_spec_builder.take()
+            .expect("calling end infers that this was created with the parent record spec builder connected")
+            .add_field(name, self)
+    }
 }
 
 impl Builder<FieldSpec> for FieldSpecBuilder {
@@ -220,7 +288,8 @@ impl Builder<FieldSpec> for FieldSpecBuilder {
             length: self.length.ok_or(Error::BuildError("length must be set in order to build"))?,
             padding_direction: self.padding_direction.ok_or(Error::BuildError("padding direction must be set in order to build"))?,
             padding: self.padding.unwrap_or_default(),
-            default: self.default
+            default: self.default,
+            __no_construct: (),
         })
     }
 }
@@ -240,59 +309,70 @@ mod test {
             length: 4,
             padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            __no_construct: ()
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 5,
             padding: " ".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: Some("def".as_bytes().to_owned())
+            default: Some("def".as_bytes().to_owned()),
+            __no_construct: ()
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 36,
             padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: None
+            default: None,
+            __no_construct: ()
         });
         record_specs.insert("record1".to_string(), RecordSpec {
             line_ending: "\n".as_bytes().to_owned(),
-            field_specs: field_specs
+            field_specs: field_specs,
+            __no_construct: ()
         });
         let mut field_specs = BTreeMap::new();
         field_specs.insert("field1".to_string(), FieldSpec {
             length: 3,
             padding: "dsasd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            __no_construct: ()
         });
         field_specs.insert("field2".to_string(), FieldSpec {
             length: 4,
             padding: "sdf".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: Some("defa".as_bytes().to_owned())
+            default: Some("defa".as_bytes().to_owned()),
+            __no_construct: (),
         });
         field_specs.insert("field3".to_string(), FieldSpec {
             length: 27,
             padding: "xcvcxv".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Right,
-            default: None
+            default: None,
+            __no_construct: (),
         });
         field_specs.insert("field4".to_string(), FieldSpec {
             length: 8,
             padding: "sdfsd".as_bytes().to_owned(),
             padding_direction: PaddingDirection::Left,
-            default: None
+            default: None,
+            __no_construct: (),
         });
         record_specs.insert("record2".to_string(), RecordSpec {
             line_ending: "\n".as_bytes().to_owned(),
-            field_specs: field_specs
+            field_specs: field_specs,
+            __no_construct: (),
         });
         record_specs.insert("record3".to_string(), RecordSpec {
             line_ending: "\n".as_bytes().to_owned(),
-            field_specs: BTreeMap::new()
+            field_specs: BTreeMap::new(),
+            __no_construct: (),
         });
         assert_eq!(Spec {
-            record_specs: record_specs
+            record_specs: record_specs,
+            __no_construct: (),
         }, spec);
         assert_eq!(FieldSpecBuilder::new()
             .with_padding("0".to_string())
@@ -300,14 +380,14 @@ mod test {
             .with_length(0)
             .build()
             .unwrap()
-        , FieldSpecBuilder::new_number().with_length(0).build().unwrap());
+        , FieldSpecBuilder::new().number().with_length(0).build().unwrap());
         assert_eq!(FieldSpecBuilder::new()
             .with_padding(" ".as_bytes().to_owned())
             .with_padding_direction(PaddingDirection::Right)
             .with_length(0)
             .build()
             .unwrap()
-        , FieldSpecBuilder::new_string().with_length(0).build().unwrap());
+        , FieldSpecBuilder::new().string().with_length(0).build().unwrap());
     }
 
     #[test]

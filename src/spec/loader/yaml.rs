@@ -1,8 +1,8 @@
 extern crate yaml_rust;
 use self::yaml_rust::{Yaml};
 use std::io::prelude::*;
-use std::collections::{BTreeMap, HashMap};
-use spec::{FieldSpec, RecordSpec, Spec, PaddingDirection};
+use std::collections::BTreeMap;
+use spec::{Builder, FieldSpec, FieldSpecBuilder, RecordSpec, RecordSpecBuilder, Spec, SpecBuilder, PaddingDirection};
 use error::BoxedError;
 use std::fmt::{Display, Formatter, Error as FmtError};
 
@@ -36,7 +36,7 @@ impl<'a, T: 'a + Read> super::MultiLoader<&'a mut T> for YamlLoader {
 
 impl YamlLoader {
     fn read_spec(doc: Yaml) -> Result<Spec, BoxedError> {
-        let mut record_specs = HashMap::new();
+        let mut builder = SpecBuilder::new();
 
         let records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
 
@@ -44,13 +44,13 @@ impl YamlLoader {
             let path = &["records"];
             let name = Self::get_string(name, Some(path))?;
             let record_spec = Self::get_record_spec(record_spec_data, &name)?;
-            record_specs.insert(
+            builder = builder.add_record(
                 name,
                 record_spec
             );
         }
 
-        Ok(Spec { record_specs: record_specs })
+        Ok(builder.build().map_err(Error::BuilderError)?)
     }
 
     fn read_reader<'a, T: 'a + Read>(resource: &'a mut T) -> Result<Vec<Yaml>, BoxedError> {
@@ -62,37 +62,39 @@ impl YamlLoader {
     fn get_field_spec<'a>(field_spec_data: Yaml, name: &'a str, field_name: &'a str) -> Result<FieldSpec, Error> {
         let path = &["records", name, "fields", &field_name];
         let mut field_spec_map = Self::get_hash(field_spec_data, Some(path))?;
-        Ok(FieldSpec {
-            default: match field_spec_map.remove(&Yaml::String("default".to_string())) {
-                Some(v) => Some(Self::get_bytes(v, Some(path))?),
-                None => None
-            },
-            length: field_spec_map.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?,
-            padding: field_spec_map.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
-            padding_direction: field_spec_map.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?
-        })
+        let builder = FieldSpecBuilder::new()
+            .with_length(field_spec_map.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?)
+            .with_padding_direction(field_spec_map.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?)
+            .with_padding(field_spec_map.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?)
+        ;
+        let builder = match field_spec_map.remove(&Yaml::String("default".to_string())) {
+            Some(v) => builder.with_default(Self::get_bytes(v, Some(path))?),
+            _ => builder
+        };
+
+        Ok(builder.build().map_err(Error::BuilderError)?)
     }
 
     fn get_record_spec<'a>(record_spec_data: Yaml, name: &'a str) -> Result<RecordSpec, Error> {
         let path = &["records", &name];
         let mut record_spec_data = Self::get_hash(record_spec_data, Some(path))?;
-        let mut field_specs = BTreeMap::new();
+        let mut builder = RecordSpecBuilder::new();
         let path = &["records", &name, "fields"];
         let fields = Self::get_hash(record_spec_data.remove(&Yaml::String("fields".to_string())).ok_or(Error::missing_key("records", Some(path)))?, Some(path))?;
 
         for (field_name, field_spec_data) in fields {
             let field_name = Self::get_string(field_name, Some(path))?;
             let field_spec = Self::get_field_spec(field_spec_data, &name, &field_name)?;
-            field_specs.insert(
+            builder = builder.add_field(
                 field_name,
                 field_spec
             );
         }
 
-        Ok(RecordSpec {
-            line_ending: record_spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?,
-            field_specs: field_specs
-        })
+        Ok(builder
+            .with_line_ending(record_spec_data.remove(&Yaml::String("line_ending".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?)
+            .build().map_err(Error::BuilderError)?
+        )
     }
 
     fn get_hash<'a, 'b>(value: Yaml, path: Option<&'a [&'b str]>) -> Result<BTreeMap<Yaml, Yaml>, Error> {
@@ -136,7 +138,8 @@ impl YamlLoader {
 pub enum Error {
     NoDocumentsFound,
     MissingKey { key: &'static str, path: Option<String> },
-    InvalidType { value: Yaml, expected_type: &'static str, path: Option<String> }
+    InvalidType { value: Yaml, expected_type: &'static str, path: Option<String> },
+    BuilderError(::error::Error)
 }
 
 impl Error {
@@ -170,7 +173,15 @@ impl ::std::error::Error for Error {
         match *self {
             Error::NoDocumentsFound => "The resource at the given path has no documents in it",
             Error::MissingKey { .. } => "There is a key missing",
-            Error::InvalidType { .. } => "The type is wrong"
+            Error::InvalidType { .. } => "The type is wrong",
+            Error::BuilderError(_) => "The spec builder had an error"
+        }
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match *self {
+            Error::BuilderError(ref e) => Some(e),
+            _ => None
         }
     }
 }
@@ -182,7 +193,8 @@ impl Display for Error {
             Error::MissingKey { ref key, path: Some(ref path) } => write!(f, "There is a key {} missing under key {}", key, path),
             Error::MissingKey { ref key, path: None } => write!(f, "There is a key {} missing", key),
             Error::InvalidType { ref value, ref expected_type, path: Some(ref path) } => write!(f, "The value {:?} at path {} has the wrong type. The expected type was {}", value, path, expected_type),
-            Error::InvalidType { ref value, ref expected_type, path: None } => write!(f, "The value {:?} has the wrong type. The expected type was {}", value, expected_type)
+            Error::InvalidType { ref value, ref expected_type, path: None } => write!(f, "The value {:?} has the wrong type. The expected type was {}", value, expected_type),
+            Error::BuilderError(ref e) => write!(f, "The spec builder had an error: {}", e)
         }
     }
 }
@@ -198,18 +210,18 @@ mod test {
     fn read_record() {
         let loader = YamlLoader;
         let spec = SpecBuilder::new()
-            .with_record(
+            .add_record(
                 "record1",
                 RecordSpecBuilder::new()
                     .with_line_ending([92, 110].as_ref())
-                    .with_field(
+                    .add_field(
                         "$id",
                         FieldSpecBuilder::new()
                             .with_length(2)
                             .with_padding_direction(PaddingDirection::Right)
                             .with_default([51, 52].as_ref())
                     )
-                    .with_field(
+                    .add_field(
                         "field1",
                         FieldSpecBuilder::new()
                             .with_length(10)
@@ -217,7 +229,7 @@ mod test {
                             .with_padding([32].as_ref())
                             .with_default([104, 101, 108, 108, 111].as_ref())
                     )
-                    .with_field(
+                    .add_field(
                         "field2",
                         FieldSpecBuilder::new()
                             .with_length(23)
@@ -225,18 +237,18 @@ mod test {
                             .with_default([103, 111, 111, 100, 98, 121, 101].as_ref())
                     )
             )
-            .with_record(
+            .add_record(
                 "record2",
                 RecordSpecBuilder::new()
                     .with_line_ending([92, 110].as_ref())
-                    .with_field(
+                    .add_field(
                         "$id",
                         FieldSpecBuilder::new()
                             .with_length(5)
                             .with_padding_direction(PaddingDirection::Right)
                             .with_default([51, 52].as_ref())
                     )
-                    .with_field(
+                    .add_field(
                         "field1",
                         FieldSpecBuilder::new()
                             .with_length(12)
@@ -244,7 +256,7 @@ mod test {
                             .with_padding([32].as_ref())
                             .with_default([104, 101, 108, 108, 111].as_ref())
                     )
-                    .with_field(
+                    .add_field(
                         "field2",
                         FieldSpecBuilder::new()
                             .with_length(67)

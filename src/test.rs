@@ -1,5 +1,5 @@
 use spec::*;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use std::io::BufRead;
 use record::{Data, DataRanges, ReadType, WriteType};
 use writer::formatter::FieldFormatter;
@@ -160,72 +160,73 @@ impl<T: ReadType> FieldParser<T> for MockParser {
 }
 
 pub fn test_spec() -> Spec {
+    let record2field4 = FieldSpecBuilder::new()
+        .with_length(8)
+        .with_padding_direction(PaddingDirection::Left)
+        .with_padding("sdfsd")
+        .build()
+        .unwrap()
+    ;
+    let record3 = RecordSpecBuilder::new()
+        .with_line_ending("\n")
+        .build()
+        .unwrap()
+    ;
     SpecBuilder::new()
-        .with_record(
-            "record1",
-            RecordSpecBuilder::new()
-                .with_line_ending("\n")
-                .with_field(
-                    "field1".to_string(),
-                    FieldSpecBuilder::new()
-                        .with_length(4)
-                        .with_padding("dsasd")
-                        .with_padding_direction(PaddingDirection::Left)
-                )
-                .with_field(
-                    "field2",
-                    FieldSpecBuilder::new_string()
-                        .with_length(5)
-                        .with_default("def")
-                )
-                .with_field(
-                    "field3".to_string(),
-                    FieldSpecBuilder::new()
-                        .with_length(36)
-                        .with_padding("xcvcxv".to_string())
-                        .with_padding_direction(PaddingDirection::Right)
-                )
-        )
-        .with_record(
+        .with_record("record1")
+            .with_line_ending("\n")
+            .add_field(
+                "field1".to_string(),
+                FieldSpecBuilder::new()
+                    .with_length(4)
+                    .with_padding("dsasd")
+                    .with_padding_direction(PaddingDirection::Left)
+            )
+            .add_field(
+                "field2",
+                FieldSpecBuilder::new()
+                    .string()
+                    .with_length(5)
+                    .with_default("def")
+            )
+            .add_field(
+                "field3".to_string(),
+                FieldSpecBuilder::new()
+                    .with_length(36)
+                    .with_padding("xcvcxv".to_string())
+                    .with_padding_direction(PaddingDirection::Right)
+            )
+        .end()
+        .add_record(
             "record2".to_string(),
             RecordSpecBuilder::new()
                 .with_line_ending("\n")
-                .with_field(
+                .add_field(
                     "field1".to_string(),
                     FieldSpecBuilder::new()
                         .with_length(3)
                         .with_padding("dsasd".to_string())
                         .with_padding_direction(PaddingDirection::Left)
                 )
-                .with_field(
-                    "field2".to_string(),
-                    FieldSpecBuilder::new()
-                        .with_length(4)
-                        .with_padding("sdf".to_string())
-                        .with_padding_direction(PaddingDirection::Right)
-                        .with_default("defa")
-                )
-                .with_field(
+                .with_field("field2".to_string())
+                    .with_length(4)
+                    .with_padding("sdf".to_string())
+                    .with_padding_direction(PaddingDirection::Right)
+                    .with_default("defa")
+                .end()
+                .add_field(
                     "field3",
                     FieldSpecBuilder::new()
                         .with_length(27)
                         .with_padding("xcvcxv".to_string())
                         .with_padding_direction(PaddingDirection::Right)
                 )
-                .with_field(
+                .add_field(
                     "field4".to_string(),
-                    FieldSpec {
-                        length: 8,
-                        padding: "sdfsd".as_bytes().to_owned(),
-                        padding_direction: PaddingDirection::Left,
-                        default: None
-                    }
+                    record2field4
                 )
         )
-        .with_record("record3".to_string(), RecordSpec {
-            line_ending: "\n".as_bytes().to_owned(),
-            field_specs: BTreeMap::new()
-        })
+        .add_record("record3".to_string(), record3)
         .build()
         .unwrap()
 }
