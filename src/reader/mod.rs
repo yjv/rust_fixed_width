@@ -17,7 +17,7 @@ use self::field_buffer::Source as FieldBufferSource;
 pub struct FieldReader<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> {
     parser: T,
     read_support: U,
-    phantom: ::std::marker::PhantomData<&'a ()>
+    lifetime: ::std::marker::PhantomData<&'a ()>
 }
 
 impl<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, T, U> {
@@ -25,7 +25,7 @@ impl<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, T
         FieldReader {
             parser: parser,
             read_support: read_support,
-            phantom: ::std::marker::PhantomData,
+            lifetime: ::std::marker::PhantomData,
         }
     }
 

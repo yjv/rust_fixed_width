@@ -16,7 +16,7 @@ use self::spec::Stream as SpecSource;
 pub struct FieldWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
     formatter: T,
     write_support: U,
-    phantom: ::std::marker::PhantomData<&'a ()>
+    lifetime: ::std::marker::PhantomData<&'a ()>
 }
 
 impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T, U> {
@@ -24,7 +24,7 @@ impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T,
         FieldWriter {
             formatter: formatter,
             write_support: write_support,
-            phantom: ::std::marker::PhantomData
+            lifetime: ::std::marker::PhantomData
         }
     }
 
@@ -53,15 +53,13 @@ impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T
 }
 
 pub struct RecordWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
-    field_writer: FieldWriter<'a, T, U>,
-    phantom: ::std::marker::PhantomData<&'a ()>
+    field_writer: FieldWriter<'a, T, U>
 }
 
 impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T, U> {
     pub fn new(field_writer: FieldWriter<'a, T, U>) -> RecordWriter<'a, T, U> {
         RecordWriter {
-            field_writer: field_writer,
-            phantom: ::std::marker::PhantomData
+            field_writer: field_writer
         }
     }
 
