@@ -1,16 +1,16 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use data_type::{FieldReadSupporter, BinarySupporter};
+use data_type::{FieldReadSupport, BinarySupport};
 use spec::FieldSpec;
 use super::super::BoxedErrorResult as Result;
 
-pub trait FieldParser<T: FieldReadSupporter> {
-    fn parse<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, read_type: &'a T) -> Result<()>;
+pub trait FieldParser<'a, T: FieldReadSupport + 'a> {
+    fn parse<'b>(&self, data: &[u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_support: &'b T) -> Result<()>;
 }
 
-impl<'a, T, U: FieldReadSupporter> FieldParser<U> for &'a T where T: 'a + FieldParser<U> {
-    fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_type: &'b U) -> Result<()> {
-        (**self).parse(data, field_spec, destination, read_type)
+impl<'a, T, U: FieldReadSupport + 'a> FieldParser<'a, U> for &'a T where T: 'a + FieldParser<'a, U> {
+    fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_support: &'b U) -> Result<()> {
+        (**self).parse(data, field_spec, destination, read_support)
     }
 }
 
@@ -48,8 +48,8 @@ impl Display for ParseError {
 
 pub struct DefaultParser;
 
-impl FieldParser<BinarySupporter> for DefaultParser {
-    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinarySupporter) -> Result<()> {
+impl<'a> FieldParser<'a, BinarySupport> for DefaultParser {
+    fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b BinarySupport) -> Result<()> {
         let mut index = 0;
         let mut iter = data.chunks(field_spec.padding.len());
 
@@ -74,8 +74,8 @@ impl FieldParser<BinarySupporter> for DefaultParser {
 
 pub struct IdentityParser;
 
-impl<T: FieldReadSupporter> FieldParser<T> for IdentityParser {
-    fn parse<'a>(&self, data: &'a [u8], _: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
+impl<'a, T: FieldReadSupport + 'a> FieldParser<'a, T> for IdentityParser {
+    fn parse<'b>(&self, data: &'b [u8], _: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
@@ -85,13 +85,13 @@ impl<T: FieldReadSupporter> FieldParser<T> for IdentityParser {
 mod test {
     use super::*;
     use spec::*;
-    use data_type::{BinarySupporter, StringSupporter};
+    use data_type::{BinarySupport, StringSupport};
 
     #[test]
     fn default_parser() {
         let padder = DefaultParser;
         let mut destination = Vec::new();
-        let data_type = BinarySupporter;
+        let data_type = BinarySupport;
         let field_spec_builder = FieldSpecBuilder::new()
             .with_padding("33".to_owned())
             .with_length(0)
@@ -121,7 +121,7 @@ mod test {
         let padder = IdentityParser;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        let data_type = BinarySupporter;
+        let data_type = BinarySupport;
         let field_spec = FieldSpecBuilder::new()
             .with_padding_direction(PaddingDirection::Right)
             .with_padding("33".to_owned())
@@ -149,9 +149,9 @@ mod test {
             .build()
             .unwrap()
         ;
-        let data_type = BinarySupporter;
+        let data_type = BinarySupport;
         assert_result!(Ok(()), FieldParser::parse(&&padder, data, &field_spec, &mut destination, &data_type));
-        let data_type = StringSupporter;
+        let data_type = StringSupport;
         assert_result!(Ok(()), FieldParser::parse(&&padder, data, &field_spec, &mut destination, &data_type));
     }
 }

@@ -7,7 +7,7 @@ pub enum ShouldReadMore {
     NoMore
 }
 
-pub trait DataSupporter {
+pub trait DataSupport {
     type DataHolder;
     fn get_length(&self, data: &[u8]) -> Length {
         Length { length: data.len(), remainder: 0 }
@@ -27,7 +27,7 @@ pub struct Length {
     pub remainder: usize
 }
 
-pub trait FieldReadSupporter: DataSupporter {
+pub trait FieldReadSupport: DataSupport {
     fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
         let length = self.get_length(data).length;
         if wanted_length > length {
@@ -38,23 +38,23 @@ pub trait FieldReadSupporter: DataSupporter {
     }
 }
 
-pub trait RecordReadSupporter: FieldReadSupporter {
+pub trait RecordReadSupport: FieldReadSupport {
     fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder>;
     fn get_range(&self, old_length: usize, data: &[u8]) -> Range<usize> {
         old_length..data.len()
     }
 }
 
-pub trait WriteSupporter: DataSupporter {
+pub trait WriteSupport: DataSupport {
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]>;
     fn get_data_by_name<'a, T: DataRanges + 'a>(&self, name: &'a str, data: &'a Data<T, Self::DataHolder>) -> Option<&'a [u8]> {
         data.ranges.get(name).and_then(|range| self.get_data(range, &data.data))
     }
 }
 
-pub struct BinarySupporter;
+pub struct BinarySupport;
 
-impl DataSupporter for BinarySupporter {
+impl DataSupport for BinarySupport {
     type DataHolder = Vec<u8>;
 
     fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
@@ -62,23 +62,23 @@ impl DataSupporter for BinarySupporter {
     }
 }
 
-impl FieldReadSupporter for BinarySupporter {}
+impl FieldReadSupport for BinarySupport {}
 
-impl RecordReadSupporter for BinarySupporter {
+impl RecordReadSupport for BinarySupport {
     fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
         Ok(data)
     }
 }
 
-impl WriteSupporter for BinarySupporter {
+impl WriteSupport for BinarySupport {
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
         Some(&data[range])
     }
 }
 
-pub struct StringSupporter;
+pub struct StringSupport;
 
-impl StringSupporter {
+impl StringSupport {
     fn get_string<'a>(&self, data: &'a [u8]) -> &'a str {
         match ::std::str::from_utf8(data) {
             Ok(ref string) => string,
@@ -89,7 +89,7 @@ impl StringSupporter {
     }
 }
 
-impl DataSupporter for StringSupporter {
+impl DataSupport for StringSupport {
     type DataHolder = String;
     fn get_length(&self, data: &[u8]) -> Length {
         let string = self.get_string(data);
@@ -114,7 +114,7 @@ impl DataSupporter for StringSupporter {
     }
 }
 
-impl FieldReadSupporter for StringSupporter {
+impl FieldReadSupport for StringSupport {
     fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
         let length = self.get_length(data).length;
 
@@ -126,13 +126,13 @@ impl FieldReadSupporter for StringSupporter {
     }
 }
 
-impl RecordReadSupporter for StringSupporter {
+impl RecordReadSupport for StringSupport {
     fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
         Ok(String::from_utf8(data)?)
     }
 }
 
-impl WriteSupporter for StringSupporter {
+impl WriteSupport for StringSupport {
     fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
         Some(data[range].as_bytes())
     }

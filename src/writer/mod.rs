@@ -8,37 +8,39 @@ use std::borrow::Borrow;
 use error::Error;
 use super::{Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges};
-use data_type::WriteSupporter;
+use data_type::WriteSupport;
 use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
 use self::spec::Stream as SpecSource;
 
-pub struct FieldWriter<T: FieldFormatter<U>, U: WriteSupporter> {
+pub struct FieldWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
     formatter: T,
-    write_type: U
+    write_support: U,
+    phantom: ::std::marker::PhantomData<&'a ()>
 }
 
-impl<T: FieldFormatter<U>, U: WriteSupporter> FieldWriter<T, U> {
-    pub fn new(formatter: T, write_type: U) -> FieldWriter<T, U> {
+impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T, U> {
+    pub fn new(formatter: T, write_support: U) -> FieldWriter<'a, T, U> {
         FieldWriter {
             formatter: formatter,
-            write_type: write_type
+            write_support: write_support,
+            phantom: ::std::marker::PhantomData
         }
     }
 
-    pub fn write_type(&self) -> &U {
-        &self.write_type
+    pub fn write_support(&self) -> &U {
+        &self.write_support
     }
 }
 
-impl <T: FieldFormatter<U>, U: WriteSupporter> FieldWriter<T, U> {
-    pub fn write<'a, V>(&self, writer: &'a mut V, spec: &'a FieldSpec, data: &'a [u8], buffer: &'a mut Vec<u8>) -> Result<usize>
-        where V: Write + 'a
+impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T, U> {
+    pub fn write<'b, V>(&self, writer: &'b mut V, spec: &'b FieldSpec, data: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<usize>
+        where V: Write + 'b
     {
         buffer.clear();
-        self.formatter.format(data, spec, buffer, &self.write_type).map_err(Error::FormatterFailure)?;
+        self.formatter.format(data, spec, buffer, &self.write_support).map_err(Error::FormatterFailure)?;
 
-        let length = self.write_type.get_length(&buffer[..]);
+        let length = self.write_support.get_length(&buffer[..]);
 
         if length.length != spec.length || length.remainder > 0 {
             return Err(Error::FormattedValueWrongLength(spec.length, buffer.clone()).into());
@@ -50,31 +52,33 @@ impl <T: FieldFormatter<U>, U: WriteSupporter> FieldWriter<T, U> {
     }
 }
 
-pub struct RecordWriter<T: FieldFormatter<U>, U: WriteSupporter> {
-    field_writer: FieldWriter<T, U>
+pub struct RecordWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
+    field_writer: FieldWriter<'a, T, U>,
+    phantom: ::std::marker::PhantomData<&'a ()>
 }
 
-impl<T: FieldFormatter<U>, U: WriteSupporter> RecordWriter<T, U> {
-    pub fn new(field_writer: FieldWriter<T, U>) -> RecordWriter<T, U> {
+impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T, U> {
+    pub fn new(field_writer: FieldWriter<'a, T, U>) -> RecordWriter<'a, T, U> {
         RecordWriter {
-            field_writer: field_writer
+            field_writer: field_writer,
+            phantom: ::std::marker::PhantomData
         }
     }
 
-    pub fn write_type(&self) -> &U {
-        self.field_writer.write_type()
+    pub fn write_support(&self) -> &U {
+        self.field_writer.write_support()
     }
 }
 
-impl <T: FieldFormatter<U>, U: WriteSupporter> RecordWriter<T, U> {
-    pub fn write<'a, V, W>(&self, writer: &'a mut V, spec: &'a RecordSpec, data: &'a Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> FieldResult<usize>
-        where V: Write + 'a,
-              W: DataRanges + 'a
+impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T, U> {
+    pub fn write<'b, V, W>(&self, writer: &'b mut V, spec: &'b RecordSpec, data: &'b Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> FieldResult<usize>
+        where V: Write + 'b,
+              W: DataRanges + 'b
     {
         let mut amount_written = 0;
 
         for (name, field_spec) in &spec.field_specs {
-            let field_data = self.field_writer.write_type().get_data_by_name(name, data)
+            let field_data = self.field_writer.write_support().get_data_by_name(name, data)
                 .or_else(|| field_spec.default.as_ref().map(|v| &v[..]))
                 .ok_or_else(|| (Error::FieldValueRequired, name))?
             ;
@@ -90,15 +94,15 @@ impl <T: FieldFormatter<U>, U: WriteSupporter> RecordWriter<T, U> {
 pub struct Writer<
     'a,
     R: Write + 'a,
-    T: FieldFormatter<V> + 'a,
-    U: SpecSource<V> + 'a,
-    V: WriteSupporter + 'a,
+    T: FieldFormatter<'a, V> + 'a,
+    U: SpecSource<'a, V> + 'a,
+    V: WriteSupport + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a
 > {
     destination: X,
-    writer: RecordWriter<T, V>,
+    writer: RecordWriter<'a, T, V>,
     spec_source: U,
     record_specs: W,
     buffer: Y,
@@ -107,14 +111,14 @@ pub struct Writer<
 
 impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
     where R: Write + 'a,
-          T: FieldFormatter<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: WriteSupporter + 'a,
+          T: FieldFormatter<'a, V> + 'a,
+          U: SpecSource<'a, V> + 'a,
+          V: WriteSupport + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
     pub fn write_record<'b, A: DataRanges + 'b>(&mut self, data: &'b Data<A, V::DataHolder>) -> PositionalResult<usize> {
-        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_type())
+        let spec_name = self.spec_source.next(data, self.record_specs.borrow(), self.writer.write_support())
             .map_err(Error::SpecStreamError)?
             .ok_or(Error::SpecStreamReturnedNone)?
         ;
@@ -128,7 +132,7 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
             .map_err(|e| (e, spec_name).into())
     }
 
-    pub fn into_inner(self) -> RecordWriter<T, V> {
+    pub fn into_inner(self) -> RecordWriter<'a, T, V> {
         self.writer
     }
 }
@@ -136,16 +140,16 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
 pub struct WriterBuilder<
     'a,
     WR: Write + 'a,
-    T: FieldFormatter<V> + 'a,
-    U: SpecSource<V> + 'a,
-    V: WriteSupporter + 'a,
+    T: FieldFormatter<'a, V> + 'a,
+    U: SpecSource<'a, V> + 'a,
+    V: WriteSupport + 'a,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<WR> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a
 > {
     destination: Option<X>,
     field_formatter: Option<T>,
-    write_type: V,
+    write_support: V,
     spec_source: Option<U>,
     record_specs: Option<W>,
     buffer: Y,
@@ -154,16 +158,16 @@ pub struct WriterBuilder<
 
 impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
     where WR: Write + 'a,
-          T: FieldFormatter<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: WriteSupporter + 'a,
+          T: FieldFormatter<'a, V> + 'a,
+          U: SpecSource<'a, V> + 'a,
+          V: WriteSupport + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<WR> + 'a {
-    pub fn new(write_type: V) -> Self {
+    pub fn new(write_support: V) -> Self {
         WriterBuilder {
             destination: None,
             field_formatter: None,
-            write_type: write_type,
+            write_support: write_support,
             spec_source: None,
             record_specs: None,
             buffer: Vec::new(),
@@ -174,16 +178,16 @@ impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
 
 impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     where WR: Write + 'a,
-          T: FieldFormatter<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: WriteSupporter + 'a,
+          T: FieldFormatter<'a, V> + 'a,
+          U: SpecSource<'a, V> + 'a,
+          V: WriteSupport + 'a,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<WR> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
     pub fn with_source<Z: Write + 'a, A: BorrowMut<Z> + 'a>(self, destination: A) -> WriterBuilder<'a, Z, T, U, V, W, A, Y> {
         WriterBuilder {
             destination: Some(destination),
-            write_type: self.write_type,
+            write_support: self.write_support,
             field_formatter: self.field_formatter,
             spec_source: self.spec_source,
             record_specs: self.record_specs,
@@ -192,10 +196,10 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
         }
     }
 
-    pub fn with_field_formatter<Z: FieldFormatter<V> + 'a>(self, field_formatter: Z) -> WriterBuilder<'a, WR, Z, U, V, W, X, Y> {
+    pub fn with_field_formatter<Z: FieldFormatter<'a, V> + 'a>(self, field_formatter: Z) -> WriterBuilder<'a, WR, Z, U, V, W, X, Y> {
         WriterBuilder {
             destination: self.destination,
-            write_type: self.write_type,
+            write_support: self.write_support,
             field_formatter: Some(field_formatter),
             spec_source: self.spec_source,
             record_specs: self.record_specs,
@@ -204,10 +208,10 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
         }
     }
 
-    pub fn with_spec_source<Z: SpecSource<V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
+    pub fn with_spec_source<Z: SpecSource<'a, V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
         WriterBuilder {
             destination: self.destination,
-            write_type: self.write_type,
+            write_support: self.write_support,
             field_formatter: self.field_formatter,
             spec_source: Some(spec_source),
             record_specs: self.record_specs,
@@ -219,7 +223,7 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_record_specs<Z: Borrow<HashMap<String, RecordSpec>> + 'a>(self, record_specs: Z) -> WriterBuilder<'a, WR, T, U, V, Z, X, Y> {
         WriterBuilder {
             destination: self.destination,
-            write_type: self.write_type,
+            write_support: self.write_support,
             field_formatter: self.field_formatter,
             spec_source: self.spec_source,
             record_specs: Some(record_specs),
@@ -231,7 +235,7 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     pub fn with_buffer<Z: BorrowMut<Vec<u8>> + 'a>(self, buffer: Z) -> WriterBuilder<'a, WR, T, U, V, W, X, Z> {
         WriterBuilder {
             destination: self.destination,
-            write_type: self.write_type,
+            write_support: self.write_support,
             field_formatter: self.field_formatter,
             spec_source: self.spec_source,
             record_specs: self.record_specs,
@@ -245,7 +249,7 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
             destination: self.destination.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
             writer: RecordWriter::new(FieldWriter::new(
                 self.field_formatter.ok_or(Error::BuildError("field_formatter needs to be defined in order to build"))?,
-                self.write_type
+                self.write_support
             )),
             spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
             record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
@@ -263,7 +267,7 @@ mod test {
     use test::*;
     use std::collections::{HashMap, BTreeMap};
     use std::io::Cursor;
-    use data_type::BinarySupporter;
+    use data_type::BinarySupport;
 
     #[test]
     fn write_record() {
@@ -275,7 +279,7 @@ mod test {
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok(string[0..4].as_bytes().to_owned()));
         formatter.add_format_call("def".as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok(string[4..9].as_bytes().to_owned()));
         formatter.add_format_call("hello2".as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok(string[9..45].as_bytes().to_owned()));
-        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupporter));
+        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupport));
         writer.write(&mut buf, record_spec, &Data::from([("field1".to_string(), "hello".as_bytes().to_owned()),
             ("field3".to_string(), "hello2".as_bytes().to_owned())]
             .iter().cloned().collect::<HashMap<_, _>>()), &mut Vec::new()).unwrap();
@@ -289,7 +293,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err("".into()));
-        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupporter));
+        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupport));
         assert_result!(
             Err(FieldError {
                 error: Error::FormatterFailure(_),
@@ -305,7 +309,7 @@ mod test {
         let spec = test_spec();
         let mut buf = Cursor::new(Vec::new());
         let record_spec = &spec.record_specs.get("record1").unwrap();
-        let writer = RecordWriter::new(FieldWriter::new(MockFormatter::new(), BinarySupporter));
+        let writer = RecordWriter::new(FieldWriter::new(MockFormatter::new(), BinarySupport));
         assert_result!(
             Err(FieldError {
                 error: Error::FieldValueRequired,
@@ -323,7 +327,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
-        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupporter));
+        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupport));
         assert_result!(
             Err(FieldError {
                 error: Error::FormattedValueWrongLength(4, ref value),
@@ -342,7 +346,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("bye2".as_bytes().to_owned()));
-        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupporter));
+        let writer = RecordWriter::new(FieldWriter::new(&formatter, BinarySupport));
         assert_result!(
             Err(FieldError {
                 error: Error::IoError(_),
@@ -362,7 +366,7 @@ mod test {
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok(string[0..4].as_bytes().to_owned()));
         formatter.add_format_call("hello2".as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok(string[4..9].as_bytes().to_owned()));
-        let writer = FieldWriter::new(&formatter, BinarySupporter);
+        let writer = FieldWriter::new(&formatter, BinarySupport);
         assert_result!(
             Ok(4),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
@@ -382,7 +386,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Err("".into()));
-        let writer = FieldWriter::new(&formatter, BinarySupporter);
+        let writer = FieldWriter::new(&formatter, BinarySupport);
         assert_result!(
             Err(Error::FormatterFailure(_)),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
@@ -396,7 +400,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
-        let writer = FieldWriter::new(&formatter, BinarySupporter);
+        let writer = FieldWriter::new(&formatter, BinarySupport);
         assert_result!(
             Err(Error::FormattedValueWrongLength(4, ref value)) if *value == "hello2".as_bytes().to_owned(),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
@@ -411,7 +415,7 @@ mod test {
         let mut formatter = MockFormatter::new();
         let record_spec = &spec.record_specs.get("record1").unwrap();
         formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("bye2".as_bytes().to_owned()));
-        let writer = FieldWriter::new(&formatter, BinarySupporter);
+        let writer = FieldWriter::new(&formatter, BinarySupport);
         assert_result!(
             Err(Error::IoError(_)),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
