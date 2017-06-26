@@ -4,11 +4,9 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error {
-    RecordSpecNameRequired,
+    SpecStreamReturnedNone,
     SpecStreamError(BoxedError),
-    SpecResolverError(BoxedError),
     RecordSpecNotFound(String),
-    FieldSpecNotFound(String, String),
     ParserFailure(BoxedError),
     FormatterFailure(BoxedError),
     IoError(IoError),
@@ -25,11 +23,9 @@ pub enum Error {
 impl ::std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::RecordSpecNameRequired => "spec name is required since it cannot be recognized",
+            Error::SpecStreamReturnedNone => "record spec stream returned no record spec",
             Error::SpecStreamError(_) => "record spec stream encountered an error",
-            Error::SpecResolverError(_) => "record spec resolver encountered an error",
             Error::RecordSpecNotFound(_) => "record spec could not be found",
-            Error::FieldSpecNotFound(_, _) => "field spec could not be found",
             Error::ParserFailure(_) => "The field parser encountered an error",
             Error::FormatterFailure(_) => "The field formatter encountered an error",
             Error::IoError(_) => "An IO error occurred while trying to read",
@@ -47,7 +43,6 @@ impl ::std::error::Error for Error {
     fn cause(&self) -> Option<&::std::error::Error> {
         match *self {
             Error::SpecStreamError(ref e) => Some(&**e),
-            Error::SpecResolverError(ref e) => Some(&**e),
             Error::IoError(ref e) => Some(e),
             Error::DataHolderError(ref e) => Some(&**e),
             Error::SpecLoaderError(ref e) => Some(&**e),
@@ -70,11 +65,9 @@ macro_rules! write_with_data {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
         match *self {
-            Error::RecordSpecNameRequired => write!(f, "spec name is required since it cannot be recognized"),
+            Error::SpecStreamReturnedNone => write!(f, "record spec stream returned no record spec"),
             Error::SpecStreamError(ref e) => write!(f, "record spec stream encountered an error: {}", e),
-            Error::SpecResolverError(ref e) => write!(f, "record spec stream encountered an error: {}", e),
             Error::RecordSpecNotFound(ref name) => write!(f, "record spec named {} could not be found", name),
-            Error::FieldSpecNotFound(ref record_name, ref name) => write!(f, "field spec named {} in record spec {} could not be found", name, record_name),
             Error::ParserFailure(ref e) => write!(f, "The field parser encountered an error: {}", e),
             Error::FormatterFailure(ref e) => write!(f, "The field formatter encountered an error: {}", e),
             Error::IoError(ref e) => write!(f, "An IO error occurred while trying to read: {}", e),

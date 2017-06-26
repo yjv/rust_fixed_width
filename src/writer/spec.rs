@@ -1,38 +1,39 @@
 use spec::RecordSpec;
 use std::collections::HashMap;
-use record::{Data, DataRanges, WriteType};
+use record::{Data, DataRanges};
+use data_type::{WriteSupporter};
 use super::super::BoxedErrorResult as Result;
 use spec::resolver::{IdFieldResolver, NoneResolver};
 use std::borrow::Borrow;
 
-pub trait Stream<T: WriteType> {
+pub trait Stream<T: WriteSupporter> {
     fn next<'a, 'b, U: DataRanges + 'a>(&mut self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<Option<&'b str>>;
 }
 
-impl<'c, T: Stream<U> + 'c, U: WriteType + 'c> Stream<U> for &'c mut T {
+impl<'c, T: Stream<U> + 'c, U: WriteSupporter + 'c> Stream<U> for &'c mut T {
     fn next<'a, 'b, V: DataRanges + 'a>(&mut self, data: &'a Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a U) -> Result<Option<&'b str>> {
         Stream::next(*self, data, record_specs, write_type)
     }
 }
 
-pub trait Resolver<T: WriteType> {
+pub trait Resolver<T: WriteSupporter> {
     fn resolve<'a, 'b, U: DataRanges + 'a>(&self, data: &'a Data<U, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<Option<&'b str>>;
 }
 
-impl<'c, T: Resolver<U> + 'c, U: WriteType + 'c> Resolver<U> for &'c mut T {
+impl<'c, T: Resolver<U> + 'c, U: WriteSupporter + 'c> Resolver<U> for &'c mut T {
     fn resolve<'a, 'b, V: DataRanges + 'a>(&self, data: &'a Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a U) -> Result<Option<&'b str>> {
         Resolver::resolve(*self, data, record_specs, write_type)
     }
 }
 
-pub struct ResolverSource<T: Resolver<U>, U: WriteType> {
+pub struct ResolverSource<T: Resolver<U>, U: WriteSupporter> {
     resolver: T,
     read_type: ::std::marker::PhantomData<U>
 }
 
 impl <T, U> ResolverSource<T, U>
     where T: Resolver<U>,
-          U: WriteType {
+          U: WriteSupporter {
     pub fn new(resolver: T) -> Self {
         ResolverSource {
             resolver: resolver,
@@ -43,13 +44,13 @@ impl <T, U> ResolverSource<T, U>
 
 impl <T, U> Stream<U> for ResolverSource<T, U>
     where T: Resolver<U>,
-          U: WriteType {
+          U: WriteSupporter {
     fn next<'a, 'b, V: DataRanges + 'a>(&mut self, data: &'a Data<V, U::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a U) -> Result<Option<&'b str>> {
         self.resolver.resolve(data, record_specs, write_type)
     }
 }
 
-impl<T: WriteType, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
+impl<T: WriteSupporter, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     fn resolve<'a, 'b, V: DataRanges + 'a>(&self, data: &'a Data<V, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, write_type: &'a T) -> Result<Option<&'b str>> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(self.id_field()) {
@@ -67,7 +68,7 @@ impl<T: WriteType, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     }
 }
 
-impl<T: WriteType> Resolver<T> for NoneResolver {
+impl<T: WriteSupporter> Resolver<T> for NoneResolver {
     fn resolve<'a, 'b, U: DataRanges + 'a>(&self, _: &'a Data<U, T::DataHolder>, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
         Ok(None)
     }

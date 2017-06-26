@@ -1,9 +1,8 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::collections::btree_map::{Iter as BTreeMapIter, IntoIter as BTreeMapIntoIter};
 use std::collections::hash_map::{Iter as HashMapIter, IntoIter as HashMapIntoIter};
 use std::ops::{Range, Index};
 use std::iter::FromIterator;
-use super::BoxedErrorResult as Result;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Data<T: DataRanges, U> {
@@ -11,7 +10,7 @@ pub struct Data<T: DataRanges, U> {
     pub data: U
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Record<T: DataRanges, U> {
     pub data: Data<T, U>,
     pub name: String
@@ -28,169 +27,23 @@ pub trait BuildableDataRanges: DataRanges {
 
 impl<'a, T> DataRanges for &'a T where T: 'a + DataRanges {
     fn get<'b>(&self, name: &'b str) -> Option<Range<usize>> {
-        (**self).get(name)
-    }
-}
-
-pub enum ShouldReadMore {
-    More(usize),
-    NoMore
-}
-
-pub trait DataType {
-    type DataHolder;
-    fn get_length(&self, data: &[u8]) -> Length {
-        Length { length: data.len(), remainder: 0 }
-    }
-
-    fn get_byte_range(&self, _: &[u8], range: Range<usize>) -> Option<Range<usize>> {
-        Some(range)
-    }
-
-    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
-        (length, None)
-    }
-}
-
-pub struct Length {
-    pub length: usize,
-    pub remainder: usize
-}
-
-pub trait ReadType: DataType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder>;
-    fn get_range(&self, old_length: usize, data: &[u8]) -> Range<usize> {
-        old_length..data.len()
-    }
-
-    fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
-        let length = self.get_length(data).length;
-        if wanted_length > length {
-            ShouldReadMore::More(wanted_length - length)
-        } else {
-            ShouldReadMore::NoMore
-        }
-    }
-}
-
-pub trait WriteType: DataType {
-    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]>;
-    fn get_data_by_name<'a, T: DataRanges + 'a>(&self, name: &'a str, data: &'a Data<T, Self::DataHolder>) -> Option<&'a [u8]> {
-        data.ranges.get(name).and_then(|range| self.get_data(range, &data.data))
-    }
-}
-
-pub struct BinaryType;
-
-impl DataType for BinaryType  {
-    type DataHolder = Vec<u8>;
-
-    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
-        (length, Some(length))
-    }
-}
-
-impl ReadType for BinaryType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
-        Ok(data)
-    }
-}
-
-impl WriteType for BinaryType {
-    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
-        Some(&data[range])
-    }
-}
-
-pub struct StringType;
-
-impl StringType {
-    fn get_string<'a>(&self, data: &'a [u8]) -> &'a str {
-        match ::std::str::from_utf8(data) {
-            Ok(ref string) => string,
-            Err(e) => unsafe {
-                ::std::str::from_utf8_unchecked(&data[..e.valid_up_to()])
-            }
-        }
-    }
-}
-
-impl DataType for StringType {
-    type DataHolder = String;
-    fn get_length(&self, data: &[u8]) -> Length {
-        let string = self.get_string(data);
-
-        Length {
-            length: string.chars().count(),
-            remainder: data.len() - string.len()
-        }
-    }
-
-    fn get_byte_range(&self, data: &[u8], range: Range<usize>) -> Option<Range<usize>> {
-        let mut iterator = self.get_string(data).char_indices();
-
-        match (iterator.nth(range.start), iterator.nth(range.end - 1 - range.start)) {
-            (Some((start, _)), Some((end, _))) => Some(start..end + 1),
-            _ => None
-        }
-    }
-
-    fn get_size_hint(&self, length: usize) -> (usize, Option<usize>) {
-        (length, Some(length * 4))
-    }
-}
-
-impl ReadType for StringType {
-    fn upcast_data(&self, data: Vec<u8>) -> Result<Self::DataHolder> {
-        Ok(String::from_utf8(data)?)
-    }
-
-    fn should_read_more(&self, wanted_length: usize, data: &[u8]) -> ShouldReadMore {
-        let length = self.get_length(data).length;
-
-        if wanted_length > length {
-            ShouldReadMore::More(wanted_length - length)
-        } else {
-            ShouldReadMore::NoMore
-        }
-    }
-}
-
-impl WriteType for StringType {
-    fn get_data<'a>(&self, range: Range<usize>, data: &'a Self::DataHolder) -> Option<&'a [u8]> {
-        Some(data[range].as_bytes())
+        DataRanges::get(*self, name)
     }
 }
 
 pub trait IterableDataRanges<'a>: DataRanges {
     type Iter: Iterator<Item=(&'a String, &'a Range<usize>)>;
-    fn field_iter(&'a self) -> Self::Iter;
+    fn range_iter(&'a self) -> Self::Iter;
 }
 
 pub trait IntoIterableDataRanges: DataRanges {
     type Iter: Iterator<Item=(String, Range<usize>)>;
-    fn into_field_iter(self) -> Self::Iter;
+    fn into_range_iter(self) -> Self::Iter;
 }
 
 impl<T: DataRanges, U: Index<Range<usize>>> Data<T, U> {
     pub fn get<'a>(&self, name: &'a str) -> Option<&U::Output> {
         self.ranges.get(name).map(|range| &self.data[range])
-    }
-}
-
-impl<'a, T: DataRanges + 'a> Data<T, Vec<u8>> {
-    pub fn internal_references(&'a self) -> Data<&'a T, &'a [u8]> {
-        Data { ranges: &self.ranges, data: &self.data[..] }
-    }
-}
-
-impl<'a, T: DataRanges + 'a> Data<T, &'a [u8]> {
-    pub fn get_write_data<'b>(&'b self, name: &'b str) -> Option<&'b [u8]> {
-        self.ranges.get(name).map(|range| &self.data[range])
-    }
-
-    pub fn internal_references(&'a self) -> Data<&'a T, &'a [u8]> {
-        Data { ranges: &self.ranges, data: &self.data[..] }
     }
 }
 
@@ -202,7 +55,8 @@ impl <T: BuildableDataRanges> Data<T, Vec<u8>> {
         }
     }
 
-    pub fn push<'a>(&mut self, name: &'a str, data: &'a [u8]) {
+    pub fn push<'a, U: AsRef<[u8]> + 'a>(&mut self, name: &'a str, data: U) {
+        let data = data.as_ref();
         self.ranges.insert(name, self.data.len()..self.data.len() + data.len());
         self.data.extend(data);
     }
@@ -223,7 +77,7 @@ impl<'a, T: Iterator<Item=(&'a String, &'a Range<usize>)>, U: Index<Range<usize>
 impl<'a, T: IterableDataRanges<'a>, U: Index<Range<usize>> + 'a> Data<T, U> {
     pub fn iter(&'a self) -> Iter<'a, T::Iter, U> {
         Iter {
-            iter: self.ranges.field_iter(),
+            iter: self.ranges.range_iter(),
             data: &self.data
         }
     }
@@ -247,7 +101,7 @@ impl<T: IntoIterableDataRanges, U: ToOwned, V: Index<Range<usize>, Output=U>> In
     type IntoIter = IntoIter<T::Iter, U, V>;
     fn into_iter(self) -> Self::IntoIter {
         IntoIter {
-            iter: self.ranges.into_field_iter(),
+            iter: self.ranges.into_range_iter(),
             data: self.data,
             marker: ::std::marker::PhantomData
         }
@@ -336,14 +190,14 @@ impl BuildableDataRanges for BTreeMap<String, Range<usize>> {
 
 impl<'a> IterableDataRanges<'a> for BTreeMap<String, Range<usize>> {
     type Iter = BTreeMapIter<'a, String, Range<usize>>;
-    fn field_iter(&'a self) -> BTreeMapIter<'a, String, Range<usize>> {
+    fn range_iter(&'a self) -> BTreeMapIter<'a, String, Range<usize>> {
         self.iter()
     }
 }
 
 impl IntoIterableDataRanges for BTreeMap<String, Range<usize>> {
     type Iter = BTreeMapIntoIter<String, Range<usize>>;
-    fn into_field_iter(self) -> BTreeMapIntoIter<String, Range<usize>> {
+    fn into_range_iter(self) -> BTreeMapIntoIter<String, Range<usize>> {
         self.into_iter()
     }
 }
@@ -366,61 +220,15 @@ impl BuildableDataRanges for HashMap<String, Range<usize>> {
 
 impl<'a> IterableDataRanges<'a> for HashMap<String, Range<usize>> {
     type Iter = HashMapIter<'a, String, Range<usize>>;
-    fn field_iter(&'a self) -> HashMapIter<'a, String, Range<usize>> {
+    fn range_iter(&'a self) -> HashMapIter<'a, String, Range<usize>> {
         self.iter()
     }
 }
 
 impl IntoIterableDataRanges for HashMap<String, Range<usize>> {
     type Iter = HashMapIntoIter<String, Range<usize>>;
-    fn into_field_iter(self) -> HashMapIntoIter<String, Range<usize>> {
+    fn into_range_iter(self) -> HashMapIntoIter<String, Range<usize>> {
         self.into_iter()
-    }
-}
-
-impl DataRanges for Vec<Range<usize>> {
-    fn get<'a>(&self, _: &'a str) -> Option<Range<usize>> {
-        None
-    }
-}
-
-impl BuildableDataRanges for Vec<Range<usize>> {
-    fn new() -> Self {
-        Vec::new()
-    }
-
-    fn insert<'a>(&mut self, _: &'a str, range: Range<usize>) {
-        self.push(range);
-    }
-}
-//
-//impl<'a> IterableDataRanges<'a> for Vec<Range<usize>> {
-//    type Iter = Box<Iterator<Item=(&'a String, &'a Range<usize>)>>;
-//    fn field_iter(&'a self) -> Box<Iterator<Item=(&'a String, &'a Range<usize>)>> {
-//        Box::new(self.iter().map(|range| (&string.to_string(), range)))
-//    }
-//}
-
-impl IntoIterableDataRanges for Vec<Range<usize>> {
-    type Iter = Box<Iterator<Item=(String, Range<usize>)>>;
-    fn into_field_iter(self) -> Box<Iterator<Item=(String, Range<usize>)>> {
-        Box::new(self.into_iter().map(|range| ("".to_string(), range)))
-    }
-}
-
-impl DataRanges for HashSet<Range<usize>> {
-    fn get<'a>(&self, _: &'a str) -> Option<Range<usize>> {
-        None
-    }
-}
-
-impl BuildableDataRanges for HashSet<Range<usize>> {
-    fn new() -> Self {
-        HashSet::new()
-    }
-
-    fn insert<'a>(&mut self, _: &'a str, range: Range<usize>) {
-        self.insert(range);
     }
 }
 

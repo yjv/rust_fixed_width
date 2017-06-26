@@ -1,7 +1,8 @@
 use spec::*;
 use std::collections::HashMap;
 use std::io::BufRead;
-use record::{Data, DataRanges, ReadType, WriteType};
+use record::{Data, DataRanges};
+use data_type::{FieldReadSupporter, WriteSupporter};
 use writer::formatter::FieldFormatter;
 use reader::parser::FieldParser;
 use reader::spec::{Resolver as ReaderResolver, RequiresBufRead};
@@ -33,10 +34,10 @@ impl<'a> MockResolver<'a> {
     }
 }
 
-impl<'a, T: ReadType> RequiresBufRead<T> for MockResolver<'a> {
+impl<'a, T: FieldReadSupporter> RequiresBufRead<T> for MockResolver<'a> {
 }
 
-impl<'a, U: ReadType> ReaderResolver<U> for MockResolver<'a> {
+impl<'a, U: FieldReadSupporter> ReaderResolver<U> for MockResolver<'a> {
     fn resolve<'b, 'c, V: BufRead + 'b>(&self, _: &'b mut V, record_specs: &'c HashMap<String, RecordSpec>, _: &'b U) -> Result<Option<&'c str>> {
         for &(ref expected_record_specs, ref return_value) in &self.line_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
@@ -61,7 +62,7 @@ impl<'a, U: ReadType> ReaderResolver<U> for MockResolver<'a> {
     }
 }
 
-impl<'a, V: WriteType> WriterResolver<V> for MockResolver<'a> {
+impl<'a, V: WriteSupporter> WriterResolver<V> for MockResolver<'a> {
     fn resolve<'b, 'c, W: DataRanges + 'b>(&self, _: &'b Data<W, V::DataHolder>, record_specs: &'c HashMap<String, RecordSpec>, _: &'b V) -> Result<Option<&'c str>> {
         for &(ref expected_record_specs, ref return_value) in &self.data_recognize_calls {
             if *expected_record_specs as *const HashMap<String, RecordSpec> == record_specs as *const HashMap<String, RecordSpec>
@@ -104,7 +105,7 @@ impl MockFormatter {
     }
 }
 
-impl<T: WriteType> FieldFormatter<T> for MockFormatter {
+impl<T: WriteSupporter> FieldFormatter<T> for MockFormatter {
     fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.format_calls {
             if *expected_data == data && expected_field_spec == field_spec {
@@ -140,7 +141,7 @@ impl MockParser {
     }
 }
 
-impl<T: ReadType> FieldParser<T> for MockParser {
+impl<T: FieldReadSupporter> FieldParser<T> for MockParser {
     fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         for &(ref expected_data, ref expected_field_spec, ref return_value) in &self.parse_calls {
             if *expected_data == data

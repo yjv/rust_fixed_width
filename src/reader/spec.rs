@@ -1,51 +1,51 @@
 use spec::RecordSpec;
 use std::collections::{HashMap};
 use std::io::BufRead;
-use record::ReadType;
+use data_type::FieldReadSupporter;
 use super::super::BoxedErrorResult as Result;
 use spec::resolver::{IdFieldResolver, NoneResolver};
 use std::borrow::Borrow;
 
-pub trait RequiresBufRead<T: ReadType> {
+pub trait RequiresBufRead<T: FieldReadSupporter> {
     fn get_suggested_buffer_size<'a>(&self, _: &'a HashMap<String, RecordSpec>, _: &'a T) -> Option<usize> {
         None
     }
 }
 
-pub trait Stream<T: ReadType>: RequiresBufRead<T> {
+pub trait Stream<T: FieldReadSupporter>: RequiresBufRead<T> {
     fn next<'a, 'b, U: BufRead + 'a>(&mut self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<Option<&'b str>>;
 }
 
-impl<'b, T: RequiresBufRead<U> + 'b, U: ReadType + 'b> RequiresBufRead<U> for &'b mut T {
+impl<'b, T: RequiresBufRead<U> + 'b, U: FieldReadSupporter + 'b> RequiresBufRead<U> for &'b mut T {
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
         RequiresBufRead::get_suggested_buffer_size(*self, record_specs, read_type)
     }
 }
 
-impl<'c, T: Stream<U> + 'c, U: ReadType + 'c> Stream<U> for &'c mut T {
+impl<'c, T: Stream<U> + 'c, U: FieldReadSupporter + 'c> Stream<U> for &'c mut T {
     fn next<'a, 'b, V: BufRead + 'a>(&mut self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<Option<&'b str>> {
         Stream::next(*self, reader, record_specs, read_type)
     }
 }
 
-pub trait Resolver<T: ReadType>: RequiresBufRead<T> {
+pub trait Resolver<T: FieldReadSupporter>: RequiresBufRead<T> {
     fn resolve<'a, 'b, U: BufRead + 'a>(&self, reader: &'a mut U, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<Option<&'b str>>;
 }
 
-impl<'c, T: Resolver<U> + 'c, U: ReadType + 'c> Resolver<U> for &'c mut T {
+impl<'c, T: Resolver<U> + 'c, U: FieldReadSupporter + 'c> Resolver<U> for &'c mut T {
     fn resolve<'a, 'b, V: BufRead + 'a>(&self, reader: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<Option<&'b str>> {
         Resolver::resolve(*self, reader, record_specs, read_type)
     }
 }
 
-pub struct ResolverSource<T: Resolver<U>, U: ReadType> {
+pub struct ResolverSource<T: Resolver<U>, U: FieldReadSupporter> {
     resolver: T,
     read_type: ::std::marker::PhantomData<U>
 }
 
 impl <T, U> RequiresBufRead<U> for ResolverSource<T, U>
     where T: Resolver<U>,
-          U: ReadType {
+          U: FieldReadSupporter {
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a U) -> Option<usize> {
         self.resolver.get_suggested_buffer_size(record_specs, read_type)
     }
@@ -53,7 +53,7 @@ impl <T, U> RequiresBufRead<U> for ResolverSource<T, U>
 
 impl <T, U> ResolverSource<T, U>
     where T: Resolver<U>,
-          U: ReadType {
+          U: FieldReadSupporter {
     pub fn new(resolver: T) -> Self {
         ResolverSource {
             resolver: resolver,
@@ -64,13 +64,13 @@ impl <T, U> ResolverSource<T, U>
 
 impl <T, U> Stream<U> for ResolverSource<T, U>
     where T: Resolver<U>,
-          U: ReadType {
+          U: FieldReadSupporter {
     fn next<'a, 'b, X: BufRead + 'a>(&mut self, reader: &'a mut X, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a U) -> Result<Option<&'b str>> {
         self.resolver.resolve(reader, record_specs, read_type)
     }
 }
 
-impl<T: ReadType, U: Borrow<str>> RequiresBufRead<T> for IdFieldResolver<U> {
+impl<T: FieldReadSupporter, U: Borrow<str>> RequiresBufRead<T> for IdFieldResolver<U> {
     fn get_suggested_buffer_size<'a>(&self, record_specs: &'a HashMap<String, RecordSpec>, read_type: &'a T) -> Option<usize> {
         let min = record_specs.iter().map(|(_, spec)| spec.field_range(self.id_field()).map(|range| range.end).unwrap_or(0)).min().unwrap_or(0);
         if min == 0 {
@@ -81,7 +81,7 @@ impl<T: ReadType, U: Borrow<str>> RequiresBufRead<T> for IdFieldResolver<U> {
     }
 }
 
-impl<T: ReadType, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
+impl<T: FieldReadSupporter, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     fn resolve<'a, 'b, V: BufRead + 'a>(&self, mut buffer: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, read_type: &'a T) -> Result<Option<&'b str>> {
         for (name, record_spec) in record_specs.iter() {
             if let Some(ref field_spec) = record_spec.field_specs.get(self.id_field()) {
@@ -106,11 +106,11 @@ impl<T: ReadType, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     }
 }
 
-impl<T: ReadType> Resolver<T> for NoneResolver {
+impl<T: FieldReadSupporter> Resolver<T> for NoneResolver {
     fn resolve<'a, 'b, U: BufRead + 'a>(&self, _: &'a mut U, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
         Ok(None)
     }
 }
 
-impl<T: ReadType> RequiresBufRead<T> for NoneResolver {
+impl<T: FieldReadSupporter> RequiresBufRead<T> for NoneResolver {
 }

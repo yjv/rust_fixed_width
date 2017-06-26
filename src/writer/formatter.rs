@@ -1,14 +1,14 @@
 use spec::PaddingDirection;
 use std::fmt::{Display, Formatter, Error as FmtError};
-use record::{WriteType, BinaryType};
+use data_type::{WriteSupporter, BinarySupporter};
 use spec::FieldSpec;
 use super::super::BoxedErrorResult as Result;
 
-pub trait FieldFormatter<T: WriteType> {
+pub trait FieldFormatter<T: WriteSupporter> {
     fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_type: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: WriteType> FieldFormatter<U> for &'a T where T: 'a + FieldFormatter<U> {
+impl<'a, T, U: WriteSupporter> FieldFormatter<U> for &'a T where T: 'a + FieldFormatter<U> {
     fn format<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, write_type: &'b U) -> Result<()> {
         (**self).format(data, field_spec, destination, write_type)
     }
@@ -48,8 +48,8 @@ impl Display for FormatError {
 
 pub struct DefaultFormatter;
 
-impl FieldFormatter<BinaryType> for DefaultFormatter {
-    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinaryType) -> Result<()> {
+impl FieldFormatter<BinarySupporter> for DefaultFormatter {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinarySupporter) -> Result<()> {
         if data.len() >= field_spec.length {
             destination.extend_from_slice(&data[..field_spec.length]);
             return Ok(());
@@ -68,7 +68,7 @@ impl FieldFormatter<BinaryType> for DefaultFormatter {
 
 pub struct IdentityFormatter;
 
-impl<T: WriteType> FieldFormatter<T> for IdentityFormatter {
+impl<T: WriteSupporter> FieldFormatter<T> for IdentityFormatter {
     fn format<'a>(&self, data: &'a [u8], _: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
@@ -79,14 +79,14 @@ impl<T: WriteType> FieldFormatter<T> for IdentityFormatter {
 mod test {
     use super::*;
     use spec::*;
-    use record::{BinaryType, StringType};
+    use data_type::{BinarySupporter, StringSupporter};
 
     #[test]
     fn default_formatter() {
         let padder = DefaultFormatter;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        let data_type = BinaryType;
+        let data_type = BinarySupporter;
         let field_spec_builder = FieldSpecBuilder::new()
             .with_padding("33".to_owned())
             .with_length(10)
@@ -116,7 +116,7 @@ mod test {
         let padder = IdentityFormatter;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        let data_type = BinaryType;
+        let data_type = BinarySupporter;
         let field_spec = FieldSpecBuilder::new()
             .with_padding_direction(PaddingDirection::Right)
             .with_padding("33".to_owned())
@@ -136,7 +136,7 @@ mod test {
         let padder = IdentityFormatter;
         let data = "qwer".as_bytes();
         let mut destination = Vec::new();
-        let data_type = BinaryType;
+        let data_type = BinarySupporter;
         let field_spec = FieldSpecBuilder::new()
             .with_padding_direction(PaddingDirection::Right)
             .with_padding("33".to_owned())
@@ -145,7 +145,7 @@ mod test {
             .unwrap()
         ;
         assert_result!(Ok(()), FieldFormatter::format(&&padder, data, &field_spec, &mut destination, &data_type));
-        let data_type = StringType;
+        let data_type = StringSupporter;
         assert_result!(Ok(()), FieldFormatter::format(&&padder, data, &field_spec, &mut destination, &data_type));
     }
 }
