@@ -4,11 +4,11 @@ use data_type::{FieldReadSupport, BinarySupport};
 use spec::FieldSpec;
 use super::super::BoxedErrorResult as Result;
 
-pub trait FieldParser<'a, T: FieldReadSupport + 'a> {
-    fn parse<'b>(&self, data: &[u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_support: &'b T) -> Result<()>;
+pub trait FieldParser<T: FieldReadSupport> {
+    fn parse<'a>(&self, data: &[u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, read_support: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: FieldReadSupport + 'a> FieldParser<'a, U> for &'a T where T: 'a + FieldParser<'a, U> {
+impl<'a, T, U: FieldReadSupport> FieldParser<U> for &'a T where T: FieldParser<U> + 'a {
     fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, read_support: &'b U) -> Result<()> {
         (**self).parse(data, field_spec, destination, read_support)
     }
@@ -48,8 +48,8 @@ impl Display for ParseError {
 
 pub struct DefaultParser;
 
-impl<'a> FieldParser<'a, BinarySupport> for DefaultParser {
-    fn parse<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b BinarySupport) -> Result<()> {
+impl FieldParser<BinarySupport> for DefaultParser {
+    fn parse<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinarySupport) -> Result<()> {
         let mut index = 0;
         let mut iter = data.chunks(field_spec.padding.len());
 
@@ -74,8 +74,8 @@ impl<'a> FieldParser<'a, BinarySupport> for DefaultParser {
 
 pub struct IdentityParser;
 
-impl<'a, T: FieldReadSupport + 'a> FieldParser<'a, T> for IdentityParser {
-    fn parse<'b>(&self, data: &'b [u8], _: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b T) -> Result<()> {
+impl<T: FieldReadSupport> FieldParser<T> for IdentityParser {
+    fn parse<'a>(&self, data: &'a [u8], _: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }

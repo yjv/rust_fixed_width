@@ -13,13 +13,13 @@ use self::formatter::FieldFormatter;
 use std::borrow::BorrowMut;
 use self::spec::Stream as SpecSource;
 
-pub struct FieldWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
+pub struct FieldWriter<'a, T: FieldFormatter<U> + 'a, U: WriteSupport> {
     formatter: T,
     write_support: U,
     lifetime: ::std::marker::PhantomData<&'a ()>
 }
 
-impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T, U> {
+impl<'a, T: FieldFormatter<U> + 'a, U: WriteSupport> FieldWriter<'a, T, U> {
     pub fn new(formatter: T, write_support: U) -> FieldWriter<'a, T, U> {
         FieldWriter {
             formatter: formatter,
@@ -33,7 +33,7 @@ impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T,
     }
 }
 
-impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T, U> {
+impl <'a, T: FieldFormatter<U> + 'a, U: WriteSupport> FieldWriter<'a, T, U> {
     pub fn write<'b, V>(&self, writer: &'b mut V, spec: &'b FieldSpec, data: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<usize>
         where V: Write + 'b
     {
@@ -52,11 +52,11 @@ impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> FieldWriter<'a, T
     }
 }
 
-pub struct RecordWriter<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> {
+pub struct RecordWriter<'a, T: FieldFormatter<U> + 'a, U: WriteSupport> {
     field_writer: FieldWriter<'a, T, U>
 }
 
-impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T, U> {
+impl<'a, T: FieldFormatter<U> + 'a, U: WriteSupport> RecordWriter<'a, T, U> {
     pub fn new(field_writer: FieldWriter<'a, T, U>) -> RecordWriter<'a, T, U> {
         RecordWriter {
             field_writer: field_writer
@@ -68,7 +68,7 @@ impl<'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T
     }
 }
 
-impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, T, U> {
+impl <'a, T: FieldFormatter<U> + 'a, U: WriteSupport> RecordWriter<'a, T, U> {
     pub fn write<'b, V, W>(&self, writer: &'b mut V, spec: &'b RecordSpec, data: &'b Data<W, U::DataHolder>, buffer: &mut Vec<u8>) -> FieldResult<usize>
         where V: Write + 'b,
               W: DataRanges + 'b
@@ -92,9 +92,9 @@ impl <'a, T: FieldFormatter<'a, U> + 'a, U: WriteSupport + 'a> RecordWriter<'a, 
 pub struct Writer<
     'a,
     R: Write + 'a,
-    T: FieldFormatter<'a, V> + 'a,
-    U: SpecSource<'a, V> + 'a,
-    V: WriteSupport + 'a,
+    T: FieldFormatter<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: WriteSupport,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a
@@ -109,9 +109,9 @@ pub struct Writer<
 
 impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
     where R: Write + 'a,
-          T: FieldFormatter<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: WriteSupport + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
@@ -138,9 +138,9 @@ impl<'a, R, T, U, V, W, X, Y> Writer<'a, R, T, U, V, W, X, Y>
 pub struct WriterBuilder<
     'a,
     WR: Write + 'a,
-    T: FieldFormatter<'a, V> + 'a,
-    U: SpecSource<'a, V> + 'a,
-    V: WriteSupport + 'a,
+    T: FieldFormatter<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: WriteSupport,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<WR> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a
@@ -156,9 +156,9 @@ pub struct WriterBuilder<
 
 impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
     where WR: Write + 'a,
-          T: FieldFormatter<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: WriteSupport + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<WR> + 'a {
     pub fn new(write_support: V) -> Self {
@@ -176,9 +176,9 @@ impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
 
 impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
     where WR: Write + 'a,
-          T: FieldFormatter<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: WriteSupport + 'a,
+          T: FieldFormatter<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: WriteSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<WR> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a {
@@ -194,7 +194,7 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
         }
     }
 
-    pub fn with_field_formatter<Z: FieldFormatter<'a, V> + 'a>(self, field_formatter: Z) -> WriterBuilder<'a, WR, Z, U, V, W, X, Y> {
+    pub fn with_field_formatter<Z: FieldFormatter<V> + 'a>(self, field_formatter: Z) -> WriterBuilder<'a, WR, Z, U, V, W, X, Y> {
         WriterBuilder {
             destination: self.destination,
             write_support: self.write_support,
@@ -206,7 +206,7 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
         }
     }
 
-    pub fn with_spec_source<Z: SpecSource<'a, V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
+    pub fn with_spec_source<Z: SpecSource<V> + 'a>(self, spec_source: Z) -> WriterBuilder<'a, WR, T, Z, V, W, X, Y> {
         WriterBuilder {
             destination: self.destination,
             write_support: self.write_support,

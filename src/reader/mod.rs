@@ -14,13 +14,13 @@ use reader::parser::FieldParser;
 use self::spec::Stream as SpecSource;
 use self::field_buffer::Source as FieldBufferSource;
 
-pub struct FieldReader<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> {
+pub struct FieldReader<'a, T: FieldParser<U> + 'a, U: FieldReadSupport> {
     parser: T,
     read_support: U,
     lifetime: ::std::marker::PhantomData<&'a ()>
 }
 
-impl<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, T, U> {
+impl<'a, T: FieldParser<U> + 'a, U: FieldReadSupport> FieldReader<'a, T, U> {
     pub fn new(parser: T, read_support: U) -> FieldReader<'a, T, U> {
         FieldReader {
             parser: parser,
@@ -34,7 +34,7 @@ impl<'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, T
     }
 }
 
-impl <'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, T, U> {
+impl <'a, T: FieldParser<U> + 'a, U: FieldReadSupport> FieldReader<'a, T, U> {
     pub fn read<'b, V>(&self, reader: &'b mut V, field_spec: &'b FieldSpec, field_buffer: &'b mut Vec<u8>, buffer: &'b mut Vec<u8>) -> Result<()>
         where V: Read + 'b
     {
@@ -53,11 +53,11 @@ impl <'a, T: FieldParser<'a, U> + 'a, U: FieldReadSupport + 'a> FieldReader<'a, 
     }
 }
 
-pub struct RecordReader<'a, T: FieldParser<'a, U> + 'a, U: RecordReadSupport + 'a> {
+pub struct RecordReader<'a, T: FieldParser<U> + 'a, U: RecordReadSupport> {
     field_reader: FieldReader<'a, T, U>
 }
 
-impl<'a, T: FieldParser<'a, U> + 'a, U: RecordReadSupport + 'a> RecordReader<'a, T, U> {
+impl<'a, T: FieldParser<U> + 'a, U: RecordReadSupport> RecordReader<'a, T, U> {
     pub fn new(field_writer: FieldReader<'a, T, U>) -> RecordReader<T, U> {
         RecordReader {
             field_reader: field_writer
@@ -73,7 +73,7 @@ impl<'a, T: FieldParser<'a, U> + 'a, U: RecordReadSupport + 'a> RecordReader<'a,
     }
 }
 
-impl <'a, T: FieldParser<'a, U> + 'a, U: RecordReadSupport + 'a> RecordReader<'a, T, U> {
+impl <'a, T: FieldParser<U> + 'a, U: RecordReadSupport> RecordReader<'a, T, U> {
     pub fn read<'b, V, X>(&self, reader: &'b mut V, spec: &'b RecordSpec, mut field_buffer: Vec<u8>, buffer: &'b mut Vec<u8>) -> FieldResult<Data<X, U::DataHolder>>
         where V: Read + 'b,
               X: BuildableDataRanges + 'b
@@ -106,9 +106,9 @@ impl <'a, T: FieldParser<'a, U> + 'a, U: RecordReadSupport + 'a> RecordReader<'a
 pub struct Reader<
     'a,
     R: BufRead + 'a,
-    T: FieldParser<'a, V> + 'a,
-    U: SpecSource<'a, V> + 'a,
-    V: RecordReadSupport + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: RecordReadSupport,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a,
@@ -125,9 +125,9 @@ pub struct Reader<
 
 impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a,
@@ -157,9 +157,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> Reader<'a, R, T, U, V, W, X, Y, Z>
 pub struct ReaderBuilder<
     'a,
     R: BufRead + 'a,
-    T: FieldParser<'a, V> + 'a,
-    U: SpecSource<'a, V> + 'a,
-    V: FieldReadSupport + 'a,
+    T: FieldParser<V> + 'a,
+    U: SpecSource<V> + 'a,
+    V: FieldReadSupport,
     W: Borrow<HashMap<String, RecordSpec>> + 'a,
     X: BorrowMut<R> + 'a,
     Y: BorrowMut<Vec<u8>> + 'a,
@@ -177,9 +177,9 @@ pub struct ReaderBuilder<
 
 impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a {
     pub fn new(read_support: V) -> Self {
@@ -198,9 +198,9 @@ impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<V
 
 impl<'a, R, T, U, V, W, X> From<FieldReader<'a, T, V>> for ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a {
     fn from(field_reader: FieldReader<'a, T, V>) -> Self {
@@ -210,9 +210,9 @@ impl<'a, R, T, U, V, W, X> From<FieldReader<'a, T, V>> for ReaderBuilder<'a, R, 
 
 impl<'a, R, T, U, V, W, X> From<RecordReader<'a, T, V>> for ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a {
     fn from(record_reader: RecordReader<'a, T, V>) -> Self {
@@ -222,9 +222,9 @@ impl<'a, R, T, U, V, W, X> From<RecordReader<'a, T, V>> for ReaderBuilder<'a, R,
 
 impl<'a, R, T, U, V, W, X, Y, Z> From<Reader<'a, R, T, U, V, W, X, Y, Z>> for ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a,
@@ -245,9 +245,9 @@ impl<'a, R, T, U, V, W, X, Y, Z> From<Reader<'a, R, T, U, V, W, X, Y, Z>> for Re
 
 impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
     where R: BufRead + 'a,
-          T: FieldParser<'a, V> + 'a,
-          U: SpecSource<'a, V> + 'a,
-          V: RecordReadSupport + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
           W: Borrow<HashMap<String, RecordSpec>> + 'a,
           X: BorrowMut<R> + 'a,
           Y: BorrowMut<Vec<u8>> + 'a,
@@ -265,7 +265,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
         }
     }
 
-    pub fn with_field_parser<A: FieldParser<'a, V> + 'a>(self, field_parser: A) -> ReaderBuilder<'a, R, A, U, V, W, X, Y, Z> {
+    pub fn with_field_parser<A: FieldParser<V> + 'a>(self, field_parser: A) -> ReaderBuilder<'a, R, A, U, V, W, X, Y, Z> {
         ReaderBuilder {
             read_support: self.read_support,
             source: self.source,
@@ -278,7 +278,7 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
         }
     }
 
-    pub fn with_spec_source<A: SpecSource<'a, V> + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
+    pub fn with_spec_source<A: SpecSource<V> + 'a>(self, spec_source: A) -> ReaderBuilder<'a, R, T, A, V, W, X, Y, Z> {
         ReaderBuilder {
             read_support: self.read_support,
             source: self.source,

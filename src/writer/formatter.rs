@@ -4,11 +4,11 @@ use data_type::{WriteSupport, BinarySupport};
 use spec::FieldSpec;
 use super::super::BoxedErrorResult as Result;
 
-pub trait FieldFormatter<'a, T: WriteSupport + 'a> {
-    fn format<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, write_support: &'b T) -> Result<()>;
+pub trait FieldFormatter<T: WriteSupport> {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, write_support: &'a T) -> Result<()>;
 }
 
-impl<'a, T, U: WriteSupport + 'a> FieldFormatter<'a, U> for &'a T where T: 'a + FieldFormatter<'a, U> {
+impl<'a, T, U: WriteSupport> FieldFormatter<U> for &'a T where T: FieldFormatter<U> + 'a {
     fn format<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, write_support: &'b U) -> Result<()> {
         (**self).format(data, field_spec, destination, write_support)
     }
@@ -48,8 +48,8 @@ impl Display for FormatError {
 
 pub struct DefaultFormatter;
 
-impl<'a> FieldFormatter<'a, BinarySupport> for DefaultFormatter {
-    fn format<'b>(&self, data: &'b [u8], field_spec: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b BinarySupport) -> Result<()> {
+impl FieldFormatter<BinarySupport> for DefaultFormatter {
+    fn format<'a>(&self, data: &'a [u8], field_spec: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a BinarySupport) -> Result<()> {
         if data.len() >= field_spec.length {
             destination.extend_from_slice(&data[..field_spec.length]);
             return Ok(());
@@ -68,8 +68,8 @@ impl<'a> FieldFormatter<'a, BinarySupport> for DefaultFormatter {
 
 pub struct IdentityFormatter;
 
-impl<'a, T: WriteSupport + 'a> FieldFormatter<'a, T> for IdentityFormatter {
-    fn format<'b>(&self, data: &'b [u8], _: &'b FieldSpec, destination: &'b mut Vec<u8>, _: &'b T) -> Result<()> {
+impl<T: WriteSupport> FieldFormatter<T> for IdentityFormatter {
+    fn format<'a>(&self, data: &'a [u8], _: &'a FieldSpec, destination: &'a mut Vec<u8>, _: &'a T) -> Result<()> {
         destination.extend_from_slice(data);
         Ok(())
     }
