@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use record::{Data, DataRanges};
 use data_type::{WriteSupport};
 use super::super::BoxedErrorResult as Result;
-use spec::resolver::{IdFieldResolver, NoneResolver};
+use spec::resolver::IdFieldResolver;
+use spec::stream::VecStream;
 use std::borrow::Borrow;
 
 pub trait Stream<T: WriteSupport> {
@@ -70,8 +71,26 @@ impl<'a, T: WriteSupport, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     }
 }
 
-impl<'a, T: WriteSupport> Resolver<T> for NoneResolver {
+impl<'a, T: WriteSupport> Resolver<T> for () {
     fn resolve<'b, 'c, U: DataRanges + 'b>(&self, _: &'b Data<U, T::DataHolder>, _: &'c HashMap<String, RecordSpec>, _: &'b T) -> Result<Option<&'c str>> {
         Ok(None)
+    }
+}
+
+impl<T: WriteSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
+    fn next<'a, 'b, V: DataRanges + 'a>(&mut self, _: &'a Data<V, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
+        self.position += self.position;
+
+        Ok(match self.vec.get(self.position) {
+            None => None,
+            Some(v) => {
+                for (name, _) in record_specs.iter() {
+                    if name == v.borrow() {
+                        return Ok(Some(name));
+                    }
+                }
+                return Err("The nes".into())
+            }
+        })
     }
 }

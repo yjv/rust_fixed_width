@@ -244,13 +244,13 @@ impl<'a, WR, T, U, V, W, X, Y> WriterBuilder<'a, WR, T, U, V, W, X, Y>
 
     pub fn build(self) -> Result<Writer<'a, WR, T, U, V, W, X, Y>> {
         Ok(Writer {
-            destination: self.destination.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
+            destination: self.destination.ok_or(Error::FieldRequiredToBuild("source needs to be defined in order to build"))?,
             writer: RecordWriter::new(FieldWriter::new(
-                self.field_formatter.ok_or(Error::BuildError("field_formatter needs to be defined in order to build"))?,
+                self.field_formatter.ok_or(Error::FieldRequiredToBuild("field_formatter needs to be defined in order to build"))?,
                 self.write_support
             )),
-            spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
-            record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
+            spec_source: self.spec_source.ok_or(Error::FieldRequiredToBuild("spec_source needs to be defined in order to build"))?,
+            record_specs: self.record_specs.ok_or(Error::FieldRequiredToBuild("record_specs needs to be defined in order to build"))?,
             buffer: self.buffer,
             destination_type: ::std::marker::PhantomData
         })

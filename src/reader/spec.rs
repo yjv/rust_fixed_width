@@ -3,7 +3,8 @@ use std::collections::{HashMap};
 use std::io::BufRead;
 use data_type::FieldReadSupport;
 use super::super::BoxedErrorResult as Result;
-use spec::resolver::{IdFieldResolver, NoneResolver};
+use spec::resolver::{IdFieldResolver};
+use spec::stream::{VecStream};
 use std::borrow::Borrow;
 
 pub trait RequiresBufRead<T: FieldReadSupport> {
@@ -122,10 +123,36 @@ impl<T: FieldReadSupport, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     }
 }
 
-impl<T: FieldReadSupport> Resolver<T> for NoneResolver {
+impl<T: FieldReadSupport> Resolver<T> for () {
     fn resolve<'a, 'b, U: BufRead + 'a>(&self, _: &'a mut U, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
         Ok(None)
     }
 }
 
-impl<T: FieldReadSupport> RequiresBufRead<T> for NoneResolver {}
+impl<T: FieldReadSupport> Stream<T> for () {
+    fn next<'a, 'b, U: BufRead + 'a>(&mut self, _: &'a mut U, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
+        Ok(None)
+    }
+}
+
+impl<T: FieldReadSupport> RequiresBufRead<T> for () {}
+
+impl<T: FieldReadSupport, U: Borrow<str>> RequiresBufRead<T> for VecStream<U> {}
+
+impl<T: FieldReadSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
+    fn next<'a, 'b, V: BufRead + 'a>(&mut self, _: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
+        self.position += self.position;
+
+        Ok(match self.vec.get(self.position) {
+            None => None,
+            Some(v) => {
+                for (name, _) in record_specs.iter() {
+                    if name == v.borrow() {
+                        return Ok(Some(name));
+                    }
+                }
+                return Err("The nes".into())
+            }
+        })
+    }
+}

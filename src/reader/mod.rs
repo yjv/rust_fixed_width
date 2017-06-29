@@ -10,7 +10,7 @@ use error::Error;
 use super::{Result, PositionalResult, FieldResult, Record};
 use record::{Data, BuildableDataRanges};
 use data_type::{FieldReadSupport, RecordReadSupport, ShouldReadMore};
-use reader::parser::FieldParser;
+use reader::parser::{FieldParser, IdentityParser};
 use self::spec::Stream as SpecSource;
 use self::field_buffer::Source as FieldBufferSource;
 
@@ -175,13 +175,9 @@ pub struct ReaderBuilder<
     source_type: ::std::marker::PhantomData<&'a R>
 }
 
-impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
-    where R: BufRead + 'a,
-          T: FieldParser<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: RecordReadSupport,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BorrowMut<R> + 'a {
+impl<'a, V> ReaderBuilder<'a, &'a [u8], IdentityParser, (), V, HashMap<String, RecordSpec>, &'a [u8], Vec<u8>, Option<Vec<u8>>>
+    where V: RecordReadSupport {
+
     pub fn new(read_support: V) -> Self {
         ReaderBuilder {
             read_support: read_support,
@@ -191,53 +187,6 @@ impl<'a, R, T, U, V, W, X> ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<V
             record_specs: None,
             buffer: Vec::new(),
             field_buffer_source: None,
-            source_type: ::std::marker::PhantomData
-        }
-    }
-}
-
-impl<'a, R, T, U, V, W, X> From<FieldReader<'a, T, V>> for ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
-    where R: BufRead + 'a,
-          T: FieldParser<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: RecordReadSupport,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BorrowMut<R> + 'a {
-    fn from(field_reader: FieldReader<'a, T, V>) -> Self {
-        Self::new(field_reader.read_support).with_field_parser(field_reader.parser)
-    }
-}
-
-impl<'a, R, T, U, V, W, X> From<RecordReader<'a, T, V>> for ReaderBuilder<'a, R, T, U, V, W, X, Vec<u8>, Option<Vec<u8>>>
-    where R: BufRead + 'a,
-          T: FieldParser<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: RecordReadSupport,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BorrowMut<R> + 'a {
-    fn from(record_reader: RecordReader<'a, T, V>) -> Self {
-        Self::from(record_reader.field_reader)
-    }
-}
-
-impl<'a, R, T, U, V, W, X, Y, Z> From<Reader<'a, R, T, U, V, W, X, Y, Z>> for ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
-    where R: BufRead + 'a,
-          T: FieldParser<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: RecordReadSupport,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BorrowMut<R> + 'a,
-          Y: BorrowMut<Vec<u8>> + 'a,
-          Z: FieldBufferSource + 'a {
-    fn from(reader: Reader<'a, R, T, U, V, W, X, Y, Z>) -> Self {
-        ReaderBuilder {
-            read_support: reader.reader.field_reader.read_support,
-            source: Some(reader.source),
-            field_parser: Some(reader.reader.field_reader.parser),
-            spec_source: Some(reader.spec_source),
-            record_specs: Some(reader.record_specs),
-            buffer: reader.buffer,
-            field_buffer_source: reader.field_buffer_source,
             source_type: ::std::marker::PhantomData
         }
     }
@@ -332,17 +281,56 @@ impl<'a, R, T, U, V, W, X, Y, Z> ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
 
     pub fn build(self) -> Result<Reader<'a, R, T, U, V, W, X, Y, Z>> {
         Ok(Reader {
-            source: self.source.ok_or(Error::BuildError("source needs to be defined in order to build"))?,
+            source: self.source.ok_or(Error::FieldRequiredToBuild("source"))?,
             reader: RecordReader::new(FieldReader::new(
-                self.field_parser.ok_or(Error::BuildError("field_parser needs to be defined in order to build"))?,
+                self.field_parser.ok_or(Error::FieldRequiredToBuild("field_parser"))?,
                 self.read_support
             )),
-            spec_source: self.spec_source.ok_or(Error::BuildError("spec_source needs to be defined in order to build"))?,
-            record_specs: self.record_specs.ok_or(Error::BuildError("record_specs needs to be defined in order to build"))?,
+            spec_source: self.spec_source.ok_or(Error::FieldRequiredToBuild("spec_source"))?,
+            record_specs: self.record_specs.ok_or(Error::FieldRequiredToBuild("record_specs"))?,
             buffer: self.buffer,
             field_buffer_source: self.field_buffer_source,
             source_type: ::std::marker::PhantomData
         })
+    }
+}
+
+impl<'a, T, V> From<FieldReader<'a, T, V>> for ReaderBuilder<'a, &'a [u8], T, (), V, HashMap<String, RecordSpec>, &'a [u8], Vec<u8>, Option<Vec<u8>>>
+    where T: FieldParser<V> + 'a,
+          V: RecordReadSupport {
+    fn from(field_reader: FieldReader<'a, T, V>) -> Self {
+        ReaderBuilder::new(field_reader.read_support).with_field_parser(field_reader.parser)
+    }
+}
+
+impl<'a, T, V> From<RecordReader<'a, T, V>> for ReaderBuilder<'a, &'a [u8], T, (), V, HashMap<String, RecordSpec>, &'a [u8], Vec<u8>, Option<Vec<u8>>>
+    where T: FieldParser<V> + 'a,
+          V: RecordReadSupport {
+    fn from(record_reader: RecordReader<'a, T, V>) -> Self {
+        ReaderBuilder::from(record_reader.field_reader)
+    }
+}
+
+impl<'a, R, T, U, V, W, X, Y, Z> From<Reader<'a, R, T, U, V, W, X, Y, Z>> for ReaderBuilder<'a, R, T, U, V, W, X, Y, Z>
+    where R: BufRead + 'a,
+          T: FieldParser<V> + 'a,
+          U: SpecSource<V> + 'a,
+          V: RecordReadSupport,
+          W: Borrow<HashMap<String, RecordSpec>> + 'a,
+          X: BorrowMut<R> + 'a,
+          Y: BorrowMut<Vec<u8>> + 'a,
+          Z: FieldBufferSource + 'a {
+    fn from(reader: Reader<'a, R, T, U, V, W, X, Y, Z>) -> Self {
+        ReaderBuilder {
+            read_support: reader.reader.field_reader.read_support,
+            source: Some(reader.source),
+            field_parser: Some(reader.reader.field_reader.parser),
+            spec_source: Some(reader.spec_source),
+            record_specs: Some(reader.record_specs),
+            buffer: reader.buffer,
+            field_buffer_source: reader.field_buffer_source,
+            source_type: ::std::marker::PhantomData
+        }
     }
 }
 
@@ -500,4 +488,49 @@ mod test {
             reader.read(&mut buf, &record_spec.field_specs.get("field3").unwrap(), &mut buffer, &mut Vec::new())
         );
     }
+
+    #[test]
+    fn read() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\ndfszbvvitwyotywt4trjkvvbjsbrgh4oq3njm,k.l/[p]";
+        let mut buf = Cursor::new(string.as_bytes());
+        let mut parser = MockParser::new();
+        let record_spec = &spec.record_specs.get("record1").unwrap();
+        parser.add_parse_call(string[..4].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello".as_bytes().to_owned()));
+        parser.add_parse_call(string[4..9].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello2".as_bytes().to_owned()));
+        parser.add_parse_call(string[9..45].as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok("hello3".as_bytes().to_owned()));
+        parser.add_parse_call(string[46..50].as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok("hello4".as_bytes().to_owned()));
+        parser.add_parse_call(string[50..55].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello5".as_bytes().to_owned()));
+        parser.add_parse_call(string[55..91].as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok("hello6".as_bytes().to_owned()));
+        let mut reader = ReaderBuilder::new(BinarySupport)
+            .with_source::<Cursor<_>, &mut Cursor<_>>(&mut buf)
+            .with_field_parser(&parser)
+            .with_spec_source(::spec::stream::VecStream::from(vec!["record1", "record1"]))
+            .with_record_specs(&spec.record_specs)
+            .build()
+            .unwrap()
+        ;
+        assert_result!(
+        Ok(Record {
+            data: Data {
+                data: "hellohello2hello3".as_bytes().to_owned(),
+                ranges: [("field1".to_owned(), 0..5),
+                    ("field2".to_owned(), 5..11),
+                    ("field3".to_owned(), 11..17)]
+                    .iter().cloned().collect::<HashMap<String, Range<usize>>>()
+            },
+            name: "record1".to_string()
+        }), reader.read_record());
+        assert_result!(Ok(Record {
+            data: Data {
+                data: "hello4hello5hello6".as_bytes().to_owned(),
+                ranges: [("field1".to_owned(), 0..6),
+                    ("field2".to_owned(), 6..12),
+                    ("field3".to_owned(), 12..18)]
+                    .iter().cloned().collect::<BTreeMap<String, Range<usize>>>()
+            },
+            name: "record1".to_string()
+        }), reader.read_record());
+    }
+
 }

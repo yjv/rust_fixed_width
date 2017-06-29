@@ -3,57 +3,43 @@ use self::yaml_rust::{Yaml};
 use std::io::prelude::*;
 use std::collections::BTreeMap;
 use spec::{Builder, FieldSpec, FieldSpecBuilder, RecordSpec, RecordSpecBuilder, Spec, SpecBuilder, PaddingDirection};
-use error::BoxedError;
+use super::BoxedErrorResult;
 use std::fmt::{Display, Formatter, Error as FmtError};
 
 pub struct YamlLoader;
 
 impl<'a, T: 'a + Read> super::Loader<&'a mut T> for YamlLoader {
-    fn load(&self, resource: &'a mut T) -> ::Result<Spec> {
-        let mut docs = Self::read_reader(resource).map_err(::error::Error::SpecLoaderError)?;
+    fn load(&self, resource: &'a mut T) -> BoxedErrorResult<Spec> {
+        let mut docs = Self::read_reader(resource)?;
 
         if docs.len() == 0 {
-            return Err(::error::Error::SpecLoaderError(Box::new(Error::NoDocumentsFound)));
+            return Err(Error::NoDocumentsFound.into());
         }
 
-        Self::read_spec(docs.remove(0)).map_err(::error::Error::SpecLoaderError)
-    }
-}
-
-impl<'a, T: 'a + Read> super::MultiLoader<&'a mut T> for YamlLoader {
-    fn multi_load(&self, resource: &'a mut T) -> ::Result<Vec<Spec>> {
-        let docs = Self::read_reader(resource).map_err(::error::Error::SpecLoaderError)?;
-
-        let mut specs = Vec::new();
-
-        for doc in docs {
-            specs.push(Self::read_spec(doc).map_err(::error::Error::SpecLoaderError)?);
-        }
-
-        Ok(specs)
+        Self::read_spec(docs.remove(0))
     }
 }
 
 impl YamlLoader {
-    fn read_spec(doc: Yaml) -> Result<Spec, BoxedError> {
+    fn read_spec(doc: Yaml) -> BoxedErrorResult<Spec> {
         let mut builder = SpecBuilder::new();
 
-        let records = Self::get_hash(Self::get_hash(doc, None)?.remove(&Yaml::String("records".to_string())).ok_or(Error::missing_key("records", None))?, Some(&["records"]))?;
+        let records = Self::get_hash(Self::get_hash(doc, None)?
+             .remove(&Yaml::String("records".to_string()))
+             .ok_or(Error::missing_key("records", None))?, Some(&["records"]))?
+        ;
 
         for (name, record_spec_data) in records {
             let path = &["records"];
             let name = Self::get_string(name, Some(path))?;
             let record_spec = Self::get_record_spec(record_spec_data, &name)?;
-            builder = builder.add_record(
-                name,
-                record_spec
-            );
+            builder = builder.add_record(name, record_spec);
         }
 
         Ok(builder.build().map_err(Error::BuilderError)?)
     }
 
-    fn read_reader<'a, T: 'a + Read>(resource: &'a mut T) -> Result<Vec<Yaml>, BoxedError> {
+    fn read_reader<'a, T: 'a + Read>(resource: &'a mut T) -> BoxedErrorResult<Vec<Yaml>> {
         let mut contents = String::new();
         resource.read_to_string(&mut contents)?;
         Ok(yaml_rust::YamlLoader::load_from_str(&contents)?)
@@ -63,9 +49,21 @@ impl YamlLoader {
         let path = &["records", name, "fields", &field_name];
         let mut field_spec_map = Self::get_hash(field_spec_data, Some(path))?;
         let builder = FieldSpecBuilder::new()
-            .with_length(field_spec_map.remove(&Yaml::String("length".to_string())).map(|v| Self::get_usize(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?)
-            .with_padding_direction(field_spec_map.remove(&Yaml::String("padding_direction".to_string())).map(|v| Self::get_padding_direction(v, Some(path))).unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?)
-            .with_padding(field_spec_map.remove(&Yaml::String("padding".to_string())).map(|v| Self::get_bytes(v, Some(path))).unwrap_or_else(|| Ok(Vec::new()))?)
+            .with_length(field_spec_map
+                .remove(&Yaml::String("length".to_string()))
+                .map(|v| Self::get_usize(v, Some(path)))
+                .unwrap_or_else(|| Err(Error::missing_key("length", Some(path))))?
+            )
+            .with_padding_direction(field_spec_map
+                .remove(&Yaml::String("padding_direction".to_string()))
+                .map(|v| Self::get_padding_direction(v, Some(path)))
+                .unwrap_or_else(|| Err(Error::missing_key("padding_direction", Some(path))))?
+            )
+            .with_padding(field_spec_map
+                .remove(&Yaml::String("padding".to_string()))
+                .map(|v| Self::get_bytes(v, Some(path)))
+                .unwrap_or_else(|| Ok(Vec::new()))?
+            )
         ;
         let builder = match field_spec_map.remove(&Yaml::String("default".to_string())) {
             Some(v) => builder.with_default(Self::get_bytes(v, Some(path))?),
@@ -85,10 +83,7 @@ impl YamlLoader {
         for (field_name, field_spec_data) in fields {
             let field_name = Self::get_string(field_name, Some(path))?;
             let field_spec = Self::get_field_spec(field_spec_data, &name, &field_name)?;
-            builder = builder.add_field(
-                field_name,
-                field_spec
-            );
+            builder = builder.add_field(field_name, field_spec);
         }
 
         Ok(builder
@@ -139,7 +134,7 @@ pub enum Error {
     NoDocumentsFound,
     MissingKey { key: &'static str, path: Option<String> },
     InvalidType { value: Yaml, expected_type: &'static str, path: Option<String> },
-    BuilderError(::error::Error)
+    BuilderError(super::super::Error)
 }
 
 impl Error {
@@ -202,7 +197,7 @@ impl Display for Error {
 #[cfg(test)]
 mod test {
     use super::YamlLoader;
-    use spec::loader::{Loader, MultiLoader};
+    use spec::loader::Loader;
     use spec::{RecordSpecBuilder, SpecBuilder, FieldSpecBuilder, PaddingDirection, Builder};
     use std::fs::File;
 
@@ -268,6 +263,5 @@ mod test {
             .unwrap()
         ;
         assert_eq!(spec, loader.load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
-        assert_eq!(vec![spec], loader.multi_load(&mut File::open("src/spec/loader/spec.yml").unwrap()).unwrap());
     }
 }

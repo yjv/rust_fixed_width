@@ -1,10 +1,13 @@
 pub mod resolver;
+pub mod stream;
 pub mod loader;
 
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
 use std::iter::repeat;
-use super::{Result, Error};
+use ::std::fmt::{Display, Error as FmtError, Formatter};
+
+type Result<T> = ::std::result::Result<T, Error>;
 
 pub trait Builder<T> {
     fn build(self) -> Result<T>;
@@ -285,12 +288,43 @@ impl FieldSpecBuilder {
 impl Builder<FieldSpec> for FieldSpecBuilder {
     fn build(self) -> Result<FieldSpec> {
         Ok(FieldSpec {
-            length: self.length.ok_or(Error::BuildError("length must be set in order to build"))?,
-            padding_direction: self.padding_direction.ok_or(Error::BuildError("padding direction must be set in order to build"))?,
+            length: self.length.ok_or(Error::FieldRequiredToBuild("length"))?,
+            padding_direction: self.padding_direction.ok_or(Error::FieldRequiredToBuild("padding"))?,
             padding: self.padding.unwrap_or_default(),
             default: self.default,
             __no_construct: (),
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    FieldRequiredToBuild(&'static str),
+    SubBuilderErrors(HashMap<String, Error>)
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::FieldRequiredToBuild(_) => "There is a required field missing",
+            Error::SubBuilderErrors(_) => "Some sub builders had errors"
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> ::std::result::Result<(), FmtError> {
+        match *self {
+            Error::FieldRequiredToBuild(ref field) => write!(f, "{} must be set in order to build", field),
+            Error::SubBuilderErrors(ref errors) => {
+                write!(f, "Some sub builders had errors: ")?;
+                for (name, error) in errors {
+                    write!(f, "\n {}: {}", name, error)?;
+                }
+
+                Ok(())
+            }
+        }
     }
 }
 

@@ -1,12 +1,8 @@
 pub mod yaml;
 
-use ::Result;
+use ::BoxedErrorResult;
 use spec::Spec;
 
 pub trait Loader<T> {
-    fn load(&self, resource: T) -> Result<Spec>;
-}
-
-pub trait MultiLoader<T> {
-    fn multi_load(&self, resource: T) -> Result<Vec<Spec>>;
+    fn load(&self, resource: T) -> BoxedErrorResult<Spec>;
 }

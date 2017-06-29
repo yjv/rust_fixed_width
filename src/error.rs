@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter, Error as FmtError};
 use std::io::Error as IoError;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,9 +14,7 @@ pub enum Error {
     FormattedValueWrongLength(usize, Vec<u8>),
     FieldValueRequired,
     DataHolderError(BoxedError),
-    BuildError(&'static str),
-    SubBuilderErrors(HashMap<String, Error>),
-    SpecLoaderError(BoxedError)
+    FieldRequiredToBuild(&'static str)
 }
 
 impl ::std::error::Error for Error {
@@ -34,9 +31,7 @@ impl ::std::error::Error for Error {
             Error::FormattedValueWrongLength(_, _) => "The value returned after padding is either longer or shorter than the length for the field",
             Error::FieldValueRequired => "The value for the given field is required since it has no default",
             Error::DataHolderError(_) => "There was an error creating the records data holder",
-            Error::BuildError(_) => "There was an error while building",
-            Error::SubBuilderErrors(_) => "Some sub builders had errors",
-            Error::SpecLoaderError(_) => "The spec loader encountered an error"
+            Error::FieldRequiredToBuild(_) => "There is a required field missing",
         }
     }
 
@@ -45,7 +40,6 @@ impl ::std::error::Error for Error {
             Error::SpecStreamError(ref e) => Some(&**e),
             Error::IoError(ref e) => Some(e),
             Error::DataHolderError(ref e) => Some(&**e),
-            Error::SpecLoaderError(ref e) => Some(&**e),
             _ => None
         }
     }
@@ -91,16 +85,7 @@ impl Display for Error {
             ),
             Error::FieldValueRequired => write!(f, "The value for the field is required since it has no default"),
             Error::DataHolderError(ref e) => write!(f, "An error occurred while trying to create the record data holder: {}", e),
-            Error::BuildError(ref e) => write!(f, "There was an error while building: {}", e),
-            Error::SubBuilderErrors(ref errors) => {
-                write!(f, "Some sub builders had errors: ")?;
-                for (name, error) in errors {
-                    write!(f, "\n {}: {}", name, error)?;
-                }
-
-                Ok(())
-            },
-            Error::SpecLoaderError(ref e) => write!(f, "The spec loader encountered an error: {}", e)
+            Error::FieldRequiredToBuild(ref field) => write!(f, "{} must be set in order to build", field),
         }
     }
 }

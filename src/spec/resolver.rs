@@ -20,8 +20,6 @@ impl IdFieldResolver<&'static str> {
     }
 }
 
-pub struct NoneResolver;
-
 #[cfg(test)]
 mod test {
 
