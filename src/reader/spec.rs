@@ -141,16 +141,6 @@ impl<T: FieldReadSupport, U: Borrow<str>> RequiresBufRead<T> for VecStream<U> {}
 
 impl<T: FieldReadSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
     fn next<'a, 'b, V: BufRead + 'a>(&mut self, _: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
-        Ok(match self.get_next() {
-            None => None,
-            Some(v) => {
-                for (name, _) in record_specs.iter() {
-                    if name == v.borrow() {
-                        return Ok(Some(name));
-                    }
-                }
-                return Err("The nes".into())
-            }
-        })
+        self.next(record_specs)
     }
 }

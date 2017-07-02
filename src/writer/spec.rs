@@ -85,18 +85,6 @@ impl<T: WriteSupport> Stream<T> for () {
 
 impl<T: WriteSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
     fn next<'a, 'b, V: DataRanges + 'a>(&mut self, _: &'a Data<V, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
-        self.position += self.position;
-
-        Ok(match self.get_next() {
-            None => None,
-            Some(v) => {
-                for (name, _) in record_specs.iter() {
-                    if name == v.borrow() {
-                        return Ok(Some(name));
-                    }
-                }
-                return Err("The nes".into())
-            }
-        })
+        self.next(record_specs)
     }
 }
