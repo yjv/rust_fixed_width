@@ -503,7 +503,7 @@ mod test {
         parser.add_parse_call(string[50..55].as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok("hello5".as_bytes().to_owned()));
         parser.add_parse_call(string[55..91].as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok("hello6".as_bytes().to_owned()));
         let mut reader = ReaderBuilder::new(BinarySupport)
-            .with_source::<Cursor<_>, &mut Cursor<_>>(&mut buf)
+            .with_source::<Cursor<_>, _>(&mut buf)
             .with_field_parser(&parser)
             .with_spec_source(::spec::stream::VecStream::from(vec!["record1", "record1"]))
             .with_record_specs(&spec.record_specs)

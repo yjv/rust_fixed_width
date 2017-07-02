@@ -427,7 +427,7 @@ mod test {
         formatter.add_format_call("hello2".as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok(string[9..45].as_bytes().to_owned()));
         {
             let mut writer = WriterBuilder::new(BinarySupport)
-                .with_source::<Cursor<_>, &mut Cursor<_>>(&mut buf)
+                .with_source::<Cursor<_>, _>(&mut buf)
                 .with_field_formatter(&formatter)
                 .with_spec_source(::spec::stream::VecStream::from(vec!["record1", "record1"]))
                 .with_record_specs(&spec.record_specs)
