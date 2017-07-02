@@ -71,8 +71,14 @@ impl<'a, T: WriteSupport, U: Borrow<str>> Resolver<T> for IdFieldResolver<U> {
     }
 }
 
-impl<'a, T: WriteSupport> Resolver<T> for () {
-    fn resolve<'b, 'c, U: DataRanges + 'b>(&self, _: &'b Data<U, T::DataHolder>, _: &'c HashMap<String, RecordSpec>, _: &'b T) -> Result<Option<&'c str>> {
+impl<T: WriteSupport> Resolver<T> for () {
+    fn resolve<'a, 'b, U: DataRanges + 'a>(&self, _: &'a Data<U, T::DataHolder>, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
+        Ok(None)
+    }
+}
+
+impl<T: WriteSupport> Stream<T> for () {
+    fn next<'a, 'b, U: DataRanges + 'a>(&mut self, _: &'a Data<U, T::DataHolder>, _: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
         Ok(None)
     }
 }
@@ -81,7 +87,7 @@ impl<T: WriteSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
     fn next<'a, 'b, V: DataRanges + 'a>(&mut self, _: &'a Data<V, T::DataHolder>, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
         self.position += self.position;
 
-        Ok(match self.vec.get(self.position) {
+        Ok(match self.get_next() {
             None => None,
             Some(v) => {
                 for (name, _) in record_specs.iter() {

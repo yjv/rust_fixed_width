@@ -9,7 +9,7 @@ use error::Error;
 use super::{Result, PositionalResult, FieldResult};
 use record::{Data, DataRanges};
 use data_type::WriteSupport;
-use self::formatter::FieldFormatter;
+use self::formatter::{FieldFormatter, IdentityFormatter};
 use std::borrow::BorrowMut;
 use self::spec::Stream as SpecSource;
 
@@ -154,13 +154,8 @@ pub struct WriterBuilder<
     destination_type: ::std::marker::PhantomData<&'a WR>
 }
 
-impl<'a, WR, T, U, V, W, X> WriterBuilder<'a, WR, T, U, V, W, X, Vec<u8>>
-    where WR: Write + 'a,
-          T: FieldFormatter<V> + 'a,
-          U: SpecSource<V> + 'a,
-          V: WriteSupport,
-          W: Borrow<HashMap<String, RecordSpec>> + 'a,
-          X: BorrowMut<WR> + 'a {
+impl<'a, V> WriterBuilder<'a, &'a mut [u8], IdentityFormatter, (), V, HashMap<String, RecordSpec>, &'a mut [u8], Vec<u8>>
+    where V: WriteSupport {
     pub fn new(write_support: V) -> Self {
         WriterBuilder {
             destination: None,
@@ -418,5 +413,31 @@ mod test {
             Err(Error::IoError(_)),
             writer.write(&mut buf, record_spec.field_specs.get("field1").unwrap(), "hello".as_bytes(), &mut Vec::new())
         );
+    }
+
+    #[test]
+    fn write() {
+        let spec = test_spec();
+        let string = "1234567890qwertyuiopasdfghjkl;zxcvbnm,./-=[];\n".to_string();
+        let mut buf = Cursor::new(Vec::new());
+        let mut formatter = MockFormatter::new();
+        let record_spec = &spec.record_specs.get("record1").unwrap();
+        formatter.add_format_call("hello".as_bytes().to_owned(), record_spec.field_specs.get("field1").unwrap().clone(), Ok(string[0..4].as_bytes().to_owned()));
+        formatter.add_format_call("def".as_bytes().to_owned(), record_spec.field_specs.get("field2").unwrap().clone(), Ok(string[4..9].as_bytes().to_owned()));
+        formatter.add_format_call("hello2".as_bytes().to_owned(), record_spec.field_specs.get("field3").unwrap().clone(), Ok(string[9..45].as_bytes().to_owned()));
+        {
+            let mut writer = WriterBuilder::new(BinarySupport)
+                .with_source::<Cursor<_>, &mut Cursor<_>>(&mut buf)
+                .with_field_formatter(&formatter)
+                .with_spec_source(::spec::stream::VecStream::from(vec!["record1", "record1"]))
+                .with_record_specs(&spec.record_specs)
+                .build()
+                .unwrap()
+            ;
+            writer.write_record(&Data::from([("field1".to_string(), "hello".as_bytes().to_owned()),
+                ("field3".to_string(), "hello2".as_bytes().to_owned())]
+                .iter().cloned().collect::<HashMap<_, _>>())).unwrap();
+        }
+        assert_eq!(string, String::from_utf8(buf.into_inner()).unwrap());
     }
 }

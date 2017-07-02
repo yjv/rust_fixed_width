@@ -141,9 +141,7 @@ impl<T: FieldReadSupport, U: Borrow<str>> RequiresBufRead<T> for VecStream<U> {}
 
 impl<T: FieldReadSupport, U: Borrow<str>> Stream<T> for VecStream<U> {
     fn next<'a, 'b, V: BufRead + 'a>(&mut self, _: &'a mut V, record_specs: &'b HashMap<String, RecordSpec>, _: &'a T) -> Result<Option<&'b str>> {
-        self.position += self.position;
-
-        Ok(match self.vec.get(self.position) {
+        Ok(match self.get_next() {
             None => None,
             Some(v) => {
                 for (name, _) in record_specs.iter() {
